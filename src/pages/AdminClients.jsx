@@ -4,8 +4,6 @@ import {
   getDocs,
   query,
   where,
-  doc,
-  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { Link } from "react-router-dom";
@@ -14,6 +12,7 @@ export default function AdminClients() {
   const [clients, setClients] = useState([]);
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name-asc");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     load();
@@ -52,6 +51,16 @@ export default function AdminClients() {
     setClients(data);
   }
 
+  function applySearch(list) {
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter(c =>
+      `${c.name} ${c.surname} ${c.email}`
+        .toLowerCase()
+        .includes(q)
+    );
+  }
+
   function applyFilter(list) {
     if (filter === "active") {
       return list.filter(c => c.hasActiveSub);
@@ -82,15 +91,21 @@ export default function AdminClients() {
     }
 
     if (sort === "sub") {
-      sorted.sort((a, b) =>
-        (b.hasActiveSub === true) - (a.hasActiveSub === true)
+      sorted.sort(
+        (a, b) =>
+          (b.hasActiveSub === true) -
+          (a.hasActiveSub === true)
       );
     }
 
     return sorted;
   }
 
-  const visibleClients = applySort(applyFilter(clients));
+  const visibleClients = applySort(
+    applyFilter(
+      applySearch(clients)
+    )
+  );
 
   return (
     <div>
@@ -98,6 +113,14 @@ export default function AdminClients() {
 
       {/* Controls */}
       <div style={{ marginBottom: 15 }}>
+        <input
+          type="text"
+          placeholder="Pretraga (ime, email...)"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ marginRight: 10 }}
+        />
+
         <select
           value={filter}
           onChange={e => setFilter(e.target.value)}
@@ -150,11 +173,19 @@ export default function AdminClients() {
                   <button>Profil</button>
                 </Link>
 
-                <Link to={`/assign-subscription/${c.id}`}>
+                <Link to={`/dodela-pretplate?uid=${c.id}`}>
                   <button style={{ marginLeft: 5 }}>
                     + Pretplata
                   </button>
                 </Link>
+
+                {c.hasActiveSub && (
+                  <Link to={`/dodela-pretplate?uid=${c.id}&mode=renew`}>
+                    <button style={{ marginLeft: 5 }}>
+                      Produži
+                    </button>
+                  </Link>
+                )}
               </td>
             </tr>
           ))}
