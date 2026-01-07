@@ -47,8 +47,8 @@ export default function ClientProfile() {
 
     setSubscription({
       ...subSnap.data(),
-      startDate: cs.startDate.toDate ? cs.startDate.toDate() : new Date(cs.startDate),
-      endDate: cs.endDate.toDate ? cs.endDate.toDate() : new Date(cs.endDate),
+      startDate: cs.startDate?.toDate ? cs.startDate.toDate() : new Date(cs.startDate),
+      endDate: cs.endDate?.toDate ? cs.endDate.toDate() : new Date(cs.endDate),
     });
   }
 
@@ -59,15 +59,23 @@ export default function ClientProfile() {
     ? subscription.endDate >= today
     : false;
 
+  // Helper to format any date safely with Latin months
+  const formatDate = (d) =>
+    d?.toDate
+      ? d.toDate().toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
+      : d instanceof Date
+      ? d.toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
+      : d || "—";
+
   return (
     <div>
       <h2>Profil klijenta</h2>
 
-      <p><b>Ime:</b> {user.name}</p>
-      <p><b>Prezime:</b> {user.surname}</p>
-      <p><b>Email:</b> {user.email}</p>
-      <p><b>Telefon:</b> {user.phone}</p>
-      <p><b>Datum rođenja:</b> {user.dob}</p>
+      <p><b>Ime:</b> {user.name || "—"}</p>
+      <p><b>Prezime:</b> {user.surname || "—"}</p>
+      <p><b>Email:</b> {user.email || "—"}</p>
+      <p><b>Telefon:</b> {user.phone || "—"}</p>
+      <p><b>Datum rođenja:</b> {formatDate(user.dob)}</p>
 
       <hr />
 
@@ -75,13 +83,11 @@ export default function ClientProfile() {
 
       {subscription ? (
         <>
-          <p><b>Paket:</b> {subscription.name}</p>
+          <p><b>Paket:</b> {subscription.name || "—"}</p>
           <p>
-            <b>Trajanje:</b>{" "}
-            {subscription.startDate.toLocaleDateString("sr-RS", { day: "2-digit", month: "long", year: "numeric" })} –{" "}
-{subscription.endDate.toLocaleDateString("sr-RS", { day: "2-digit", month: "long", year: "numeric" })}
+            <b>Trajanje:</b> {formatDate(subscription.startDate)} – {formatDate(subscription.endDate)}
           </p>
-          <p><b>Cena:</b> {subscription.price} RSD</p>
+          <p><b>Cena:</b> {subscription.price ?? "—"} RSD</p>
           <p>
             <b>Status:</b>{" "}
             <span style={{ color: isActive ? "green" : "red" }}>

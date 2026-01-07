@@ -35,13 +35,9 @@ export default function MySubscriptions() {
         doc(db, "subscriptions", cs.subscriptionId)
       );
 
-      const startDate = cs.startDate.toDate
-        ? cs.startDate.toDate()
-        : new Date(cs.startDate);
-
-      const endDate = cs.endDate.toDate
-        ? cs.endDate.toDate()
-        : new Date(cs.endDate);
+      // Normalize dates safely
+      const startDate = cs.startDate?.toDate ? cs.startDate.toDate() : new Date(cs.startDate);
+      const endDate = cs.endDate?.toDate ? cs.endDate.toDate() : new Date(cs.endDate);
 
       data.push({
         id: d.id,
@@ -56,6 +52,14 @@ export default function MySubscriptions() {
 
   const today = new Date();
 
+  // Helper to format dates in Latin months
+  const formatDate = (d) =>
+    d instanceof Date
+      ? d.toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
+      : d?.toDate
+      ? d.toDate().toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
+      : "—";
+
   if (!subs.length) {
     return <p>Nemaš nijednu pretplatu.</p>;
   }
@@ -64,7 +68,7 @@ export default function MySubscriptions() {
     <div>
       <h2>Moje pretplate</h2>
 
-      {subs.map(s => {
+      {subs.map((s) => {
         const active = s.endDate >= today;
 
         return (
@@ -81,12 +85,12 @@ export default function MySubscriptions() {
             <h3>{s.name}</h3>
 
             <p>
-              <b>Period:</b>{" "}
-              {s.startDate.toLocaleDateString("sr-RS")} –{" "}
-              {s.endDate.toLocaleDateString("sr-RS")}
+              <b>Period:</b> {formatDate(s.startDate)} – {formatDate(s.endDate)}
             </p>
 
-            <p><b>Cena:</b> {s.price} RSD</p>
+            <p>
+              <b>Cena:</b> {s.price ?? "—"} RSD
+            </p>
 
             <p>
               <b>Status:</b>{" "}

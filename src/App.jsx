@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom"; 
 import { signOut } from "firebase/auth";
 import { useAuth } from "./context/AuthContext";
 import { auth } from "./firebase";
@@ -74,7 +74,10 @@ export default function App() {
             <Route path="/raspored" element={<AdminSlots />} />
             <Route path="/klijenti" element={<AdminClients />} />
             <Route path="/paketi" element={<AdminPackages />} />
+
+            {/* Support both /dodela-pretplate and /assign-subscription/:uid */}
             <Route path="/dodela-pretplate" element={<AssignSubscription />} />
+            <Route path="/assign-subscription/:uid?" element={<AssignSubscription />} />
           </>
         )}
       </Routes>

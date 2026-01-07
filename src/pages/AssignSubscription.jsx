@@ -9,20 +9,16 @@ import {
   doc
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { useLocation } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 export default function AssignSubscription() {
+  const { uid } = useParams(); // may be undefined
   const [users, setUsers] = useState([]);
   const [packages, setPackages] = useState([]);
-  const [userId, setUserId] = useState("");
+  const [userId, setUserId] = useState(uid || "");
   const [packageId, setPackageId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [currentSubs, setCurrentSubs] = useState([]);
-
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  const preselectedUserId = params.get("uid");
-  const isRenew = params.get("mode") === "renew";
 
   useEffect(() => {
     load();
@@ -36,32 +32,12 @@ export default function AssignSubscription() {
     }
   }, [userId]);
 
-  // When current subscriptions load AND we're renewing
   useEffect(() => {
-    if (isRenew && currentSubs.length > 0) {
-      // Find latest subscription by end date
-      const latest = [...currentSubs].sort(
-        (a, b) => b.endDate - a.endDate
-      )[0];
-
-      // Start date = day after last end
-      const nextStart = new Date(latest.endDate);
-      nextStart.setDate(nextStart.getDate() + 1);
-
-      setStartDate(nextStart.toISOString().slice(0, 10));
-
-      // Preselect same package if exists
-      const matchingPackage = packages.find(
-        p => p.name === latest.name
-      );
-      if (matchingPackage) {
-        setPackageId(matchingPackage.id);
-      }
-    }
-  }, [isRenew, currentSubs, packages]);
+    if (uid) setUserId(uid); // update state if route param exists
+  }, [uid]);
 
   async function load() {
-    // Load active clients
+    // Load active clients only
     const uSnap = await getDocs(
       query(
         collection(db, "users"),
@@ -69,26 +45,11 @@ export default function AssignSubscription() {
         where("active", "==", true)
       )
     );
+    setUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-    const loadedUsers = uSnap.docs.map(d => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    setUsers(loadedUsers);
-
-    if (preselectedUserId) {
-      const exists = loadedUsers.some(u => u.id === preselectedUserId);
-      if (exists) {
-        setUserId(preselectedUserId);
-      }
-    }
-
-    // Load active packages
+    // Load active subscriptions/packages
     const pSnap = await getDocs(
-      query(
-        collection(db, "subscriptions"),
-        where("active", "==", true)
-      )
+      query(collection(db, "subscriptions"), where("active", "==", true))
     );
     setPackages(pSnap.docs.map(d => ({ id: d.id, ...d.data() })));
   }
@@ -106,20 +67,12 @@ export default function AssignSubscription() {
     for (const d of snap.docs) {
       const subData = d.data();
       const pkgSnap = await getDocs(
-        query(
-          collection(db, "subscriptions"),
-          where("__name__", "==", subData.subscriptionId)
-        )
+        query(collection(db, "subscriptions"), where("__name__", "==", subData.subscriptionId))
       );
       const pkg = pkgSnap.docs[0]?.data();
-
       if (pkg) {
-        const start = subData.startDate?.toDate
-          ? subData.startDate.toDate()
-          : new Date(subData.startDate);
-        const end = subData.endDate?.toDate
-          ? subData.endDate.toDate()
-          : new Date(subData.endDate);
+        const start = subData.startDate?.toDate ? subData.startDate.toDate() : new Date(subData.startDate);
+        const end = subData.endDate?.toDate ? subData.endDate.toDate() : new Date(subData.endDate);
 
         subs.push({
           ...pkg,
@@ -143,7 +96,7 @@ export default function AssignSubscription() {
     const end = new Date(start);
     end.setDate(end.getDate() + (pkg.durationDays || 30));
 
-    // Deactivate existing subscriptions
+    // Deactivate existing subscriptions for this client
     const existing = await getDocs(
       query(
         collection(db, "clientSubscriptions"),
@@ -153,10 +106,7 @@ export default function AssignSubscription() {
     );
 
     for (const d of existing.docs) {
-      await updateDoc(
-        doc(db, "clientSubscriptions", d.id),
-        { active: false }
-      );
+      await updateDoc(doc(db, "clientSubscriptions", d.id), { active: false });
     }
 
     // Assign new subscription
@@ -168,30 +118,29 @@ export default function AssignSubscription() {
       active: true,
     });
 
-    alert(isRenew ? "Pretplata produžena" : "Pretplata dodeljena");
-
-    if (!preselectedUserId) {
-      setUserId("");
-    }
+    alert("Pretplata dodeljena");
+    setUserId(uid || "");
     setPackageId("");
     setStartDate("");
     setCurrentSubs([]);
   }
 
+  // Format dates with Latin months
+  const formatDate = (d) =>
+    d?.toDate
+      ? d.toDate().toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
+      : d instanceof Date
+      ? d.toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
+      : "—";
+
   return (
     <div>
-      <h2>
-        {isRenew ? "Produži pretplatu" : "Dodeli pretplatu klijentu"}
-      </h2>
+      <h2>Dodeli pretplatu klijentu</h2>
 
       {/* Client selection */}
       <div style={{ marginBottom: 10 }}>
         <label>Izaberite klijenta:</label>
-        <select
-          value={userId}
-          onChange={e => setUserId(e.target.value)}
-          disabled={!!preselectedUserId}
-        >
+        <select value={userId} onChange={e => setUserId(e.target.value)}>
           <option value="">-- Odaberite klijenta --</option>
           {users.map(u => (
             <option key={u.id} value={u.id}>
@@ -208,22 +157,17 @@ export default function AssignSubscription() {
           <ul>
             {currentSubs.map((s, i) => (
               <li key={i}>
-                {s.name} —{" "}
-                {s.startDate.toLocaleDateString("sr-RS")} –{" "}
-                {s.endDate.toLocaleDateString("sr-RS")}
+                {s.name} — {formatDate(s.startDate)} – {formatDate(s.endDate)}
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {/* Package selection */}
+      {/* Subscription selection */}
       <div style={{ marginBottom: 10 }}>
         <label>Izaberite pretplatu:</label>
-        <select
-          value={packageId}
-          onChange={e => setPackageId(e.target.value)}
-        >
+        <select value={packageId} onChange={e => setPackageId(e.target.value)}>
           <option value="">-- Odaberite pretplatu --</option>
           {packages.map(p => (
             <option key={p.id} value={p.id}>
@@ -235,17 +179,11 @@ export default function AssignSubscription() {
 
       {/* Start date */}
       <div style={{ marginBottom: 10 }}>
-        <label>Datum početka:</label>
-        <input
-          type="date"
-          value={startDate}
-          onChange={e => setStartDate(e.target.value)}
-        />
+        <label>Datum početka (opciono):</label>
+        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
       </div>
 
-      <button onClick={assign}>
-        {isRenew ? "Produži" : "Dodeli"}
-      </button>
+      <button onClick={assign}>Dodeli</button>
     </div>
   );
 }
