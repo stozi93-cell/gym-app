@@ -8,7 +8,18 @@ export default function AdminPackages() {
     name: "",
     durationDays: "",
     price: "",
+    defaultCheckIns: "default",
   });
+
+  const checkInOptions = [
+    { value: "default", label: "Koristi podrazumevano" },
+    { value: "1", label: "Jednom nedeljno" },
+    { value: "2", label: "Dva puta nedeljno" },
+    { value: "3", label: "Tri puta nedeljno" },
+    { value: "4", label: "Četiri puta nedeljno" },
+    { value: "5", label: "Pet puta nedeljno" },
+    { value: "unlimited", label: "Neograničeno" },
+  ];
 
   useEffect(() => {
     load();
@@ -20,7 +31,7 @@ export default function AdminPackages() {
   }
 
   async function createPackage() {
-    const { name, durationDays, price } = newPackage;
+    const { name, durationDays, price, defaultCheckIns } = newPackage;
     if (!name || !durationDays || !price) {
       alert("Popunite sva polja");
       return;
@@ -30,10 +41,11 @@ export default function AdminPackages() {
       name,
       durationDays: Number(durationDays),
       price: Number(price),
+      defaultCheckIns,
       active: true,
     });
 
-    setNewPackage({ name: "", durationDays: "", price: "" });
+    setNewPackage({ name: "", durationDays: "", price: "", defaultCheckIns: "default" });
     load();
   }
 
@@ -45,9 +57,14 @@ export default function AdminPackages() {
   }
 
   async function updatePackage(pkgId, field, value) {
-    await updateDoc(doc(db, "subscriptions", pkgId), {
-      [field]: field === "name" ? value : Number(value),
-    });
+    const data =
+      field === "name"
+        ? { [field]: value }
+        : field === "defaultCheckIns"
+        ? { [field]: value }
+        : { [field]: Number(value) };
+
+    await updateDoc(doc(db, "subscriptions", pkgId), data);
     load();
   }
 
@@ -76,6 +93,15 @@ export default function AdminPackages() {
           onChange={e => setNewPackage({ ...newPackage, price: e.target.value })}
           style={{ marginRight: 5 }}
         />
+        <select
+          value={newPackage.defaultCheckIns}
+          onChange={e => setNewPackage({ ...newPackage, defaultCheckIns: e.target.value })}
+          style={{ marginRight: 5 }}
+        >
+          {checkInOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
         <button onClick={createPackage}>Kreiraj paket</button>
       </div>
 
@@ -85,6 +111,7 @@ export default function AdminPackages() {
             <th>Naziv</th>
             <th>Trajanje (dani)</th>
             <th>Cena</th>
+            <th>Podrazumevani dolasci nedeljno</th>
             <th>Status</th>
             <th>Akcija</th>
           </tr>
@@ -113,6 +140,16 @@ export default function AdminPackages() {
                   onChange={e => updatePackage(p.id, "price", e.target.value)}
                   style={{ width: 80 }}
                 />
+              </td>
+              <td>
+                <select
+                  value={p.defaultCheckIns || "default"}
+                  onChange={e => updatePackage(p.id, "defaultCheckIns", e.target.value)}
+                >
+                  {checkInOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </td>
               <td>{p.active ? "Aktivan" : "Neaktivan"}</td>
               <td>

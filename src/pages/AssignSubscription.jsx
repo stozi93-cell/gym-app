@@ -6,7 +6,8 @@ import {
   updateDoc,
   query,
   where,
-  doc
+  doc,
+  getDoc
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useParams } from "react-router-dom";
@@ -18,7 +19,18 @@ export default function AssignSubscription() {
   const [userId, setUserId] = useState(uid || "");
   const [packageId, setPackageId] = useState("");
   const [startDate, setStartDate] = useState("");
+  const [checkInOption, setCheckInOption] = useState("default");
   const [currentSubs, setCurrentSubs] = useState([]);
+
+  const checkInOptions = [
+    { value: "default", label: "Koristi podrazumevano iz paketa" },
+    { value: "1", label: "Jednom nedeljno" },
+    { value: "2", label: "Dva puta nedeljno" },
+    { value: "3", label: "Tri puta nedeljno" },
+    { value: "4", label: "Četiri puta nedeljno" },
+    { value: "5", label: "Pet puta nedeljno" },
+    { value: "unlimited", label: "Neograničeno" },
+  ];
 
   useEffect(() => {
     load();
@@ -33,7 +45,7 @@ export default function AssignSubscription() {
   }, [userId]);
 
   useEffect(() => {
-    if (uid) setUserId(uid); // update state if route param exists
+    if (uid) setUserId(uid);
   }, [uid]);
 
   async function load() {
@@ -66,10 +78,8 @@ export default function AssignSubscription() {
     const subs = [];
     for (const d of snap.docs) {
       const subData = d.data();
-      const pkgSnap = await getDocs(
-        query(collection(db, "subscriptions"), where("__name__", "==", subData.subscriptionId))
-      );
-      const pkg = pkgSnap.docs[0]?.data();
+      const pkgSnap = await getDoc(doc(db, "subscriptions", subData.subscriptionId));
+      const pkg = pkgSnap.data();
       if (pkg) {
         const start = subData.startDate?.toDate ? subData.startDate.toDate() : new Date(subData.startDate);
         const end = subData.endDate?.toDate ? subData.endDate.toDate() : new Date(subData.endDate);
@@ -78,6 +88,7 @@ export default function AssignSubscription() {
           ...pkg,
           startDate: start,
           endDate: end,
+          checkIns: subData.checkIns || [],
         });
       }
     }
@@ -95,6 +106,19 @@ export default function AssignSubscription() {
     const start = startDate ? new Date(startDate) : new Date();
     const end = new Date(start);
     end.setDate(end.getDate() + (pkg.durationDays || 30));
+
+    // Determine weekly check-ins
+    let weeklyCheckIns = checkInOption;
+    if (checkInOption === "default") {
+      weeklyCheckIns = pkg.defaultCheckIns || "unlimited";
+    }
+
+    // Initialize check-ins array per week
+    const weeks = Math.ceil((end - start) / (7 * 24 * 60 * 60 * 1000));
+    const checkInsArray = [];
+    for (let i = 0; i < weeks; i++) {
+      checkInsArray.push(weeklyCheckIns === "unlimited" ? "unlimited" : 0);
+    }
 
     // Deactivate existing subscriptions for this client
     const existing = await getDocs(
@@ -116,16 +140,18 @@ export default function AssignSubscription() {
       startDate: start,
       endDate: end,
       active: true,
+      weeklyCheckIns,
+      checkInsArray,
     });
 
     alert("Pretplata dodeljena");
     setUserId(uid || "");
     setPackageId("");
     setStartDate("");
+    setCheckInOption("default");
     setCurrentSubs([]);
   }
 
-  // Format dates with Latin months
   const formatDate = (d) =>
     d?.toDate
       ? d.toDate().toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
@@ -137,7 +163,6 @@ export default function AssignSubscription() {
     <div>
       <h2>Dodeli pretplatu klijentu</h2>
 
-      {/* Client selection */}
       <div style={{ marginBottom: 10 }}>
         <label>Izaberite klijenta:</label>
         <select value={userId} onChange={e => setUserId(e.target.value)}>
@@ -150,7 +175,6 @@ export default function AssignSubscription() {
         </select>
       </div>
 
-      {/* Current subscriptions */}
       {currentSubs.length > 0 && (
         <div style={{ marginBottom: 10 }}>
           <b>Trenutne aktivne pretplate:</b>
@@ -164,7 +188,6 @@ export default function AssignSubscription() {
         </div>
       )}
 
-      {/* Subscription selection */}
       <div style={{ marginBottom: 10 }}>
         <label>Izaberite pretplatu:</label>
         <select value={packageId} onChange={e => setPackageId(e.target.value)}>
@@ -177,7 +200,15 @@ export default function AssignSubscription() {
         </select>
       </div>
 
-      {/* Start date */}
+      <div style={{ marginBottom: 10 }}>
+        <label>Izaberite broj dolazaka nedeljno:</label>
+        <select value={checkInOption} onChange={e => setCheckInOption(e.target.value)}>
+          {checkInOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+
       <div style={{ marginBottom: 10 }}>
         <label>Datum početka (opciono):</label>
         <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
