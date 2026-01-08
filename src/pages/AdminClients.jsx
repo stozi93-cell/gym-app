@@ -9,7 +9,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 export default function AdminClients() {
   const [clients, setClients] = useState([]);
@@ -161,7 +161,13 @@ export default function AdminClients() {
           {visibleClients.map((c) => (
             <tr key={c.id}>
               <td>
-                {c.name} {c.surname}
+                <Link
+                  to={`/profil/${c.id}`}
+                  target="_blank"
+                  style={{ fontWeight: "bold", textDecoration: "none", color: "#007bff" }}
+                >
+                  {c.name} {c.surname}
+                </Link>
               </td>
               <td>{c.email}</td>
               <td>
@@ -174,10 +180,6 @@ export default function AdminClients() {
                 )}
               </td>
               <td>
-                <Link to={`/profil/${c.id}`}>
-                  <button>Profil</button>
-                </Link>
-
                 {c.hasActiveSub && (
                   <button
                     style={{ marginLeft: 5 }}

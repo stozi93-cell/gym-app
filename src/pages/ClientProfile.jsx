@@ -78,12 +78,17 @@ export default function ClientProfile() {
 
   if (!user) return <div>Učitavanje...</div>;
 
-  const formatDate = (value) => {
-    if (!value) return "—";
-    if (value instanceof Timestamp) return value.toDate().toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" });
-    if (value instanceof Date) return value.toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" });
-    return value;
-  };
+  const formatDate = (d) => {
+  if (!d) return "—";
+
+  const dateObj = d?.toDate ? d.toDate() : new Date(d);
+  return dateObj.toLocaleDateString("sr-Latn-RS", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+};
+
 
   const renderText = (value) => {
     if (!value) return "—";
@@ -152,7 +157,7 @@ export default function ClientProfile() {
       <p><b>Prezime:</b> {editMode ? (<input value={formData.surname || ""} onChange={e => handleChange("surname", e.target.value)} />) : renderText(user.surname)}</p>
       <p><b>Email:</b> {editMode ? (<input value={formData.email || ""} onChange={e => handleChange("email", e.target.value)} />) : renderText(user.email)}</p>
       <p><b>Telefon:</b> {editMode ? (<input value={formData.phone || ""} onChange={e => handleChange("phone", e.target.value)} />) : renderText(user.phone)}</p>
-      <p><b>Datum rođenja:</b> {editMode ? (<input type="date" value={formData.dob || ""} onChange={e => handleChange("dob", e.target.value)} />) : formatDate(user.dob)}</p>
+      <p><b>Datum rođenja:</b> {editMode ? (<input type="date" value={formData.dob || ""} onChange={e => handleChange("dob", e.target.value)} />) : formatDate(profile.dob)}</p>
 
       <hr />
 
