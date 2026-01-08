@@ -11,7 +11,6 @@ import AdminSlots from "./pages/AdminSlots";
 import ClientProfile from "./pages/ClientProfile";
 import AdminClients from "./pages/AdminClients";
 import AdminPackages from "./pages/AdminPackages";
-import AssignSubscription from "./pages/AssignSubscription";
 import MySubscriptions from "./pages/MySubscriptions";
 
 export default function App() {
@@ -50,7 +49,6 @@ export default function App() {
             <Link to="/raspored">Raspored</Link>{" | "}
             <Link to="/klijenti">Lista klijenata</Link>{" | "}
             <Link to="/paketi">Paketi</Link>{" | "}
-            <Link to="/dodela-pretplate">Dodela pretplate</Link>
           </>
         )}
       </nav>
@@ -73,8 +71,6 @@ export default function App() {
             <Route path="/raspored" element={<AdminSlots />} />
             <Route path="/klijenti" element={<AdminClients />} />
             <Route path="/paketi" element={<AdminPackages />} />
-            <Route path="/dodela-pretplate" element={<AssignSubscription />} />
-            <Route path="/assign-subscription/:uid?" element={<AssignSubscription />} />
 
             {/* Redirect admin default "/" and MySubscriptions */}
             <Route path="/" element={<Navigate to="/raspored" />} />
