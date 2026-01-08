@@ -8,15 +8,12 @@ import {
   query,
   where,
   updateDoc,
-  Timestamp,
-  addDoc,
-  orderBy,
-  limit
+  Timestamp
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
-export default function ClientProfile() {
+function ClientProfile() {
   const { uid } = useParams();
   const { profile } = useAuth();
   const role = profile?.role;
@@ -28,7 +25,7 @@ export default function ClientProfile() {
 
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({});
-  const [editingSubId, setEditingSubId] = useState(null); // sub being edited
+  const [editingSubId, setEditingSubId] = useState(null);
 
   useEffect(() => {
     load();
@@ -47,32 +44,23 @@ export default function ClientProfile() {
     setUser({ ...userData, dob: dobString });
     setFormData({ ...userData, dob: dobString });
 
-    // --- LAST VISIT (read-only, safe) ---
-// --- LAST VISIT (days ago + color) ---
-const bookingSnap = await getDocs(
-  query(
-    collection(db, "bookings"),
-    where("userId", "==", uid)
-  )
-);
+    // --- LAST VISIT ---
+    const bookingSnap = await getDocs(
+      query(collection(db, "bookings"), where("userId", "==", uid))
+    );
 
-if (!bookingSnap.empty) {
-  const visits = bookingSnap.docs
-    .map(d => d.data())
-    .filter(b => b.checkedInAt)
-    .sort((a, b) => b.checkedInAt.toDate() - a.checkedInAt.toDate());
+    if (!bookingSnap.empty) {
+      const visits = bookingSnap.docs
+        .map(d => d.data())
+        .filter(b => b.checkedInAt)
+        .sort((a, b) => b.checkedInAt.toDate() - a.checkedInAt.toDate());
 
-  if (visits.length) {
-    const last = visits[0].checkedInAt.toDate();
-    setLastVisit(last);
-  } else {
-    setLastVisit(null);
-  }
-} else {
-  setLastVisit(null);
-}
+      setLastVisit(visits.length ? visits[0].checkedInAt.toDate() : null);
+    } else {
+      setLastVisit(null);
+    }
 
-
+    // --- SUBSCRIPTIONS ---
     const csSnap = await getDocs(
       query(collection(db, "clientSubscriptions"), where("userId", "==", uid))
     );
@@ -84,11 +72,17 @@ if (!bookingSnap.empty) {
       const pkg = subSnap.data();
       if (!pkg) continue;
 
-      const startDate = cs.startDate?.toDate ? cs.startDate.toDate() : new Date(cs.startDate);
-      const endDate = cs.endDate?.toDate ? cs.endDate.toDate() : new Date(cs.endDate);
+      // --- Safe defaults ---
+      const checkInsArray = Array.isArray(cs.checkInsArray) ? cs.checkInsArray : [];
+      let weeklyCheckIns = cs.weeklyCheckIns;
+      if (!weeklyCheckIns || weeklyCheckIns === "default") {
+        weeklyCheckIns = pkg.defaultCheckIns || "unlimited";
+      }
 
-      const checkInsArray = cs.checkInsArray || [];
-      const weeklyCheckIns = cs.weeklyCheckIns || pkg.defaultCheckIns || "unlimited";
+      let startDate = cs.startDate?.toDate ? cs.startDate.toDate() : new Date(cs.startDate);
+      let endDate = cs.endDate?.toDate ? cs.endDate.toDate() : new Date(cs.endDate);
+      if (isNaN(startDate.getTime())) startDate = new Date();
+      if (isNaN(endDate.getTime())) endDate = new Date();
 
       subs.push({
         id: d.id,
@@ -108,16 +102,15 @@ if (!bookingSnap.empty) {
   if (!user) return <div>Učitavanje...</div>;
 
   const formatDate = (d) => {
-  if (!d) return "—";
-
-  const dateObj = d?.toDate ? d.toDate() : new Date(d);
-  return dateObj.toLocaleDateString("sr-Latn-RS", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-};
-
+    if (!d) return "—";
+    const dateObj = d?.toDate ? d.toDate() : new Date(d);
+    return dateObj.toLocaleDateString("sr-Latn-RS", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+  };
 
   const renderText = (value) => {
     if (!value) return "—";
@@ -128,18 +121,16 @@ if (!bookingSnap.empty) {
 
   const handleChange = (field, value) => setFormData({ ...formData, [field]: value });
 
-  // Days ago and color for last visit
-const getLastVisitInfo = (date) => {
-  if (!date) return { text: "—", color: "black" };
-  const today = new Date();
-  const daysAgo = Math.floor((today - date) / (1000 * 60 * 60 * 24));
-  let color = "black";
-  if (daysAgo < 7) color = "green";
-  else if (daysAgo <= 30) color = "orange";
-  else color = "red";
-  return { text: `${formatDate(date)} (${daysAgo} ${daysAgo === 1 ? "dan" : "dana"} unazad)`, color };
-};
-
+  const getLastVisitInfo = (date) => {
+    if (!date) return { text: "—", color: "black" };
+    const today = new Date();
+    const daysAgo = Math.floor((today - date) / (1000 * 60 * 60 * 24));
+    let color = "black";
+    if (daysAgo < 7) color = "green";
+    else if (daysAgo <= 30) color = "orange";
+    else color = "red";
+    return { text: `${formatDate(date)} (${daysAgo} ${daysAgo === 1 ? "dan" : "dana"} unazad)`, color };
+  };
 
   async function saveProfile() {
     await updateDoc(doc(db, "users", uid), formData);
@@ -150,13 +141,11 @@ const getLastVisitInfo = (date) => {
 
   const visibleSubs = showAllSubs ? subscriptions : subscriptions.slice(0, 1);
 
-  // ---- Subscription Editing ----
   const startEditingSub = (subId) => setEditingSubId(subId);
   const stopEditingSub = () => setEditingSubId(null);
 
   const updateSubField = async (subId, field, value) => {
-    const subRef = doc(db, "clientSubscriptions", subId);
-    await updateDoc(subRef, { [field]: value });
+    await updateDoc(doc(db, "clientSubscriptions", subId), { [field]: value });
     load();
   };
 
@@ -184,7 +173,8 @@ const getLastVisitInfo = (date) => {
     <div>
       <h2>Profil klijenta</h2>
 
-      {role === "admin" && !editMode && (
+      {/* Edit button for admin or client */}
+      {!editMode && (role === "admin" || role === "client") && (
         <button onClick={() => setEditMode(true)}>Uredi profil</button>
       )}
 
@@ -195,20 +185,17 @@ const getLastVisitInfo = (date) => {
         </>
       )}
 
-      <p><b>Ime:</b> {editMode ? (<input value={formData.name || ""} onChange={e => handleChange("name", e.target.value)} />) : renderText(user.name)}</p>
-      <p><b>Prezime:</b> {editMode ? (<input value={formData.surname || ""} onChange={e => handleChange("surname", e.target.value)} />) : renderText(user.surname)}</p>
-      <p><b>Email:</b> {editMode ? (<input value={formData.email || ""} onChange={e => handleChange("email", e.target.value)} />) : renderText(user.email)}</p>
-      <p><b>Telefon:</b> {editMode ? (<input value={formData.phone || ""} onChange={e => handleChange("phone", e.target.value)} />) : renderText(user.phone)}</p>
-      <p><b>Datum rođenja:</b> {editMode ? (<input type="date" value={formData.dob || ""} onChange={e => handleChange("dob", e.target.value)} />) : formatDate(profile.dob)}</p>
+      <p><b>Ime:</b> {editMode ? (<input value={formData.name || ""} onChange={e => handleChange("name", e.target.value)} disabled={!(role === "admin" || role === "client")} />) : renderText(user.name)}</p>
+      <p><b>Prezime:</b> {editMode ? (<input value={formData.surname || ""} onChange={e => handleChange("surname", e.target.value)} disabled={!(role === "admin" || role === "client")} />) : renderText(user.surname)}</p>
+      <p><b>Email:</b> {editMode ? (<input value={formData.email || ""} onChange={e => handleChange("email", e.target.value)} disabled={!(role === "admin" || role === "client")} />) : renderText(user.email)}</p>
+      <p><b>Telefon:</b> {editMode ? (<input value={formData.phone || ""} onChange={e => handleChange("phone", e.target.value)} disabled={!(role === "admin" || role === "client")} />) : renderText(user.phone)}</p>
+      <p><b>Datum rođenja:</b> {editMode ? (<input type="date" value={formData.dob || ""} onChange={e => handleChange("dob", e.target.value)} disabled={!(role === "admin" || role === "client")} />) : formatDate(user.dob)}</p>
       <p><b>Poslednja poseta:</b>{" "}<span style={{ color: getLastVisitInfo(lastVisit).color }}>{getLastVisitInfo(lastVisit).text}</span></p>
-
 
       <hr />
 
       <h3>Pretplate</h3>
-
       {visibleSubs.length === 0 && <p>Nema pretplata.</p>}
-
       {visibleSubs.map((s, idx) => {
         const active = s.active && s.endDate >= new Date();
         const editing = editingSubId === s.id;
@@ -252,24 +239,32 @@ const getLastVisitInfo = (date) => {
                 <p><b>Cena:</b> {s.price ?? "—"} RSD</p>
                 <p><b>Status:</b> <span style={{ color: active ? "green" : "red" }}>{active ? "Aktivna" : "Neaktivna"}</span></p>
                 <p><b>Broj dolazaka nedeljno:</b> {s.weeklyCheckIns === "unlimited" ? "Neograničeno" : s.weeklyCheckIns}</p>
+
                 <div>
                   <b>Dolasci po nedeljama:</b>
                   <ul>
-                    {s.checkInsArray.map((c, i) => (
-                      <li key={i}>
-                        Nedelja {i + 1}:{" "}
-                         {s.weeklyCheckIns === "unlimited"
-  ? `${c ?? 0}`
-  : `${c ?? 0} / ${s.weeklyCheckIns}`}
+                    {s.checkInsArray.map((c, i) => {
+                      const weekStart = new Date(s.startDate);
+                      weekStart.setDate(weekStart.getDate() + i * 7);
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekStart.getDate() + 6);
+                      const startStr = weekStart.toLocaleDateString("sr-Latn-RS", { day:"2-digit", month:"long", year:"numeric" });
+                      const endStr = weekEnd.toLocaleDateString("sr-Latn-RS", { day:"2-digit", month:"long", year:"numeric" });
+                      const attended = typeof c === "number" ? c : 0;
 
-                        {role === "admin" && active && (
-                          <>
-                            <button onClick={() => changeCheckIn(s.id, i, 1)}>+</button>
-                            <button onClick={() => changeCheckIn(s.id, i, -1)}>-</button>
-                          </>
-                        )}
-                      </li>
-                    ))}
+                      return (
+                        <li key={i}>
+                          Nedelja {i + 1} ({startStr} – {endStr}): {attended}
+                          {role === "admin" && (
+                            <>
+                              {s.weeklyCheckIns !== "unlimited" && <> / {s.weeklyCheckIns} </>}
+                              <button onClick={() => changeCheckIn(s.id, i, 1)}>+</button>
+                              <button onClick={() => changeCheckIn(s.id, i, -1)}>-</button>
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
 
@@ -295,9 +290,11 @@ const getLastVisitInfo = (date) => {
       <hr />
 
       <h3>Opšte napomene</h3>
-      <p><b>Opšti ciljevi:</b><br />{editMode ? (<textarea rows={3} value={formData.goals || ""} onChange={e => handleChange("goals", e.target.value)} />) : renderText(user.goals)}</p>
-      <p><b>Zdravstvene napomene:</b><br />{editMode ? (<textarea rows={3} value={formData.healthNotes || ""} onChange={e => handleChange("healthNotes", e.target.value)} />) : renderText(user.healthNotes)}</p>
-      <p><b>Trenažne napomene:</b><br />{editMode ? (<textarea rows={3} value={formData.trainingNotes || ""} onChange={e => handleChange("trainingNotes", e.target.value)} />) : renderText(user.trainingNotes)}</p>
+      <p><b>Opšti ciljevi:</b><br />{editMode ? (<textarea rows={3} value={formData.goals || ""} onChange={e => handleChange("goals", e.target.value)} disabled={!(role === "admin" || role === "client")} />) : renderText(user.goals)}</p>
+      <p><b>Zdravstvene napomene:</b><br />{editMode ? (<textarea rows={3} value={formData.healthNotes || ""} onChange={e => handleChange("healthNotes", e.target.value)} disabled={!(role === "admin" || role === "client")} />) : renderText(user.healthNotes)}</p>
+      <p><b>Trenažne napomene:</b><br />{editMode && role === "admin" ? (<textarea rows={3} value={formData.trainingNotes || ""} onChange={e => handleChange("trainingNotes", e.target.value)} />) : renderText(user.trainingNotes)}</p>
     </div>
   );
 }
+
+export default ClientProfile;

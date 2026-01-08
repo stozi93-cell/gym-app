@@ -27,7 +27,6 @@ export default function Bookings() {
   async function loadData() {
     setLoading(true);
 
-    // Load slots
     const slotSnap = await getDocs(
       query(collection(db, "slots"), orderBy("timestamp"))
     );
@@ -38,7 +37,6 @@ export default function Bookings() {
     }));
     setSlots(slotData);
 
-    // Load user bookings
     const bookingSnap = await getDocs(
       query(
         collection(db, "bookings"),
@@ -52,7 +50,6 @@ export default function Bookings() {
     }));
     setBookings(userBookings);
 
-    // Count bookings per slot
     const allBookings = await getDocs(collection(db, "bookings"));
     const counts = {};
     allBookings.docs.forEach(b => {
@@ -109,25 +106,105 @@ export default function Bookings() {
 
   if (loading) return <p>Učitavanje termina...</p>;
 
-  // Group slots by date
-  const groupedSlots = slots.reduce((acc, slot) => {
-    const dateKey = slot.timestamp
-      .toDate().toLocaleDateString("sr-RS", {
+  const now = new Date();
+  const todayKeyRaw = now.toLocaleDateString("sr-Latn-RS", {
+  weekday: "long",
   day: "2-digit",
   month: "long",
   year: "numeric",
 });
+const todayKey = todayKeyRaw.charAt(0).toUpperCase() + todayKeyRaw.slice(1);
+
+
+  function isFutureSlot(slot) {
+    return slot.timestamp.toDate() > now;
+  }
+
+  function isThisWeek(date) {
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay() + 1);
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+    return date >= startOfWeek && date < endOfWeek;
+  }
+
+  // Group future slots
+  const groupedSlots = slots
+  .filter(isFutureSlot)
+  .reduce((acc, slot) => {
+    const rawDate = slot.timestamp.toDate().toLocaleDateString("sr-Latn-RS", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+    const dateKey = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
+
     if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(slot);
     return acc;
   }, {});
 
+
+  // Upcoming bookings (sorted)
+  const futureBookings = bookings
+    .map(b => ({
+      booking: b,
+      slot: slots.find(s => s.id === b.slotId),
+    }))
+    .filter(x => x.slot && x.slot.timestamp.toDate() > now)
+    .sort(
+      (a, b) =>
+        a.slot.timestamp.toDate() - b.slot.timestamp.toDate()
+    );
+
+  // Weekly CHECK-INS count
+  const weeklyCheckins = futureBookings.filter(
+    x =>
+      x.booking.checkedIn === true &&
+      isThisWeek(x.slot.timestamp.toDate())
+  );
+
   return (
     <div>
       <h2>Rezervacije</h2>
 
+      {/* SUMMARY */}
+      <div
+        style={{
+          padding: "10px",
+          marginBottom: "20px",
+          background: "#f5f5f5",
+          borderRadius: "6px",
+        }}
+      >
+        <strong>Ove nedelje</strong>
+        <p>Broj treninga: {weeklyCheckins.length}</p>
+
+        {futureBookings.length > 0 && (
+          <>
+            <strong>Predstojeći termini</strong>
+            <ul>
+              {futureBookings.map(({ slot }) => (
+                <li key={slot.id}>
+                  {slot.timestamp.toDate().toLocaleDateString("sr-RS")}{" "}
+                  {slot.timestamp.toDate().toLocaleTimeString("sr-RS", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+
+      {/* BOOKINGS */}
       {Object.entries(groupedSlots).map(([date, daySlots]) => (
-        <details key={date} open>
+        <details key={date} open={date === todayKey}>
           <summary style={{ fontWeight: "bold", cursor: "pointer" }}>
             📅 {date}
           </summary>
