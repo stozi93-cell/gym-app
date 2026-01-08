@@ -10,6 +10,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
+import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 
 const MAX_CAPACITY = 5;
 const BOOKING_CUTOFF_HOURS = 1;
@@ -27,46 +28,34 @@ export default function Bookings() {
   async function loadData() {
     setLoading(true);
 
-    const slotSnap = await getDocs(
-      query(collection(db, "slots"), orderBy("timestamp"))
-    );
-
-    const slotData = slotSnap.docs.map(d => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    // Load all slots
+    const slotSnap = await getDocs(query(collection(db, "slots"), orderBy("timestamp")));
+    const slotData = slotSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     setSlots(slotData);
 
+    // Load user bookings
     const bookingSnap = await getDocs(
-      query(
-        collection(db, "bookings"),
-        where("userId", "==", auth.currentUser.uid)
-      )
+      query(collection(db, "bookings"), where("userId", "==", auth.currentUser.uid))
     );
-
-    const userBookings = bookingSnap.docs.map(d => ({
-      id: d.id,
-      ...d.data(),
-    }));
+    const userBookings = bookingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     setBookings(userBookings);
 
-    const allBookings = await getDocs(collection(db, "bookings"));
+    // Count bookings per slot
+    const allBookingsSnap = await getDocs(collection(db, "bookings"));
     const counts = {};
-    allBookings.docs.forEach(b => {
+    allBookingsSnap.docs.forEach((b) => {
       const sid = b.data().slotId;
       counts[sid] = (counts[sid] || 0) + 1;
     });
-
     setBookingCounts(counts);
+
     setLoading(false);
   }
 
   function canBook(slotTimestamp) {
     const now = new Date();
     const slotTime = slotTimestamp.toDate();
-    const diffHours =
-      (slotTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-
+    const diffHours = (slotTime.getTime() - now.getTime()) / (1000 * 60 * 60);
     return diffHours >= BOOKING_CUTOFF_HOURS;
   }
 
@@ -75,12 +64,10 @@ export default function Bookings() {
       alert("Rezervacija nije moguća manje od 1h pre početka termina.");
       return;
     }
-
-    if (bookings.some(b => b.slotId === slotId)) {
+    if (bookings.some((b) => b.slotId === slotId)) {
       alert("Već ste rezervisali ovaj termin.");
       return;
     }
-
     const count = bookingCounts[slotId] || 0;
     if (count >= MAX_CAPACITY) {
       alert("Termin je popunjen.");
@@ -97,127 +84,169 @@ export default function Bookings() {
   }
 
   async function cancel(slotId) {
-    const b = bookings.find(b => b.slotId === slotId);
+    const b = bookings.find((b) => b.slotId === slotId);
     if (!b) return;
-
     await deleteDoc(doc(db, "bookings", b.id));
     loadData();
   }
 
   if (loading) return <p>Učitavanje termina...</p>;
 
-  const now = new Date();
-  const todayKeyRaw = now.toLocaleDateString("sr-Latn-RS", {
-  weekday: "long",
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
-const todayKey = todayKeyRaw.charAt(0).toUpperCase() + todayKeyRaw.slice(1);
+  const today = new Date();
 
-
-  function isFutureSlot(slot) {
-    return slot.timestamp.toDate() > now;
-  }
-
-  function isThisWeek(date) {
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay() + 1);
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 7);
-
-    return date >= startOfWeek && date < endOfWeek;
-  }
-
-  // Group future slots
-  const groupedSlots = slots
-  .filter(isFutureSlot)
-  .reduce((acc, slot) => {
-    const rawDate = slot.timestamp.toDate().toLocaleDateString("sr-Latn-RS", {
-      weekday: "long",
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
+  // Weekly check-ins
+  const weeklyCheckins = bookings.filter((b) => {
+    if (!b.checkedIn) return false;
+    const slot = slots.find((s) => s.id === b.slotId);
+    if (!slot) return false;
+    const slotDate = slot.timestamp.toDate();
+    return isWithinInterval(slotDate, {
+      start: startOfWeek(today, { weekStartsOn: 1 }),
+      end: endOfWeek(today, { weekStartsOn: 1 }),
     });
-    const dateKey = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
+  });
 
+  // Last visits (all past checked-in bookings)
+  const lastVisits = bookings
+    .filter((b) => b.checkedIn)
+    .map((b) => {
+      const slot = slots.find((s) => s.id === b.slotId);
+      return slot ? slot.timestamp.toDate() : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b - a); // latest first
+
+  // Future bookings (for display)
+  const futureBookings = bookings
+    .filter((b) => {
+      const slot = slots.find((s) => s.id === b.slotId);
+      return slot && slot.timestamp.toDate() >= today;
+    })
+    .map((b) => slots.find((s) => s.id === b.slotId))
+    .filter(Boolean)
+    .sort((a, b) => a.timestamp.toDate() - b.timestamp.toDate()); // earliest first
+
+  // Helper to capitalize day
+  function capitalize(s) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  // Filter out past slots
+  const futureSlots = slots.filter((slot) => slot.timestamp.toDate() >= today);
+
+  // Group only future slots by date (with day names)
+  const groupedSlots = futureSlots.reduce((acc, slot) => {
+    const dateKey = capitalize(
+      slot.timestamp.toDate().toLocaleDateString("sr-Latn-RS", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    );
     if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(slot);
     return acc;
   }, {});
 
+  // Sort groupedSlots by actual date
+  const sortedDates = Object.entries(groupedSlots).sort((a, b) => {
+    const dateA = new Date(a[1][0].timestamp.toDate());
+    const dateB = new Date(b[1][0].timestamp.toDate());
+    return dateA - dateB;
+  });
 
-  // Upcoming bookings (sorted)
-  const futureBookings = bookings
-    .map(b => ({
-      booking: b,
-      slot: slots.find(s => s.id === b.slotId),
-    }))
-    .filter(x => x.slot && x.slot.timestamp.toDate() > now)
-    .sort(
-      (a, b) =>
-        a.slot.timestamp.toDate() - b.slot.timestamp.toDate()
+  // Today key to open by default
+  const todayKey = sortedDates.find(([date, slots]) => {
+    const slotDate = new Date(slots[0].timestamp.toDate());
+    return (
+      slotDate.getDate() === today.getDate() &&
+      slotDate.getMonth() === today.getMonth() &&
+      slotDate.getFullYear() === today.getFullYear()
     );
+  })?.[0];
 
-  // Weekly CHECK-INS count
-  const weeklyCheckins = futureBookings.filter(
-    x =>
-      x.booking.checkedIn === true &&
-      isThisWeek(x.slot.timestamp.toDate())
-  );
+  // Helper for slot coloring
+  function getSlotColor(slot) {
+    const booked = bookings.some((b) => b.slotId === slot.id);
+    const count = bookingCounts[slot.id] || 0;
+    const full = count >= MAX_CAPACITY;
+    const bookingAllowed = canBook(slot.timestamp);
+
+    if (booked) return "#add8e6"; // blue = booked by client
+    if (full) return "#ffeaea"; // red-ish = full
+    if (!bookingAllowed) return "#fff0b3"; // orange-ish = reservation closed
+    return "#eaffea"; // green = available
+  }
 
   return (
     <div>
       <h2>Rezervacije</h2>
 
-      {/* SUMMARY */}
-      <div
-        style={{
-          padding: "10px",
-          marginBottom: "20px",
-          background: "#f5f5f5",
-          borderRadius: "6px",
-        }}
-      >
-        <strong>Ove nedelje</strong>
-        <p>Broj treninga: {weeklyCheckins.length}</p>
+      <p>
+        <b>Dolazaka ove nedelje:</b> {weeklyCheckins.length}
+      </p>
 
-        {futureBookings.length > 0 && (
-          <>
-            <strong>Predstojeći termini</strong>
-            <ul>
-              {futureBookings.map(({ slot }) => (
-                <li key={slot.id}>
-                  {slot.timestamp.toDate().toLocaleDateString("sr-RS")}{" "}
-                  {slot.timestamp.toDate().toLocaleTimeString("sr-RS", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
+      {lastVisits.length > 0 && (
+        <ul>
+          {lastVisits.map((d, i) => (
+            <li key={i}>
+              {capitalize(
+                d.toLocaleDateString("sr-Latn-RS", {
+                  weekday: "long",
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
-      {/* BOOKINGS */}
-      {Object.entries(groupedSlots).map(([date, daySlots]) => (
+      {futureBookings.length > 0 && (
+        <ul>
+          {futureBookings.map((slot) => (
+            <li key={slot.id} style={{ color: "#007bff" }}>
+              {capitalize(
+                slot.timestamp.toDate().toLocaleDateString("sr-Latn-RS", {
+                  weekday: "long",
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })
+              )}{" "}
+              {slot.timestamp.toDate().toLocaleTimeString("sr-Latn-RS", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {sortedDates.map(([date, daySlots]) => (
         <details key={date} open={date === todayKey}>
-          <summary style={{ fontWeight: "bold", cursor: "pointer" }}>
-            📅 {date}
-          </summary>
+          <summary style={{ fontWeight: "bold", cursor: "pointer" }}>📅 {date}</summary>
 
-          {daySlots.map(slot => {
-            const booked = bookings.some(b => b.slotId === slot.id);
+          {daySlots.map((slot) => {
+            const booked = bookings.some((b) => b.slotId === slot.id);
             const count = bookingCounts[slot.id] || 0;
             const full = count >= MAX_CAPACITY;
             const bookingAllowed = canBook(slot.timestamp);
 
             return (
-              <div key={slot.id} style={{ marginLeft: 20, marginBottom: 6 }}>
-                {slot.timestamp.toDate().toLocaleTimeString("sr-RS", {
+              <div
+                key={slot.id}
+                style={{
+                  marginLeft: 20,
+                  marginBottom: 6,
+                  backgroundColor: getSlotColor(slot),
+                  padding: "4px 6px",
+                  borderRadius: 4,
+                }}
+              >
+                {slot.timestamp.toDate().toLocaleTimeString("sr-Latn-RS", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
@@ -225,34 +254,22 @@ const todayKey = todayKeyRaw.charAt(0).toUpperCase() + todayKeyRaw.slice(1);
                 {count}/{MAX_CAPACITY}
 
                 {!booked && !full && bookingAllowed && (
-                  <button
-                    style={{ marginLeft: 10 }}
-                    onClick={() => book(slot.id, slot.timestamp)}
-                  >
+                  <button style={{ marginLeft: 10 }} onClick={() => book(slot.id, slot.timestamp)}>
                     Rezerviši
                   </button>
                 )}
 
                 {!booked && !full && !bookingAllowed && (
-                  <span style={{ marginLeft: 10, color: "orange" }}>
-                    Rezervacija zatvorena
-                  </span>
+                  <span style={{ marginLeft: 10, color: "orange" }}>Rezervacija zatvorena</span>
                 )}
 
                 {booked && (
-                  <button
-                    style={{ marginLeft: 10 }}
-                    onClick={() => cancel(slot.id)}
-                  >
+                  <button style={{ marginLeft: 10 }} onClick={() => cancel(slot.id)}>
                     Otkaži
                   </button>
                 )}
 
-                {!booked && full && (
-                  <span style={{ marginLeft: 10, color: "red" }}>
-                    Popunjeno
-                  </span>
-                )}
+                {!booked && full && <span style={{ marginLeft: 10, color: "red" }}>Popunjeno</span>}
               </div>
             );
           })}

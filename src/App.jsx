@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom"; 
+import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { useAuth } from "./context/AuthContext";
 import { auth } from "./firebase";
@@ -37,49 +37,53 @@ export default function App() {
       <button onClick={() => signOut(auth)}>Odjava</button>
 
       <nav style={{ marginBottom: 20 }}>
-        <Link to="/">Rezervacije</Link>
-
-        {" | "}
-        <Link to={`/profil/${user.uid}`}>Moj profil</Link>
-
-        {" | "}
-        {/* <Link to="/moje-pretplate">Moja pretplata</Link> */}
+        {role === "client" && (
+          <>
+            <Link to="/">Rezervacije</Link>{" | "}
+            <Link to={`/profil/${user.uid}`}>Moj profil</Link>{" | "}
+            {/* "Moje pretplate" removed */}
+          </>
+        )}
 
         {role === "admin" && (
           <>
-            {" | "}
-            <Link to="/raspored">Raspored</Link>
-
-            {" | "}
-            <Link to="/klijenti">Lista klijenata</Link>
-
-            {" | "}
-            <Link to="/paketi">Paketi</Link>
-
-            {" | "}
+            <Link to="/raspored">Raspored</Link>{" | "}
+            <Link to="/klijenti">Lista klijenata</Link>{" | "}
+            <Link to="/paketi">Paketi</Link>{" | "}
             <Link to="/dodela-pretplate">Dodela pretplate</Link>
           </>
         )}
       </nav>
 
       <Routes>
-        {/* Client */}
-        <Route path="/" element={<Bookings />} />
-        <Route path="/profil/:uid" element={<ClientProfile />} />
-        <Route path="/moje-pretplate" element={<MySubscriptions />} />
+        {/* CLIENT ONLY ROUTES */}
+        {role === "client" && (
+          <>
+            <Route path="/" element={<Bookings />} />
+            <Route path="/moje-pretplate" element={<MySubscriptions />} />
+          </>
+        )}
 
-        {/* Admin */}
+        {/* PROFILE ROUTE — accessible to both */}
+        <Route path="/profil/:uid" element={<ClientProfile />} />
+
+        {/* ADMIN ONLY ROUTES */}
         {role === "admin" && (
           <>
             <Route path="/raspored" element={<AdminSlots />} />
             <Route path="/klijenti" element={<AdminClients />} />
             <Route path="/paketi" element={<AdminPackages />} />
-
-            {/* Support both /dodela-pretplate and /assign-subscription/:uid */}
             <Route path="/dodela-pretplate" element={<AssignSubscription />} />
             <Route path="/assign-subscription/:uid?" element={<AssignSubscription />} />
+
+            {/* Redirect admin default "/" and MySubscriptions */}
+            <Route path="/" element={<Navigate to="/raspored" />} />
+            <Route path="/moje-pretplate" element={<Navigate to="/raspored" />} />
           </>
         )}
+
+        {/* Fallback for all other paths */}
+        <Route path="*" element={<Navigate to={role === "client" ? "/" : "/raspored"} />} />
       </Routes>
     </BrowserRouter>
   );
