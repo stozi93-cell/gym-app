@@ -50,9 +50,9 @@ export default function AdminPackages() {
   }, []);
 
   useEffect(() => {
-    if (userId) loadCurrentSubs(userId);
-    else setCurrentSubs([]);
-  }, [userId]);
+  if (userId) loadCurrentSubs(userId);
+  else setCurrentSubs([]); // ALWAYS array
+}, [userId]);
 
   useEffect(() => {
     if (clientIdFromParam) setUserId(clientIdFromParam);
@@ -152,7 +152,10 @@ export default function AdminPackages() {
         });
       }
     }
-    setCurrentSubs(subs);
+    subs.sort((a, b) => b.endDate - a.endDate);
+
+// keep only the active one
+setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
   }
 
   async function assignSubscription() {
@@ -224,7 +227,7 @@ export default function AdminPackages() {
           </select>
         </div>
 
-        {currentSubs.length > 0 && (
+        {Array.isArray(currentSubs) && currentSubs.length > 0 && (
           <div style={{ marginBottom: 10 }}>
             <b>Trenutne aktivne pretplate:</b>
             <ul>
