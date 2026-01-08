@@ -190,11 +190,11 @@ export default function AdminClients() {
                 )}
 
                 <button
-                  style={{ marginLeft: 5 }}
-                  onClick={() => navigate(`/assign-subscription/${c.id}`)}
-                >
-                  + Pretplata
-                </button>
+  style={{ marginLeft: 5 }}
+  onClick={() => navigate(`/paketi?clientId=${c.id}`)}
+>
+  + Pretplata
+</button>
               </td>
             </tr>
           ))}
