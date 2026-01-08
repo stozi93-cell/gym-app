@@ -43,7 +43,7 @@ export default function App() {
         <Link to={`/profil/${user.uid}`}>Moj profil</Link>
 
         {" | "}
-        <Link to="/moje-pretplate">Moja pretplata</Link>
+        {/* <Link to="/moje-pretplate">Moja pretplata</Link> */}
 
         {role === "admin" && (
           <>

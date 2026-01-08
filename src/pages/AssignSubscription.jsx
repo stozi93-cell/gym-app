@@ -60,10 +60,17 @@ export default function AssignSubscription() {
     setUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
     // Load active subscriptions/packages
-    const pSnap = await getDocs(
-      query(collection(db, "subscriptions"), where("active", "==", true))
-    );
-    setPackages(pSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+const pSnap = await getDocs(
+  query(collection(db, "subscriptions"), where("active", "==", true))
+);
+
+let packagesArr = pSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+// SORT BY 'order' FIELD
+packagesArr.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+setPackages(packagesArr);
+
   }
 
   async function loadCurrentSubs(uid) {

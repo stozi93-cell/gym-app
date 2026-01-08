@@ -25,20 +25,19 @@ export default function AdminSubscriptions() {
     userSnap.docs.forEach(d => (users[d.id] = d.data()));
 
     const pkgs = {};
-    pkgSnap.docs.forEach(d => (pkgs[d.id] = d.data()));
+    pkgSnap.docs.forEach(d => {
+      const data = d.data();
+      if (data.order === undefined) data.order = 999; // default to end if no order
+      pkgs[d.id] = { id: d.id, ...data };
+    });
 
     const today = new Date();
 
     const data = csSnap.docs.map(d => {
       const cs = d.data();
 
-      const startDate = cs.startDate.toDate
-        ? cs.startDate.toDate()
-        : new Date(cs.startDate);
-
-      const endDate = cs.endDate.toDate
-        ? cs.endDate.toDate()
-        : new Date(cs.endDate);
+      const startDate = cs.startDate?.toDate ? cs.startDate.toDate() : new Date(cs.startDate);
+      const endDate = cs.endDate?.toDate ? cs.endDate.toDate() : new Date(cs.endDate);
 
       let status = "expired";
       if (cs.active === false) status = "deactivated";
@@ -56,6 +55,9 @@ export default function AdminSubscriptions() {
       };
     });
 
+    // sort by package order first, then startDate
+    data.sort((a, b) => (a.pkg.order || 999) - (b.pkg.order || 999));
+
     setRows(data);
   }
 
@@ -63,12 +65,31 @@ export default function AdminSubscriptions() {
     const ok = window.confirm("Deaktivirati ovu pretplatu?");
     if (!ok) return;
 
-    await updateDoc(doc(db, "clientSubscriptions", id), {
-      active: false,
-    });
-
+    await updateDoc(doc(db, "clientSubscriptions", id), { active: false });
     load();
   }
+
+  // --- Move package order up/down ---
+  const movePackage = async (pkgId, direction) => {
+    const allPkgsSnap = await getDocs(collection(db, "subscriptions"));
+    const pkgs = allPkgsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    pkgs.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+
+    const index = pkgs.findIndex(p => p.id === pkgId);
+    if (index < 0) return;
+
+    let swapIndex = direction === "up" ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= pkgs.length) return;
+
+    const pkgA = pkgs[index];
+    const pkgB = pkgs[swapIndex];
+
+    const tempOrder = pkgA.order ?? 999;
+    await updateDoc(doc(db, "subscriptions", pkgA.id), { order: pkgB.order ?? 999 });
+    await updateDoc(doc(db, "subscriptions", pkgB.id), { order: tempOrder });
+
+    load();
+  };
 
   function statusLabel(status) {
     if (status === "active") return <span style={{ color: "green" }}>Aktivna</span>;
@@ -84,7 +105,11 @@ export default function AdminSubscriptions() {
         <thead>
           <tr>
             <th>Klijent</th>
-            <th>Paket</th>
+            <th>
+              Paket
+              <br />
+              <small>(Up/Down da promenite redosled)</small>
+            </th>
             <th>Period</th>
             <th>Status</th>
             <th>Akcija</th>
@@ -98,7 +123,11 @@ export default function AdminSubscriptions() {
                   {r.user?.name} {r.user?.surname}
                 </Link>
               </td>
-              <td>{r.pkg?.name}</td>
+              <td>
+                {r.pkg?.name}{" "}
+                <button onClick={() => movePackage(r.pkg.id, "up")}>↑</button>
+                <button onClick={() => movePackage(r.pkg.id, "down")}>↓</button>
+              </td>
               <td>
                 {r.startDate.toLocaleDateString("sr-RS")} –{" "}
                 {r.endDate.toLocaleDateString("sr-RS")}
@@ -106,9 +135,7 @@ export default function AdminSubscriptions() {
               <td>{statusLabel(r.status)}</td>
               <td>
                 {r.status === "active" && (
-                  <button onClick={() => deactivate(r.id)}>
-                    Deaktiviraj
-                  </button>
+                  <button onClick={() => deactivate(r.id)}>Deaktiviraj</button>
                 )}
               </td>
             </tr>

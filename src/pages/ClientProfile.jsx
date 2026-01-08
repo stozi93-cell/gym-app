@@ -48,6 +48,7 @@ export default function ClientProfile() {
     setFormData({ ...userData, dob: dobString });
 
     // --- LAST VISIT (read-only, safe) ---
+// --- LAST VISIT (days ago + color) ---
 const bookingSnap = await getDocs(
   query(
     collection(db, "bookings"),
@@ -61,18 +62,16 @@ if (!bookingSnap.empty) {
     .filter(b => b.checkedInAt)
     .sort((a, b) => b.checkedInAt.toDate() - a.checkedInAt.toDate());
 
-  setLastVisit(visits[0]?.checkedInAt || null);
+  if (visits.length) {
+    const last = visits[0].checkedInAt.toDate();
+    setLastVisit(last);
+  } else {
+    setLastVisit(null);
+  }
 } else {
   setLastVisit(null);
 }
 
-
-if (!bookingSnap.empty) {
-  const b = bookingSnap.docs[0].data();
-  setLastVisit(b.checkedInAt || b.createdAt || null);
-} else {
-  setLastVisit(null);
-}
 
     const csSnap = await getDocs(
       query(collection(db, "clientSubscriptions"), where("userId", "==", uid))
@@ -128,6 +127,19 @@ if (!bookingSnap.empty) {
   };
 
   const handleChange = (field, value) => setFormData({ ...formData, [field]: value });
+
+  // Days ago and color for last visit
+const getLastVisitInfo = (date) => {
+  if (!date) return { text: "—", color: "black" };
+  const today = new Date();
+  const daysAgo = Math.floor((today - date) / (1000 * 60 * 60 * 24));
+  let color = "black";
+  if (daysAgo < 7) color = "green";
+  else if (daysAgo <= 30) color = "orange";
+  else color = "red";
+  return { text: `${formatDate(date)} (${daysAgo} ${daysAgo === 1 ? "dan" : "dana"} unazad)`, color };
+};
+
 
   async function saveProfile() {
     await updateDoc(doc(db, "users", uid), formData);
@@ -188,7 +200,8 @@ if (!bookingSnap.empty) {
       <p><b>Email:</b> {editMode ? (<input value={formData.email || ""} onChange={e => handleChange("email", e.target.value)} />) : renderText(user.email)}</p>
       <p><b>Telefon:</b> {editMode ? (<input value={formData.phone || ""} onChange={e => handleChange("phone", e.target.value)} />) : renderText(user.phone)}</p>
       <p><b>Datum rođenja:</b> {editMode ? (<input type="date" value={formData.dob || ""} onChange={e => handleChange("dob", e.target.value)} />) : formatDate(profile.dob)}</p>
-      <p><b>Poslednja poseta:</b>{" "} {lastVisit ? formatDate(lastVisit) : "—"}</p>
+      <p><b>Poslednja poseta:</b>{" "}<span style={{ color: getLastVisitInfo(lastVisit).color }}>{getLastVisitInfo(lastVisit).text}</span></p>
+
 
       <hr />
 
