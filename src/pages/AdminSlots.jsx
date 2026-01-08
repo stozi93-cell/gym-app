@@ -7,8 +7,10 @@ import {
   doc,
   query,
   orderBy,
-  updateDoc
+  updateDoc,
+  where
 } from "firebase/firestore";
+import { Link } from "react-router-dom";
 import { db } from "../firebase";
 
 const MAX_CAPACITY = 5;
@@ -20,11 +22,9 @@ export default function AdminSlots() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Single slot creation
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
 
-  // Bulk creation
   const [bulkStartDate, setBulkStartDate] = useState("");
   const [bulkEndDate, setBulkEndDate] = useState("");
   const [bulkStartTime, setBulkStartTime] = useState("");
@@ -32,12 +32,10 @@ export default function AdminSlots() {
   const [bulkInterval, setBulkInterval] = useState(60);
 
   const [overbook, setOverbook] = useState(false);
-  const [filterDate, setFilterDate] = useState(""); 
+  const [filterDate, setFilterDate] = useState("");
 
-  // Bulk selection for update/delete
   const [selectedSlots, setSelectedSlots] = useState([]);
 
-  // Copy slots
   const [copyFromDate, setCopyFromDate] = useState("");
   const [copyToDate, setCopyToDate] = useState("");
 
@@ -60,24 +58,133 @@ export default function AdminSlots() {
     setLoading(false);
   }
 
+  function getSlotColor(slot) {
+    const now = new Date();
+    const slotTime = slot.timestamp.toDate();
+    const isPast = slotTime < now;
+    const slotBookings = bookings.filter(b => b.slotId === slot.id);
+    const count = slotBookings.length;
+
+    if (isPast) return "#e2e3e5"; // past slots greyed
+    if (count >= MAX_CAPACITY && !overbook) return "#f8d7da"; 
+    if (count >= MAX_CAPACITY && overbook) return "#fff3cd"; 
+    if (count >= MAX_CAPACITY - 1) return "#fff3cd"; 
+    return "#d4edda"; 
+  }
+
+  async function adminBook(slotId, userId) {
+    if (!userId) return;
+    const slotBookings = bookings.filter(b => b.slotId === slotId);
+    if (slotBookings.length >= MAX_CAPACITY && !overbook) return alert("Slot je pun.");
+
+    await addDoc(collection(db, "bookings"), {
+      slotId,
+      userId,
+      createdAt: new Date(),
+      checkedIn: false
+    });
+    loadData();
+  }
+
+  async function handleCheckIn(booking, slotTimestamp) {
+    if (booking.checkedIn) return;
+
+    await updateDoc(doc(db, "bookings", booking.id), {
+      checkedIn: true,
+      checkedInAt: new Date()
+    });
+
+    const subSnap = await getDocs(
+      query(
+        collection(db, "clientSubscriptions"),
+        where("userId", "==", booking.userId)
+      )
+    );
+
+    if (!subSnap.docs.length) return loadData();
+
+    const subDoc = subSnap.docs[0];
+    const sub = subDoc.data();
+
+    if (!sub.startDate) return loadData();
+
+    const start = sub.startDate.toDate();
+    const checkDate = slotTimestamp.toDate();
+    const weekIndex = Math.floor((checkDate - start) / (7 * 24 * 60 * 60 * 1000));
+
+    const arr = sub.checkInsArray || [];
+    arr[weekIndex] = (arr[weekIndex] || 0) + 1;
+
+    await updateDoc(doc(db, "clientSubscriptions", subDoc.id), {
+      checkInsArray: arr
+    });
+
+    loadData();
+  }
+
+  async function cancelBooking(booking) {
+    await deleteDoc(doc(db, "bookings", booking.id));
+
+    // Remove check-in from subscription if previously checked in
+    if (booking.checkedIn) {
+      const subSnap = await getDocs(
+        query(
+          collection(db, "clientSubscriptions"),
+          where("userId", "==", booking.userId)
+        )
+      );
+
+      if (!subSnap.docs.length) return loadData();
+      const subDoc = subSnap.docs[0];
+      const sub = subDoc.data();
+
+      if (!sub.startDate) return loadData();
+
+      const start = sub.startDate.toDate();
+      const checkDate = booking.slotTimestamp.toDate ? booking.slotTimestamp.toDate() : new Date(booking.slotTimestamp);
+      const weekIndex = Math.floor((checkDate - start) / (7 * 24 * 60 * 60 * 1000));
+
+      const arr = sub.checkInsArray || [];
+      arr[weekIndex] = (arr[weekIndex] || 1) - 1;
+      if (arr[weekIndex] < 0) arr[weekIndex] = 0;
+
+      await updateDoc(doc(db, "clientSubscriptions", subDoc.id), {
+        checkInsArray: arr
+      });
+    }
+
+    loadData();
+  }
+
+  const toggleSelectSlot = (slotId) => {
+    setSelectedSlots(prev => prev.includes(slotId) ? prev.filter(id => id !== slotId) : [...prev, slotId]);
+  }
+
+  const deleteSelectedSlots = async () => {
+    if (!selectedSlots.length) return alert("Niste izabrali termine");
+    if (!window.confirm(`Obrisati ${selectedSlots.length} termina?`)) return;
+
+    await Promise.all(selectedSlots.map(id => deleteDoc(doc(db, "slots", id))));
+    setSelectedSlots([]);
+    loadData();
+  }
+
+  // --- SLOT CREATION FUNCTIONS (restored) ---
   function getSlotTimestamp(dateStr, timeStr) {
     if (!dateStr || !timeStr) return null;
     return new Date(`${dateStr}T${timeStr}:00`);
   }
 
-  async function createSlot() {
+  const createSlot = async () => {
     const ts = getSlotTimestamp(date, time);
     if (!ts) return alert("Unesite datum i vreme termina");
-
     await addDoc(collection(db, "slots"), { timestamp: ts });
     setDate(""); setTime("");
     loadData();
   }
 
-  async function createBulkSlots() {
-    if (!bulkStartDate || !bulkEndDate || !bulkStartTime || !bulkEndTime) {
-      return alert("Popunite sve parametre za bulk kreiranje");
-    }
+  const createBulkSlots = async () => {
+    if (!bulkStartDate || !bulkEndDate || !bulkStartTime || !bulkEndTime) return alert("Popunite sve parametre za bulk kreiranje");
 
     const startDay = new Date(bulkStartDate);
     const endDay = new Date(bulkEndDate);
@@ -102,68 +209,6 @@ export default function AdminSlots() {
     alert(`${slotsToCreate.length} termina kreirano`);
   }
 
-  function isLateOrStarted(slot) {
-    const now = new Date();
-    const slotTime = slot.timestamp.toDate();
-    return slotTime - now < 1000 * 60 * LATE_BOOKING_HOURS;
-  }
-
-  function getSlotColor(slot) {
-    const slotBookings = bookings.filter(b => b.slotId === slot.id);
-    const count = slotBookings.length;
-
-    if (isLateOrStarted(slot)) return "#e2e3e5"; 
-    if (count >= MAX_CAPACITY && !overbook) return "#f8d7da"; 
-    if (count >= MAX_CAPACITY && overbook) return "#fff3cd"; 
-    if (count >= MAX_CAPACITY - 1) return "#fff3cd"; 
-    return "#d4edda"; 
-  }
-
-  async function adminBook(slotId, userId) {
-    if (!userId) return;
-    const slotBookings = bookings.filter(b => b.slotId === slotId);
-    if (slotBookings.length >= MAX_CAPACITY && !overbook) return alert("Slot je pun.");
-    await addDoc(collection(db, "bookings"), { slotId, userId, createdAt: new Date() });
-    loadData();
-  }
-
-  async function cancelBooking(bookingId) {
-    await deleteDoc(doc(db, "bookings", bookingId));
-    loadData();
-  }
-
-  // Bulk selection handlers
-  const toggleSelectSlot = (slotId) => {
-    setSelectedSlots(prev => prev.includes(slotId) ? prev.filter(id => id !== slotId) : [...prev, slotId]);
-  }
-
-  const deleteSelectedSlots = async () => {
-    if (!selectedSlots.length) return alert("Niste izabrali termine");
-    if (!window.confirm(`Obrisati ${selectedSlots.length} termina?`)) return;
-
-    await Promise.all(selectedSlots.map(id => deleteDoc(doc(db, "slots", id))));
-    setSelectedSlots([]);
-    loadData();
-  }
-
-  const updateSelectedSlotsTime = async (newTimeStr) => {
-    if (!selectedSlots.length) return alert("Niste izabrali termine");
-    const [hours, minutes] = newTimeStr.split(":").map(Number);
-
-    await Promise.all(selectedSlots.map(async id => {
-      const slotDoc = slots.find(s => s.id === id);
-      if (!slotDoc) return;
-      const ts = slotDoc.timestamp.toDate();
-      ts.setHours(hours, minutes, 0, 0);
-      await updateDoc(doc(db, "slots", id), { timestamp: ts });
-    }));
-
-    setSelectedSlots([]);
-    loadData();
-    alert("Termini ažurirani");
-  }
-
-  // COPY SLOTS
   const copySlots = async () => {
     if (!copyFromDate || !copyToDate) return alert("Popunite oba datuma");
 
@@ -184,20 +229,20 @@ export default function AdminSlots() {
     alert(`${fromDateSlots.length} termina kopirano na ${copyToDate}`);
   }
 
-  // Group slots by date
+  // --- END CREATION FUNCTIONS ---
+
   const groupedSlots = slots.reduce((acc, slot) => {
-    const dateKey = slot.timestamp.toDate().toLocaleDateString("sr-RS", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
-    if (!acc[dateKey]) acc[dateKey] = [];
-    acc[dateKey].push(slot);
+    const d = slot.timestamp.toDate();
+    const key = d.toISOString().split("T")[0];
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(slot);
     return acc;
   }, {});
 
-  const filteredGroupedSlots = filterDate ? { [filterDate]: groupedSlots[filterDate] || [] } : groupedSlots;
-  const dateOptions = Object.keys(groupedSlots).sort();
+  const todayKey = new Date().toISOString().split("T")[0];
+  const filteredGroupedSlots = filterDate
+    ? { [filterDate]: groupedSlots[filterDate] || [] }
+    : groupedSlots;
 
   if (loading) return <p>Učitavanje termina...</p>;
 
@@ -205,29 +250,26 @@ export default function AdminSlots() {
     <div>
       <h2>Admin — Raspored</h2>
 
-      <label style={{ display: "block", marginBottom: 20 }}>
+      <label>
         <input type="checkbox" checked={overbook} onChange={e => setOverbook(e.target.checked)} /> Dozvoli overbooking
       </label>
 
-      {/* FILTER BY DATE */}
+      {/* Filter by date */}
       <div style={{ marginBottom: 20 }}>
         <label>Prikaži datum: </label>
-        <select value={filterDate} onChange={e => setFilterDate(e.target.value)}>
-          <option value="">Svi datumi</option>
-          {dateOptions.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
+        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
+        {filterDate && <button onClick={() => setFilterDate("")}>Reset</button>}
       </div>
 
-      {/* SINGLE SLOT CREATION */}
-      <div style={{ marginBottom: 20, padding: 10, border: "1px solid #ccc" }}>
-        <h3>Kreiraj novi termin</h3>
+      {/* --- Slot creation UI --- */}
+      <div style={{ border: "1px solid #ccc", padding: 10, marginBottom: 20 }}>
+        <h3>Kreiraj termin</h3>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} />
         <input type="time" value={time} onChange={e => setTime(e.target.value)} style={{ marginLeft: 10 }} />
-        <button onClick={createSlot} style={{ marginLeft: 10 }}>Kreiraj termin</button>
+        <button onClick={createSlot} style={{ marginLeft: 10 }}>Kreiraj</button>
       </div>
 
-      {/* BULK CREATION */}
-      <div style={{ marginBottom: 20, padding: 10, border: "1px solid #ccc" }}>
+      <div style={{ border: "1px solid #ccc", padding: 10, marginBottom: 20 }}>
         <h3>Bulk kreiranje termina</h3>
         <input type="date" value={bulkStartDate} onChange={e => setBulkStartDate(e.target.value)} />{" "}
         <input type="date" value={bulkEndDate} onChange={e => setBulkEndDate(e.target.value)} />
@@ -237,8 +279,7 @@ export default function AdminSlots() {
         <button onClick={createBulkSlots} style={{ marginLeft: 10 }}>Kreiraj termine</button>
       </div>
 
-      {/* COPY SLOTS */}
-      <div style={{ marginBottom: 20, padding: 10, border: "1px solid #ccc" }}>
+      <div style={{ border: "1px solid #ccc", padding: 10, marginBottom: 20 }}>
         <h3>Kopiraj termine</h3>
         <label>Sa datuma: </label>
         <input type="date" value={copyFromDate} onChange={e => setCopyFromDate(e.target.value)} style={{ marginLeft: 10 }} />
@@ -247,41 +288,54 @@ export default function AdminSlots() {
         <button onClick={copySlots} style={{ marginLeft: 10 }}>Kopiraj</button>
       </div>
 
-      {/* BULK UPDATE/DELETE */}
-      <div style={{ marginBottom: 20, padding: 10, border: "1px solid #ccc" }}>
-        <h3>Bulk update / delete</h3>
-        <input type="time" placeholder="Novo vreme" onChange={e => updateSelectedSlotsTime(e.target.value)} />
-        <button onClick={deleteSelectedSlots} style={{ marginLeft: 10 }}>Obriši izabrane</button>
+      {/* Bulk delete */}
+      <div style={{ border: "1px solid #ccc", padding: 10, marginBottom: 20 }}>
+        <h3>Bulk delete</h3>
+        <button onClick={deleteSelectedSlots}>Obriši izabrane</button>
       </div>
 
-      {/* EXISTING SLOTS */}
+      {/* Slots display */}
       {Object.entries(filteredGroupedSlots).map(([dateKey, daySlots]) => (
-        <details key={dateKey} open={false}>
-          <summary style={{ fontWeight: "bold", cursor: "pointer" }}>📅 {dateKey} — {daySlots.length} termina</summary>
+        <details key={dateKey} open={dateKey === todayKey}>
+          <summary style={{ fontWeight: "bold", cursor: "pointer" }}>
+            📅 {dateKey} — {daySlots.length} termina
+          </summary>
+
           {daySlots.map(slot => {
             const slotBookings = bookings.filter(b => b.slotId === slot.id);
-            const count = slotBookings.length;
             const bgColor = getSlotColor(slot);
-            const selected = selectedSlots.includes(slot.id);
+            const isPast = slot.timestamp.toDate() < new Date();
 
             return (
-              <div key={slot.id} style={{ borderBottom: "1px solid #ccc", padding: 8, backgroundColor: bgColor, marginBottom: 4 }}>
-                <input type="checkbox" checked={selected} onChange={() => toggleSelectSlot(slot.id)} />
-                <strong style={{ marginLeft: 6 }}>{slot.timestamp.toDate().toLocaleTimeString("sr-RS", { hour: "2-digit", minute: "2-digit" })}</strong>
-                <div>{count}/{MAX_CAPACITY} booked</div>
+              <div key={slot.id} style={{ padding: 8, marginBottom: 6, backgroundColor: bgColor }}>
+                <input type="checkbox" checked={selectedSlots.includes(slot.id)} onChange={() => toggleSelectSlot(slot.id)} />
+                <strong>
+                  {slot.timestamp.toDate().toLocaleTimeString("sr-RS", { hour: "2-digit", minute: "2-digit" })}
+                </strong>
 
-                {/* BOOKINGS */}
                 {slotBookings.map(b => {
                   const u = users.find(u => u.id === b.userId);
-                  return <div key={b.id} style={{ marginLeft: 10 }}>👤 {u ? `${u.name} ${u.surname}` : b.userId} <button style={{ marginLeft: 10 }} onClick={() => cancelBooking(b.id)}>❌</button></div>;
+                  return (
+                    <div key={b.id} style={{ marginLeft: 10, opacity: isPast ? 0.7 : 1 }}>
+                      👤{" "}
+                      <Link to={`/profil/${b.userId}`} target="_blank" style={{ fontWeight: "bold" }}>
+                        {u ? `${u.name} ${u.surname}` : b.userId}
+                      </Link>
+
+                      {!b.checkedIn ? (
+                        <button style={{ marginLeft: 10 }} onClick={() => handleCheckIn(b, slot.timestamp)}>✅ Check-in</button>
+                      ) : (
+                        <span style={{ marginLeft: 10, color: "green" }}>✔️ Checked-in</span>
+                      )}
+
+                      <button style={{ marginLeft: 10 }} onClick={() => cancelBooking({ ...b, slotTimestamp: slot.timestamp })}>❌ Otkaži</button>
+                    </div>
+                  );
                 })}
 
-                {/* ADMIN BOOK FOR CLIENT */}
                 <select defaultValue="" onChange={e => adminBook(slot.id, e.target.value)} style={{ marginTop: 6 }}>
                   <option value="">Rezerviši za klijenta</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>{u.name} {u.surname}</option>
-                  ))}
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name} {u.surname}</option>)}
                 </select>
               </div>
             );
