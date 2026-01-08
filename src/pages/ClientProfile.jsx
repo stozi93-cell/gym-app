@@ -9,7 +9,9 @@ import {
   where,
   updateDoc,
   Timestamp,
-  addDoc
+  addDoc,
+  orderBy,
+  limit
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
@@ -21,6 +23,7 @@ export default function ClientProfile() {
 
   const [user, setUser] = useState(null);
   const [subscriptions, setSubscriptions] = useState([]);
+  const [lastVisit, setLastVisit] = useState(null);
   const [showAllSubs, setShowAllSubs] = useState(false);
 
   const [editMode, setEditMode] = useState(false);
@@ -43,6 +46,33 @@ export default function ClientProfile() {
 
     setUser({ ...userData, dob: dobString });
     setFormData({ ...userData, dob: dobString });
+
+    // --- LAST VISIT (read-only, safe) ---
+const bookingSnap = await getDocs(
+  query(
+    collection(db, "bookings"),
+    where("userId", "==", uid)
+  )
+);
+
+if (!bookingSnap.empty) {
+  const visits = bookingSnap.docs
+    .map(d => d.data())
+    .filter(b => b.checkedInAt)
+    .sort((a, b) => b.checkedInAt.toDate() - a.checkedInAt.toDate());
+
+  setLastVisit(visits[0]?.checkedInAt || null);
+} else {
+  setLastVisit(null);
+}
+
+
+if (!bookingSnap.empty) {
+  const b = bookingSnap.docs[0].data();
+  setLastVisit(b.checkedInAt || b.createdAt || null);
+} else {
+  setLastVisit(null);
+}
 
     const csSnap = await getDocs(
       query(collection(db, "clientSubscriptions"), where("userId", "==", uid))
@@ -158,6 +188,7 @@ export default function ClientProfile() {
       <p><b>Email:</b> {editMode ? (<input value={formData.email || ""} onChange={e => handleChange("email", e.target.value)} />) : renderText(user.email)}</p>
       <p><b>Telefon:</b> {editMode ? (<input value={formData.phone || ""} onChange={e => handleChange("phone", e.target.value)} />) : renderText(user.phone)}</p>
       <p><b>Datum rođenja:</b> {editMode ? (<input type="date" value={formData.dob || ""} onChange={e => handleChange("dob", e.target.value)} />) : formatDate(profile.dob)}</p>
+      <p><b>Poslednja poseta:</b>{" "} {lastVisit ? formatDate(lastVisit) : "—"}</p>
 
       <hr />
 
@@ -213,7 +244,11 @@ export default function ClientProfile() {
                   <ul>
                     {s.checkInsArray.map((c, i) => (
                       <li key={i}>
-                        Nedelja {i + 1}: {c === "unlimited" ? "Neograničeno" : `${c} / ${s.weeklyCheckIns}`}{" "}
+                        Nedelja {i + 1}:{" "}
+                         {s.weeklyCheckIns === "unlimited"
+  ? `${c ?? 0}`
+  : `${c ?? 0} / ${s.weeklyCheckIns}`}
+
                         {role === "admin" && active && (
                           <>
                             <button onClick={() => changeCheckIn(s.id, i, 1)}>+</button>
