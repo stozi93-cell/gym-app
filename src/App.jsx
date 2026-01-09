@@ -12,6 +12,7 @@ import ClientProfile from "./pages/ClientProfile";
 import AdminClients from "./pages/AdminClients";
 import AdminPackages from "./pages/AdminPackages";
 import MySubscriptions from "./pages/MySubscriptions";
+import AdminBilling from "./pages/AdminBilling";
 
 export default function App() {
   const { user, profile, loading } = useAuth();
@@ -49,6 +50,7 @@ export default function App() {
             <Link to="/raspored">Raspored</Link>{" | "}
             <Link to="/klijenti">Lista klijenata</Link>{" | "}
             <Link to="/paketi">Paketi</Link>{" | "}
+            <Link to="/naplate">Naplate</Link>
           </>
         )}
       </nav>
@@ -71,6 +73,7 @@ export default function App() {
             <Route path="/raspored" element={<AdminSlots />} />
             <Route path="/klijenti" element={<AdminClients />} />
             <Route path="/paketi" element={<AdminPackages />} />
+            <Route path="/naplate" element={<AdminBilling />} />
 
             {/* Redirect admin default "/" and MySubscriptions */}
             <Route path="/" element={<Navigate to="/raspored" />} />

@@ -1,3 +1,4 @@
+import { getAuth } from "firebase/auth";
 import { useEffect, useState } from "react";
 import {
   collection,
@@ -13,7 +14,6 @@ import { db } from "../firebase";
 import { useSearchParams } from "react-router-dom";
 
 export default function AdminPackages() {
-  // --- Packages state ---
   const [packages, setPackages] = useState([]);
   const [newPackage, setNewPackage] = useState({
     name: "",
@@ -32,7 +32,6 @@ export default function AdminPackages() {
     { value: "unlimited", label: "Neograničeno" },
   ];
 
-  // --- Assignment state ---
   const [users, setUsers] = useState([]);
   const [userId, setUserId] = useState("");
   const [packageId, setPackageId] = useState("");
@@ -40,7 +39,6 @@ export default function AdminPackages() {
   const [checkInOption, setCheckInOption] = useState("default");
   const [currentSubs, setCurrentSubs] = useState([]);
 
-  // --- Handle query param for client preselection ---
   const [searchParams] = useSearchParams();
   const clientIdFromParam = searchParams.get("clientId");
 
@@ -50,9 +48,9 @@ export default function AdminPackages() {
   }, []);
 
   useEffect(() => {
-  if (userId) loadCurrentSubs(userId);
-  else setCurrentSubs([]); // ALWAYS array
-}, [userId]);
+    if (userId) loadCurrentSubs(userId);
+    else setCurrentSubs([]);
+  }, [userId]);
 
   useEffect(() => {
     if (clientIdFromParam) setUserId(clientIdFromParam);
@@ -154,25 +152,24 @@ export default function AdminPackages() {
     }
     subs.sort((a, b) => b.endDate - a.endDate);
 
-// keep only the active one
-setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
+    // keep only the active one
+    setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
   }
 
   async function assignSubscription() {
     if (!userId || !packageId) return alert("Sva polja su obavezna");
 
     const pkg = packages.find(p => p.id === packageId);
+    if (!pkg) return alert("Paket nije pronađen");
+
     const start = startDate ? new Date(startDate) : new Date();
     const end = new Date(start);
     end.setDate(end.getDate() + (pkg.durationDays || 30));
 
-    let weeklyCheckIns = checkInOption === "default" ? pkg.defaultCheckIns || "unlimited" : checkInOption;
+    const weeklyCheckIns = checkInOption === "default" ? pkg.defaultCheckIns || "unlimited" : checkInOption;
 
     const weeks = Math.ceil((end - start) / (7 * 24 * 60 * 60 * 1000));
-    const checkInsArray = [];
-    for (let i = 0; i < weeks; i++) {
-      checkInsArray.push(weeklyCheckIns === "unlimited" ? "unlimited" : 0);
-    }
+    const checkInsArray = Array.from({ length: weeks }, () => (weeklyCheckIns === "unlimited" ? "unlimited" : 0));
 
     const existing = await getDocs(
       query(collection(db, "clientSubscriptions"), where("userId", "==", userId), where("active", "==", true))
@@ -181,7 +178,7 @@ setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
       await updateDoc(doc(db, "clientSubscriptions", d.id), { active: false });
     }
 
-    await addDoc(collection(db, "clientSubscriptions"), {
+    const subRef = await addDoc(collection(db, "clientSubscriptions"), {
       userId,
       subscriptionId: packageId,
       startDate: start,
@@ -191,7 +188,24 @@ setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
       checkInsArray,
     });
 
-    alert("Pretplata dodeljena");
+    // --- Create billing record ---
+    const auth = getAuth();
+    const adminId = auth.currentUser?.uid || null;
+
+    await addDoc(collection(db, "billing"), {
+      clientId: userId,
+      clientName: `${users.find(u => u.id === userId)?.name || ""} ${users.find(u => u.id === userId)?.surname || ""}`,
+      subscriptionId: packageId,
+      subscriptionName: pkg.name,
+      amount: Number(pkg.price),
+      currency: "RSD",
+      status: "pending",
+      createdAt: new Date(),
+      createdBy: adminId,
+      note: "",
+    });
+
+    alert("Pretplata dodeljena i faktura kreirana");
     setUserId("");
     setPackageId("");
     setStartDate("");
@@ -206,15 +220,13 @@ setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
       ? d.toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
       : "—";
 
-  // ---------------- Render ----------------
   return (
     <div>
       <h2>Upravljanje paketima i dodela pretplate</h2>
 
-      {/* --- Assign Subscription Form (top) --- */}
+      {/* Assign Subscription */}
       <div style={{ border: "1px solid #ccc", padding: 10, marginBottom: 20 }}>
         <h3>Dodeli pretplatu klijentu</h3>
-
         <div style={{ marginBottom: 10 }}>
           <label>Izaberite klijenta: </label>
           <select value={userId} onChange={e => setUserId(e.target.value)}>
@@ -271,7 +283,7 @@ setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
         <button onClick={assignSubscription}>Dodeli</button>
       </div>
 
-      {/* --- Create New Package --- */}
+      {/* Create Package */}
       <div style={{ marginBottom: 10 }}>
         <input
           placeholder="Naziv paketa"
@@ -299,15 +311,13 @@ setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
           style={{ marginRight: 5 }}
         >
           {checkInOptions.map(opt => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
         <button onClick={createPackage}>Kreiraj paket</button>
       </div>
 
-      {/* --- Packages Table --- */}
+      {/* Packages Table */}
       <table border="1" cellPadding="5" style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -323,38 +333,16 @@ setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
         <tbody>
           {packages.map((p, i) => (
             <tr key={p.id}>
-              <td>
-                <input value={p.name} onChange={e => updatePackage(p.id, "name", e.target.value)} />
-              </td>
-              <td>
-                <input
-                  type="number"
-                  value={p.durationDays}
-                  onChange={e => updatePackage(p.id, "durationDays", e.target.value)}
-                  style={{ width: 60 }}
-                />
-              </td>
-              <td>
-                <input
-                  type="number"
-                  value={p.price}
-                  onChange={e => updatePackage(p.id, "price", e.target.value)}
-                  style={{ width: 80 }}
-                />
-              </td>
+              <td><input value={p.name} onChange={e => updatePackage(p.id, "name", e.target.value)} /></td>
+              <td><input type="number" value={p.durationDays} onChange={e => updatePackage(p.id, "durationDays", e.target.value)} style={{ width: 60 }} /></td>
+              <td><input type="number" value={p.price} onChange={e => updatePackage(p.id, "price", e.target.value)} style={{ width: 80 }} /></td>
               <td>
                 <select value={p.defaultCheckIns || "default"} onChange={e => updatePackage(p.id, "defaultCheckIns", e.target.value)}>
-                  {checkInOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
+                  {checkInOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                 </select>
               </td>
               <td>{p.active ? "Aktivan" : "Neaktivan"}</td>
-              <td>
-                <button onClick={() => toggleActive(p)}>{p.active ? "Deaktiviraj" : "Aktiviraj"}</button>
-              </td>
+              <td><button onClick={() => toggleActive(p)}>{p.active ? "Deaktiviraj" : "Aktiviraj"}</button></td>
               <td>
                 <button onClick={() => movePackage(p.id, "up")} disabled={i === 0}>⬆</button>
                 <button onClick={() => movePackage(p.id, "down")} disabled={i === packages.length - 1}>⬇</button>
