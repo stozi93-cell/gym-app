@@ -32,6 +32,7 @@ function ClientProfile() {
   }, [uid]);
 
   async function load() {
+    // --- Load user ---
     const userSnap = await getDoc(doc(db, "users", uid));
     const userData = userSnap.data();
 
@@ -84,11 +85,18 @@ function ClientProfile() {
       if (isNaN(startDate.getTime())) startDate = new Date();
       if (isNaN(endDate.getTime())) endDate = new Date();
 
-      // --- LOAD PAYMENTS ---
-      const paySnap = await getDocs(
-        query(collection(db, "payments"), where("userId", "==", uid), where("subscriptionId", "==", d.id))
+      // --- LOAD BILLING / FACTURES ---
+      const billingSnap = await getDocs(
+        query(
+          collection(db, "billing"),
+          where("clientId", "==", uid),
+          where("subscriptionId", "==", cs.subscriptionId)
+        )
       );
-      const payments = paySnap.docs.map(p => ({ id: p.id, ...p.data() }));
+      const invoices = billingSnap.docs.map(inv => ({
+        id: inv.id,
+        ...inv.data()
+      }));
 
       subs.push({
         id: d.id,
@@ -98,7 +106,7 @@ function ClientProfile() {
         active: cs.active,
         checkInsArray,
         weeklyCheckIns,
-        payments, // <-- added here
+        payments: invoices, // invoices per subscription
       });
     }
 
@@ -186,12 +194,24 @@ function ClientProfile() {
     }
   };
 
+  // --- only show paidAmount / amount and status, with colored text
   const visiblePayments = (payments) => {
     if (!payments || payments.length === 0) return <p>—</p>;
+
+    const getStatusColor = (status) => {
+      switch(status) {
+        case "pending": return "red";             // Na čekanju
+        case "partially_paid": return "orange";   // Delimično plaćeno
+        case "paid": return "green";              // Plaćeno
+        case "cancelled": return "grey";          // Otkazano
+        default: return "black";
+      }
+    };
+
     return (
-      <ul>
-        {payments.map((p, i) => (
-          <li key={i}>
+      <ul style={{ paddingLeft: "1rem" }}>
+        {payments.map((p) => (
+          <li key={p.id} style={{ color: getStatusColor(p.status) }}>
             Plaćeno: {p.paidAmount || 0} / {p.amount} RSD — Status: {statusLabel(p.status)}
           </li>
         ))}
@@ -203,7 +223,6 @@ function ClientProfile() {
     <div>
       <h2>Profil klijenta</h2>
 
-      {/* Edit button for admin or client */}
       {!editMode && (role === "admin" || role === "client") && (
         <button onClick={() => setEditMode(true)}>Uredi profil</button>
       )}
@@ -298,7 +317,7 @@ function ClientProfile() {
                   </ul>
                 </div>
 
-                {/* --- PAYMENTS INFO --- */}
+                {/* --- PAYMENTS INFO (colored text) --- */}
                 <div>
                   <b>Fakture:</b>
                   {visiblePayments(s.payments)}

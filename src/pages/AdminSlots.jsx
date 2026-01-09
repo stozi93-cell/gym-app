@@ -125,7 +125,6 @@ export default function AdminSlots() {
   async function cancelBooking(booking) {
     await deleteDoc(doc(db, "bookings", booking.id));
 
-    // Remove check-in from subscription if previously checked in
     if (booking.checkedIn) {
       const subSnap = await getDocs(
         query(
@@ -169,7 +168,6 @@ export default function AdminSlots() {
     loadData();
   }
 
-  // --- SLOT CREATION FUNCTIONS (restored) ---
   function getSlotTimestamp(dateStr, timeStr) {
     if (!dateStr || !timeStr) return null;
     return new Date(`${dateStr}T${timeStr}:00`);
@@ -229,8 +227,6 @@ export default function AdminSlots() {
     alert(`${fromDateSlots.length} termina kopirano na ${copyToDate}`);
   }
 
-  // --- END CREATION FUNCTIONS ---
-
   const groupedSlots = slots.reduce((acc, slot) => {
     const d = slot.timestamp.toDate();
     const key = d.toISOString().split("T")[0];
@@ -254,14 +250,12 @@ export default function AdminSlots() {
         <input type="checkbox" checked={overbook} onChange={e => setOverbook(e.target.checked)} /> Dozvoli overbooking
       </label>
 
-      {/* Filter by date */}
       <div style={{ marginBottom: 20 }}>
         <label>Prikaži datum: </label>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
         {filterDate && <button onClick={() => setFilterDate("")}>Reset</button>}
       </div>
 
-      {/* --- Slot creation UI --- */}
       <div style={{ border: "1px solid #ccc", padding: 10, marginBottom: 20 }}>
         <h3>Kreiraj termin</h3>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} />
@@ -288,60 +282,77 @@ export default function AdminSlots() {
         <button onClick={copySlots} style={{ marginLeft: 10 }}>Kopiraj</button>
       </div>
 
-      {/* Bulk delete */}
       <div style={{ border: "1px solid #ccc", padding: 10, marginBottom: 20 }}>
         <h3>Bulk delete</h3>
         <button onClick={deleteSelectedSlots}>Obriši izabrane</button>
       </div>
 
-      {/* Slots display */}
-      {Object.entries(filteredGroupedSlots).map(([dateKey, daySlots]) => (
-        <details key={dateKey} open={dateKey === todayKey}>
-          <summary style={{ fontWeight: "bold", cursor: "pointer" }}>
-            📅 {dateKey} — {daySlots.length} termina
-          </summary>
+      {Object.entries(filteredGroupedSlots).map(([dateKey, daySlots]) => {
+        const dateObj = new Date(daySlots[0].timestamp.toDate());
+        const formattedDate = dateObj.toLocaleDateString("sr-Latn-RS", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+        const capitalDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
 
-          {daySlots.map(slot => {
-            const slotBookings = bookings.filter(b => b.slotId === slot.id);
-            const bgColor = getSlotColor(slot);
-            const isPast = slot.timestamp.toDate() < new Date();
+        return (
+          <details key={dateKey} open={dateKey === todayKey} style={{ marginTop: 15 }}>
+            <summary style={{ fontWeight: "bold", cursor: "pointer", padding: "6px 8px" }}>
+              📅 {capitalDate} — {daySlots.length} termina
+            </summary>
 
-            return (
-              <div key={slot.id} style={{ padding: 8, marginBottom: 6, backgroundColor: bgColor }}>
-                <input type="checkbox" checked={selectedSlots.includes(slot.id)} onChange={() => toggleSelectSlot(slot.id)} />
-                <strong>
-                  {slot.timestamp.toDate().toLocaleTimeString("sr-RS", { hour: "2-digit", minute: "2-digit" })}
-                </strong>
+            {daySlots.map(slot => {
+              const slotBookings = bookings.filter(b => b.slotId === slot.id);
+              const bgColor = getSlotColor(slot);
+              const isPast = slot.timestamp.toDate() < new Date();
 
-                {slotBookings.map(b => {
-                  const u = users.find(u => u.id === b.userId);
-                  return (
-                    <div key={b.id} style={{ marginLeft: 10, opacity: isPast ? 0.7 : 1 }}>
-                      👤{" "}
-                      <Link to={`/profil/${b.userId}`} target="_blank" style={{ fontWeight: "bold" }}>
-                        {u ? `${u.name} ${u.surname}` : b.userId}
-                      </Link>
-
-                      {!b.checkedIn ? (
-                        <button style={{ marginLeft: 10 }} onClick={() => handleCheckIn(b, slot.timestamp)}>✅ Check-in</button>
-                      ) : (
-                        <span style={{ marginLeft: 10, color: "green" }}>✔️ Checked-in</span>
-                      )}
-
-                      <button style={{ marginLeft: 10 }} onClick={() => cancelBooking({ ...b, slotTimestamp: slot.timestamp })}>❌ Otkaži</button>
+              return (
+                <div key={slot.id} style={{ 
+                  display: "flex", 
+                  flexDirection: "column", 
+                  padding: 10, 
+                  marginBottom: 8, 
+                  backgroundColor: bgColor, 
+                  borderRadius: 4 
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input type="checkbox" checked={selectedSlots.includes(slot.id)} onChange={() => toggleSelectSlot(slot.id)} />
+                      <strong>
+                        {slot.timestamp.toDate().toLocaleTimeString("sr-RS", { hour: "2-digit", minute: "2-digit" })}
+                      </strong>
                     </div>
-                  );
-                })}
 
-                <select defaultValue="" onChange={e => adminBook(slot.id, e.target.value)} style={{ marginTop: 6 }}>
-                  <option value="">Rezerviši za klijenta</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.name} {u.surname}</option>)}
-                </select>
-              </div>
-            );
-          })}
-        </details>
-      ))}
+                    <select defaultValue="" onChange={e => adminBook(slot.id, e.target.value)}>
+                      <option value="">Rezerviši za klijenta</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.name} {u.surname}</option>)}
+                    </select>
+                  </div>
+
+                  <div style={{ marginTop: 8 }}>
+                    {slotBookings.map(b => {
+                      const u = users.find(u => u.id === b.userId);
+                      return (
+                        <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, opacity: isPast ? 0.7 : 1, marginTop: 4 }}>
+                          👤{" "}
+                          <Link to={`/profil/${b.userId}`} target="_blank" style={{ fontWeight: "bold" }}>
+                            {u ? `${u.name} ${u.surname}` : b.userId}
+                          </Link>
+
+                          {!b.checkedIn ? (
+                            <button onClick={() => handleCheckIn(b, slot.timestamp)}>✅ Check-in</button>
+                          ) : (
+                            <span style={{ color: "green" }}>✔️ Checked-in</span>
+                          )}
+
+                          <button onClick={() => cancelBooking({ ...b, slotTimestamp: slot.timestamp })}>❌ Otkaži</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </details>
+        );
+      })}
     </div>
   );
 }
