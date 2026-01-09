@@ -84,6 +84,12 @@ function ClientProfile() {
       if (isNaN(startDate.getTime())) startDate = new Date();
       if (isNaN(endDate.getTime())) endDate = new Date();
 
+      // --- LOAD PAYMENTS ---
+      const paySnap = await getDocs(
+        query(collection(db, "payments"), where("userId", "==", uid), where("subscriptionId", "==", d.id))
+      );
+      const payments = paySnap.docs.map(p => ({ id: p.id, ...p.data() }));
+
       subs.push({
         id: d.id,
         ...pkg,
@@ -91,7 +97,8 @@ function ClientProfile() {
         endDate,
         active: cs.active,
         checkInsArray,
-        weeklyCheckIns
+        weeklyCheckIns,
+        payments, // <-- added here
       });
     }
 
@@ -167,6 +174,29 @@ function ClientProfile() {
   const reactivateSub = async (subId) => {
     await updateDoc(doc(db, "clientSubscriptions", subId), { active: true });
     load();
+  };
+
+  const statusLabel = (status) => {
+    switch (status) {
+      case "pending": return "Na čekanju";
+      case "partially_paid": return "Delimično plaćeno";
+      case "paid": return "Plaćeno";
+      case "cancelled": return "Otkazano";
+      default: return status;
+    }
+  };
+
+  const visiblePayments = (payments) => {
+    if (!payments || payments.length === 0) return <p>—</p>;
+    return (
+      <ul>
+        {payments.map((p, i) => (
+          <li key={i}>
+            Plaćeno: {p.paidAmount || 0} / {p.amount} RSD — Status: {statusLabel(p.status)}
+          </li>
+        ))}
+      </ul>
+    );
   };
 
   return (
@@ -266,6 +296,12 @@ function ClientProfile() {
                       );
                     })}
                   </ul>
+                </div>
+
+                {/* --- PAYMENTS INFO --- */}
+                <div>
+                  <b>Fakture:</b>
+                  {visiblePayments(s.payments)}
                 </div>
 
                 {role === "admin" && (
