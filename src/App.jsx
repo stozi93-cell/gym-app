@@ -13,6 +13,7 @@ import AdminClients from "./pages/AdminClients";
 import AdminPackages from "./pages/AdminPackages";
 import MySubscriptions from "./pages/MySubscriptions";
 import AdminBilling from "./pages/AdminBilling";
+import Forum from "./pages/Forum";
 
 export default function App() {
   const { user, profile, loading } = useAuth();
@@ -41,7 +42,6 @@ export default function App() {
           <>
             <Link to="/">Rezervacije</Link>{" | "}
             <Link to={`/profil/${user.uid}`}>Moj profil</Link>{" | "}
-            {/* "Moje pretplate" removed */}
           </>
         )}
 
@@ -50,12 +50,18 @@ export default function App() {
             <Link to="/raspored">Raspored</Link>{" | "}
             <Link to="/klijenti">Lista klijenata</Link>{" | "}
             <Link to="/paketi">Paketi</Link>{" | "}
-            <Link to="/naplate">Naplate</Link>
+            <Link to="/naplate">Naplate</Link>{" | "}
           </>
         )}
+
+        {/* ALWAYS LAST */}
+        <Link to="/forum">📢 Forum</Link>
       </nav>
 
       <Routes>
+        {/* FORUM — accessible to all */}
+        <Route path="/forum" element={<Forum />} />
+
         {/* CLIENT ONLY ROUTES */}
         {role === "client" && (
           <>
@@ -75,14 +81,15 @@ export default function App() {
             <Route path="/paketi" element={<AdminPackages />} />
             <Route path="/naplate" element={<AdminBilling />} />
 
-            {/* Redirect admin default "/" and MySubscriptions */}
             <Route path="/" element={<Navigate to="/raspored" />} />
             <Route path="/moje-pretplate" element={<Navigate to="/raspored" />} />
           </>
         )}
 
-        {/* Fallback for all other paths */}
-        <Route path="*" element={<Navigate to={role === "client" ? "/" : "/raspored"} />} />
+        <Route
+          path="*"
+          element={<Navigate to={role === "client" ? "/" : "/raspored"} />}
+        />
       </Routes>
     </BrowserRouter>
   );
