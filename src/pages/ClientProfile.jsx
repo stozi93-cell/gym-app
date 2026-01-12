@@ -27,116 +27,119 @@ export default function ClientProfile() {
 
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({});
-  const [editingSubId, setEditingSubId] = useState(null);
 
   useEffect(() => {
     if (authLoading || !uid) return;
-
-    let alive = true;
-
-    async function load() {
-      // USER
-      const userSnap = await getDoc(doc(db, "users", uid));
-      if (!alive || !userSnap.exists()) return;
-
-      const userData = userSnap.data();
-      const rawDob = userData.dob ?? userData.datumRodjenja ?? null;
-      const dob = rawDob
-        ? rawDob.toDate
-          ? rawDob.toDate().toISOString().slice(0, 10)
-          : new Date(rawDob).toISOString().slice(0, 10)
-        : "";
-
-      const normalized = { ...userData, dob };
-      setUser(normalized);
-      setFormData(normalized);
-
-      // LAST VISIT
-      const bookingSnap = await getDocs(
-        query(collection(db, "bookings"), where("userId", "==", uid))
-      );
-
-      if (!bookingSnap.empty) {
-        const visits = bookingSnap.docs
-          .map((d) => d.data())
-          .filter((b) => b.checkedInAt)
-          .sort((a, b) => b.checkedInAt.toDate() - a.checkedInAt.toDate());
-
-        setLastVisit(visits[0]?.checkedInAt.toDate() ?? null);
-      } else {
-        setLastVisit(null);
-      }
-
-      // SUBSCRIPTIONS
-      const csSnap = await getDocs(
-        query(collection(db, "clientSubscriptions"), where("userId", "==", uid))
-      );
-
-      const subs = [];
-      for (const d of csSnap.docs) {
-        const cs = d.data();
-        const subSnap = await getDoc(doc(db, "subscriptions", cs.subscriptionId));
-        const pkg = subSnap.data();
-        if (!pkg) continue;
-
-        const checkInsArray = Array.isArray(cs.checkInsArray)
-          ? cs.checkInsArray
-          : [];
-
-        let weeklyCheckIns = cs.weeklyCheckIns;
-        if (!weeklyCheckIns || weeklyCheckIns === "default") {
-          weeklyCheckIns = pkg.defaultCheckIns || "unlimited";
-        }
-
-        let startDate = cs.startDate?.toDate
-          ? cs.startDate.toDate()
-          : new Date(cs.startDate);
-
-        let endDate = cs.endDate?.toDate
-          ? cs.endDate.toDate()
-          : new Date(cs.endDate);
-
-        const billingSnap = await getDocs(
-          query(
-            collection(db, "billing"),
-            where("clientId", "==", uid),
-            where("subscriptionId", "==", cs.subscriptionId)
-          )
-        );
-
-        const invoices = billingSnap.docs.map((inv) => ({
-          id: inv.id,
-          ...inv.data(),
-        }));
-
-        subs.push({
-          id: d.id,
-          ...pkg,
-          startDate,
-          endDate,
-          active: cs.active,
-          checkInsArray,
-          weeklyCheckIns,
-          payments: invoices,
-        });
-      }
-
-      subs.sort((a, b) => b.startDate - a.startDate);
-      setSubscriptions(subs);
-    }
-
     load();
-    return () => (alive = false);
   }, [uid, authLoading]);
 
-  if (authLoading || !user) {
-    return <div className="text-center text-neutral-400">Učitavanje…</div>;
+  async function load() {
+    // ─── USER ─────────────────────────
+    const userSnap = await getDoc(doc(db, "users", uid));
+    if (!userSnap.exists()) return;
+
+    const u = userSnap.data();
+    const rawDob = u.dob ?? null;
+
+    const dob = rawDob
+      ? rawDob.toDate
+        ? rawDob.toDate().toISOString().slice(0, 10)
+        : new Date(rawDob).toISOString().slice(0, 10)
+      : "";
+
+    const normalized = {
+      ...u,
+      name: u.name || "",
+      surname: u.surname || "",
+      dob,
+    };
+
+    setUser(normalized);
+    setFormData(normalized);
+
+    // ─── LAST VISIT ───────────────────
+    const bookingSnap = await getDocs(
+      query(collection(db, "bookings"), where("userId", "==", uid))
+    );
+
+    if (!bookingSnap.empty) {
+      const visits = bookingSnap.docs
+        .map((d) => d.data())
+        .filter((b) => b.checkedInAt)
+        .sort(
+          (a, b) => b.checkedInAt.toDate() - a.checkedInAt.toDate()
+        );
+
+      setLastVisit(visits[0]?.checkedInAt.toDate() ?? null);
+    } else {
+      setLastVisit(null);
+    }
+
+    // ─── SUBSCRIPTIONS + BILLING ───────
+    const csSnap = await getDocs(
+      query(collection(db, "clientSubscriptions"), where("userId", "==", uid))
+    );
+
+    const subs = [];
+
+    for (const d of csSnap.docs) {
+      const cs = d.data();
+      const subSnap = await getDoc(doc(db, "subscriptions", cs.subscriptionId));
+      const pkg = subSnap.data();
+      if (!pkg) continue;
+
+      const checkInsArray = Array.isArray(cs.checkInsArray)
+        ? cs.checkInsArray
+        : [];
+
+      let weeklyCheckIns = cs.weeklyCheckIns;
+      if (!weeklyCheckIns || weeklyCheckIns === "default") {
+        weeklyCheckIns = pkg.defaultCheckIns || "unlimited";
+      }
+
+      const startDate = cs.startDate.toDate();
+      const endDate = cs.endDate.toDate();
+
+      // 🔹 BILLING (RESTORED)
+      const billingSnap = await getDocs(
+        query(
+          collection(db, "billing"),
+          where("clientId", "==", uid),
+          where("subscriptionId", "==", cs.subscriptionId)
+        )
+      );
+
+      const payments = billingSnap.docs.map((b) => ({
+        id: b.id,
+        ...b.data(),
+      }));
+
+      subs.push({
+        id: d.id,
+        ...pkg,
+        startDate,
+        endDate,
+        active: cs.active,
+        checkInsArray,
+        weeklyCheckIns,
+        payments, // 👈 restored
+      });
+    }
+
+    subs.sort((a, b) => b.startDate - a.startDate);
+    setSubscriptions(subs);
   }
 
+  if (authLoading || !user) return <div>Učitavanje...</div>;
+
+  // ─── HELPERS ───────────────────────
   const formatDate = (d) => {
     if (!d) return "—";
-    const dateObj = d?.toDate ? d.toDate() : new Date(d);
-    return dateObj.toLocaleDateString("sr-Latn-RS");
+    return new Date(d).toLocaleDateString("sr-Latn-RS", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
   };
 
   const renderText = (v) =>
@@ -144,185 +147,191 @@ export default function ClientProfile() {
 
   const saveProfile = async () => {
     await updateDoc(doc(db, "users", uid), {
-      ...formData,
+      name: formData.name,
+      surname: formData.surname,
+      email: formData.email,
+      phone: formData.phone,
       dob: formData.dob ? new Date(formData.dob) : null,
+      goals: formData.goals,
+      healthNotes: formData.healthNotes,
+      ...(role === "admin" && { trainingNotes: formData.trainingNotes }),
     });
+
     setUser(formData);
     setEditMode(false);
   };
 
-  const visibleSubs = showAllSubs ? subscriptions : subscriptions.slice(0, 1);
+  const today = new Date();
 
-  return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <div className="rounded-2xl bg-neutral-900/80 p-5 shadow">
-        <h1 className="text-xl font-semibold text-white">
-          {user.name} {user.surname}
-        </h1>
-        <p className="text-sm text-neutral-400">
-          {role === "admin" ? "Administrator" : "Klijent"}
-        </p>
-      </div>
-
-      {/* BASIC INFO */}
-      <Card title="Lični podaci">
-        <Info label="Email" value={renderText(user.email)} />
-        <Info label="Telefon" value={renderText(user.phone)} />
-        <Info label="Datum rođenja" value={formatDate(user.dob)} />
-        <Info label="Poslednja poseta" value={formatDate(lastVisit)} />
-      </Card>
-
-      {/* SUBSCRIPTIONS */}
-      <Card title="Pretplate">
-        {visibleSubs.length === 0 && (
-          <p className="text-sm text-neutral-400">Nema pretplata.</p>
-        )}
-
-        {visibleSubs.map((s, idx) => {
-          const active = s.active && s.endDate >= new Date();
-          const editing = editingSubId === s.id;
-          const isLatest = idx === 0;
-
-          return (
-            <div
-              key={s.id}
-              className={`rounded-xl border p-4 ${
-                active
-                  ? "border-brand-green-700 bg-brand-green-900/10"
-                  : "border-red-700 bg-red-900/10"
-              }`}
-            >
-              <p className="font-medium text-white">{s.name}</p>
-              <p className="text-sm text-neutral-400">
-                {formatDate(s.startDate)} – {formatDate(s.endDate)}
-              </p>
-
-              <p className="text-sm">
-                Status:{" "}
-                <span
-                  className={active ? "text-green-400" : "text-red-400"}
-                >
-                  {active ? "Aktivna" : "Neaktivna"}
-                </span>
-              </p>
-
-              <p className="text-sm">
-                Dolasci nedeljno:{" "}
-                {s.weeklyCheckIns === "unlimited"
-                  ? "Neograničeno"
-                  : s.weeklyCheckIns}
-              </p>
-
-              {/* PAYMENTS */}
-              <div className="mt-3">
-                <p className="text-sm font-medium text-neutral-300">
-                  Fakture
-                </p>
-                {s.payments.length === 0 ? (
-                  <p className="text-sm text-neutral-400">—</p>
-                ) : (
-                  <ul className="ml-4 list-disc text-sm">
-                    {s.payments.map((p) => (
-                      <li
-                        key={p.id}
-                        className={
-                          p.status === "paid"
-                            ? "text-green-400"
-                            : p.status === "partially_paid"
-                            ? "text-orange-400"
-                            : "text-red-400"
-                        }
-                      >
-                        {p.paidAmount || 0} / {p.amount} RSD —{" "}
-                        {p.status}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {role === "admin" && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {active && (
-                    <button
-                      onClick={() => setEditingSubId(s.id)}
-                      className="rounded-lg bg-neutral-700 px-3 py-1 text-sm"
-                    >
-                      Uredi
-                    </button>
-                  )}
-                  {active && (
-                    <button
-                      onClick={() =>
-                        updateDoc(
-                          doc(db, "clientSubscriptions", s.id),
-                          { active: false }
-                        )
-                      }
-                      className="rounded-lg bg-red-700 px-3 py-1 text-sm"
-                    >
-                      Deaktiviraj
-                    </button>
-                  )}
-                  {!active && isLatest && (
-                    <button
-                      onClick={() =>
-                        updateDoc(
-                          doc(db, "clientSubscriptions", s.id),
-                          { active: true }
-                        )
-                      }
-                      className="rounded-lg bg-green-700 px-3 py-1 text-sm"
-                    >
-                      Reaktiviraj
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {subscriptions.length > 1 && (
-          <button
-            onClick={() => setShowAllSubs(!showAllSubs)}
-            className="mt-4 text-sm text-brand-blue-400"
-          >
-            {showAllSubs
-              ? "Sakrij starije pretplate"
-              : "Prikaži starije pretplate"}
-          </button>
-        )}
-      </Card>
-
-      {/* NOTES */}
-      <Card title="Napomene">
-        <Info label="Ciljevi" value={renderText(user.goals)} />
-        <Info
-          label="Zdravstvene napomene"
-          value={renderText(user.healthNotes)}
-        />
-      </Card>
-    </div>
+  const activeSubs = subscriptions.filter(
+    (s) => s.active && s.endDate >= today
   );
-}
 
-/* UI helpers */
-function Card({ title, children }) {
-  return (
-    <div className="rounded-2xl bg-neutral-900/80 p-5 shadow space-y-4">
-      <h2 className="text-sm font-medium text-neutral-300">{title}</h2>
-      {children}
-    </div>
-  );
-}
+  const visibleSubs = showAllSubs
+    ? subscriptions
+    : activeSubs.length
+    ? activeSubs
+    : subscriptions.slice(0, 1);
 
-function Info({ label, value }) {
+  const changeCheckIn = async (subId, weekIndex, delta) => {
+    const sub = subscriptions.find((s) => s.id === subId);
+    if (!sub) return;
+
+    const arr = [...sub.checkInsArray];
+    arr[weekIndex] = (arr[weekIndex] || 0) + delta;
+    if (arr[weekIndex] < 0) arr[weekIndex] = 0;
+
+    await updateDoc(doc(db, "clientSubscriptions", subId), {
+      checkInsArray: arr,
+    });
+
+    load();
+  };
+
+  const paymentColor = (status) => {
+    switch (status) {
+      case "paid":
+        return "green";
+      case "partially_paid":
+        return "orange";
+      default:
+        return "red";
+    }
+  };
+
   return (
     <div>
-      <p className="text-xs text-neutral-400">{label}</p>
-      <p className="text-sm text-white">{value}</p>
+      <h2>Profil klijenta</h2>
+
+      {!editMode && <button onClick={() => setEditMode(true)}>Uredi profil</button>}
+      {editMode && (
+        <>
+          <button onClick={saveProfile}>Sačuvaj</button>
+          <button onClick={() => { setEditMode(false); setFormData(user); }}>
+            Otkaži
+          </button>
+        </>
+      )}
+
+      {/* LIČNI PODACI */}
+      <p><b>Ime:</b> {editMode ? <input value={formData.name || ""} onChange={(e)=>setFormData({...formData,name:e.target.value})}/> : renderText(user.name)}</p>
+      <p><b>Prezime:</b> {editMode ? <input value={formData.surname || ""} onChange={(e)=>setFormData({...formData,surname:e.target.value})}/> : renderText(user.surname)}</p>
+      <p><b>Email:</b> {editMode ? <input value={formData.email || ""} onChange={(e)=>setFormData({...formData,email:e.target.value})}/> : renderText(user.email)}</p>
+      <p><b>Telefon:</b> {editMode ? <input value={formData.phone || ""} onChange={(e)=>setFormData({...formData,phone:e.target.value})}/> : renderText(user.phone)}</p>
+      <p><b>Datum rođenja:</b> {editMode ? <input type="date" value={formData.dob || ""} onChange={(e)=>setFormData({...formData,dob:e.target.value})}/> : formatDate(user.dob)}</p>
+      <p><b>Poslednja poseta:</b> {formatDate(lastVisit)}</p>
+
+      <hr />
+
+      <h3>Pretplate</h3>
+
+      {visibleSubs.map((s) => {
+        const active = s.active && s.endDate >= today;
+
+        return (
+          <div key={s.id}>
+            <p><b>{s.name}</b></p>
+            <p>Period: {formatDate(s.startDate)} – {formatDate(s.endDate)}</p>
+            <p>Status: {active ? "Aktivna" : "Neaktivna"}</p>
+
+            <ul>
+              {s.checkInsArray.map((c, i) => {
+                const ws = new Date(s.startDate);
+                ws.setDate(ws.getDate() + i * 7);
+                const we = new Date(ws);
+                we.setDate(ws.getDate() + 6);
+
+                const allowed =
+                  s.weeklyCheckIns === "unlimited"
+                    ? "∞"
+                    : s.weeklyCheckIns;
+
+                return (
+                  <li key={i}>
+                    Nedelja {i + 1} ({formatDate(ws)} – {formatDate(we)}): {c || 0} / {allowed}
+                    {role === "admin" && (
+                      <>
+                        <button onClick={() => changeCheckIn(s.id, i, 1)}>+</button>
+                        <button onClick={() => changeCheckIn(s.id, i, -1)}>-</button>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* 🔹 BILLING INFO */}
+            <div>
+              <b>Fakture:</b>
+              {s.payments?.length ? (
+                <ul>
+                  {s.payments.map((p) => (
+                    <li key={p.id} style={{ color: paymentColor(p.status) }}>
+                      {p.paidAmount || 0} / {p.amount} RSD — {p.status}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                " —"
+              )}
+            </div>
+
+            {role === "admin" && (
+              <>
+                {active ? (
+                  <button onClick={async () => {
+                    await updateDoc(doc(db, "clientSubscriptions", s.id), { active: false });
+                    load();
+                  }}>Deaktiviraj</button>
+                ) : (
+                  <button onClick={async () => {
+                    await updateDoc(doc(db, "clientSubscriptions", s.id), { active: true });
+                    load();
+                  }}>Reaktiviraj</button>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
+
+      {/* 🔹 TOGGLE BUTTON (FIXED) */}
+      {subscriptions.length > 1 && (
+        <button onClick={() => setShowAllSubs(!showAllSubs)}>
+          {showAllSubs ? "Sakrij prethodne pretplate" : "Prikaži prethodne pretplate"}
+        </button>
+      )}
+
+      <hr />
+
+      <h3>Napomene</h3>
+
+      <p>
+        <b>Ciljevi:</b><br />
+        {editMode ? (
+          <textarea value={formData.goals || ""} onChange={(e)=>setFormData({...formData,goals:e.target.value})}/>
+        ) : (
+          renderText(user.goals)
+        )}
+      </p>
+
+      <p>
+        <b>Zdravstvene napomene:</b><br />
+        {editMode ? (
+          <textarea value={formData.healthNotes || ""} onChange={(e)=>setFormData({...formData,healthNotes:e.target.value})}/>
+        ) : (
+          renderText(user.healthNotes)
+        )}
+      </p>
+
+      <p>
+        <b>Trenažne napomene:</b><br />
+        {editMode && role === "admin" ? (
+          <textarea value={formData.trainingNotes || ""} onChange={(e)=>setFormData({...formData,trainingNotes:e.target.value})}/>
+        ) : (
+          renderText(user.trainingNotes)
+        )}
+      </p>
     </div>
   );
 }
