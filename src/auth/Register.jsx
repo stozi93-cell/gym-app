@@ -1,257 +1,270 @@
 import { useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, Timestamp } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { auth } from "../firebase";
 import { Logo } from "../components/Logo";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+
+import InputField from "../components/InputField";
+import TextareaField from "../components/TextareaField";
+import StatusBanner from "../components/StatusBanner";
 
 export default function Register() {
+  const navigate = useNavigate();
+
   const [step, setStep] = useState(1);
-
-  // Required
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [surname, setSurname] = useState("");
-  const [phone, setPhone] = useState("");
-  const [dob, setDob] = useState("");
-
-  // Optional
-  const [goals, setGoals] = useState("");
-  const [healthNotes, setHealthNotes] = useState("");
-
+  const [subStep2, setSubStep2] = useState(1); // 2a / 2b
   const [loading, setLoading] = useState(false);
 
-  function nextStep() {
-    setStep((s) => Math.min(s + 1, 4));
+  const [status, setStatus] = useState(null);
+  // { type: "error" | "success", message: string }
+
+  const [errors, setErrors] = useState({});
+
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    ime: "",
+    prezime: "",
+    telefon: "",
+    datumRodjenja: "",
+    ciljevi: "",
+    zdravstveneNapomene: "",
+  });
+
+  function updateField(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => ({ ...prev, [key]: null }));
+    setStatus(null);
   }
 
-  function prevStep() {
-    setStep((s) => Math.max(s - 1, 1));
+  function validateStep() {
+    const newErrors = {};
+
+    if (step === 1) {
+      if (!form.email) newErrors.email = "Email je obavezan";
+      if (!form.password) newErrors.password = "Lozinka je obavezna";
+    }
+
+    if (step === 2 && subStep2 === 1) {
+      if (!form.ime) newErrors.ime = "Ime je obavezno";
+      if (!form.prezime) newErrors.prezime = "Prezime je obavezno";
+    }
+
+    if (step === 2 && subStep2 === 2) {
+      if (!form.telefon) newErrors.telefon = "Telefon je obavezan";
+      if (!form.datumRodjenja)
+        newErrors.datumRodjenja = "Datum rođenja je obavezan";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setStatus({
+        type: "error",
+        message: "Popuni sva obavezna polja.",
+      });
+      return false;
+    }
+
+    return true;
   }
 
-  async function register() {
-    if (!email || !password || !name || !surname || !phone || !dob) {
-      alert("Popunite sva obavezna polja");
+  function next() {
+    if (!validateStep()) return;
+
+    if (step === 2 && subStep2 === 1) {
+      setSubStep2(2);
       return;
     }
 
-    setLoading(true);
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
+    setStep((s) => s + 1);
+    if (step === 2) setSubStep2(1);
+  }
 
-      await setDoc(doc(db, "users", cred.user.uid), {
-        name,
-        surname,
-        email,
-        phone,
-        dob: Timestamp.fromDate(new Date(dob)),
-        role: "client",
-        active: true,
-        goals: goals || "",
-        healthNotes: healthNotes || "",
-        createdAt: Timestamp.fromDate(new Date()),
+  function back() {
+    setStatus(null);
+
+    if (step === 2 && subStep2 === 2) {
+      setSubStep2(1);
+      return;
+    }
+
+    setStep((s) => s - 1);
+  }
+
+  async function submitRegister() {
+    setLoading(true);
+    setStatus(null);
+
+    try {
+      await createUserWithEmailAndPassword(auth, form.email, form.password);
+
+      setStatus({
+        type: "success",
+        message: "Registracija uspešna 🎉 Dobrodošao u ReMotion",
       });
+
+      setTimeout(() => {
+        navigate("/app"); // adjust route if needed
+      }, 1500);
     } catch (err) {
-      console.error(err);
-      alert("Greška pri registraciji");
+      setStatus({
+        type: "error",
+        message: "Došlo je do greške. Pokušaj ponovo.",
+      });
     } finally {
       setLoading(false);
     }
   }
 
+  const progress = (step / 4) * 100;
+
   return (
-    <div className="fixed inset-0 overflow-y-auto bg-gradient-to-br from-brand-blue-900 via-brand-blue-700 to-brand-green-900 px-4 py-10">
-      <div className="mx-auto flex w-full max-w-md flex-col items-center">
+    <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-gradient-to-br from-brand-blue-900 via-brand-blue-700 to-brand-green-900 px-4">
+      <div className="w-full max-w-md rounded-3xl bg-neutral-900/90 p-6 shadow-2xl backdrop-blur-md">
+
         {/* Logo */}
-        <Logo className="-mb-4 h-40 select-none" />
+        <div className="flex justify-center">
+          <Logo className="h-24 select-none" />
+        </div>
 
-        {/* Card */}
-        <div className="w-full rounded-3xl bg-neutral-900/90 p-8 shadow-2xl backdrop-blur-md">
-          {/* Step indicator */}
-          <div className="mb-6 text-center text-sm text-neutral-400">
-            Korak {step} / 4
-          </div>
+        {/* Progress */}
+        <div className="mt-4 h-1.5 w-full rounded-full bg-neutral-700 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-brand-blue-500 to-brand-green-500 transition-all"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
 
-          <h1 className="mb-8 text-center text-3xl font-semibold text-white">
-            Registracija
-          </h1>
+        <p className="mt-3 text-center text-xs text-neutral-400">
+          Korak {step} / 4
+        </p>
 
-          {/* STEP 1 — Account */}
+        {/* Status banner */}
+        {status && <StatusBanner type={status.type} message={status.message} />}
+
+        {/* CONTENT */}
+        <div className="mt-6 space-y-6">
+
+          {/* STEP 1 */}
           {step === 1 && (
-            <div className="space-y-6">
-              <div>
-                <label className="mb-2 block text-sm text-neutral-300">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
-                />
-              </div>
+            <>
+              <InputField
+                label="Email *"
+                type="email"
+                value={form.email}
+                onChange={(v) => updateField("email", v)}
+                error={errors.email}
+                placeholder="vas@email.com"
+              />
 
-              <div>
-                <label className="mb-2 block text-sm text-neutral-300">
-                  Lozinka *
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
-                />
-              </div>
-
-              <button
-                onClick={nextStep}
-                className="w-full rounded-2xl bg-brand-blue-500 py-4 text-lg font-semibold text-white transition hover:bg-brand-blue-600"
-              >
-                Dalje →
-              </button>
-            </div>
+              <InputField
+                label="Lozinka *"
+                type="password"
+                value={form.password}
+                onChange={(v) => updateField("password", v)}
+                error={errors.password}
+              />
+            </>
           )}
 
-          {/* STEP 2 — Personal */}
-          {step === 2 && (
-            <div className="space-y-6">
-              <div>
-                <label className="mb-2 block text-sm text-neutral-300">
-                  Ime *
-                </label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
-                />
-              </div>
+          {/* STEP 2A */}
+          {step === 2 && subStep2 === 1 && (
+            <>
+              <InputField
+                label="Ime *"
+                value={form.ime}
+                onChange={(v) => updateField("ime", v)}
+                error={errors.ime}
+              />
 
-              <div>
-                <label className="mb-2 block text-sm text-neutral-300">
-                  Prezime *
-                </label>
-                <input
-                  value={surname}
-                  onChange={(e) => setSurname(e.target.value)}
-                  className="w-full rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm text-neutral-300">
-                  Telefon *
-                </label>
-                <input
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm text-neutral-300">
-                  Datum rođenja *
-                </label>
-                <input
-                  type="date"
-                  value={dob}
-                  onChange={(e) => setDob(e.target.value)}
-                  className="w-full rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={prevStep}
-                  className="w-full rounded-2xl bg-neutral-700 py-3 text-white"
-                >
-                  ← Nazad
-                </button>
-                <button
-                  onClick={nextStep}
-                  className="w-full rounded-2xl bg-brand-blue-500 py-3 text-white"
-                >
-                  Dalje →
-                </button>
-              </div>
-            </div>
+              <InputField
+                label="Prezime *"
+                value={form.prezime}
+                onChange={(v) => updateField("prezime", v)}
+                error={errors.prezime}
+              />
+            </>
           )}
 
-          {/* STEP 3 — Goals */}
+          {/* STEP 2B */}
+          {step === 2 && subStep2 === 2 && (
+            <>
+              <InputField
+                label="Telefon *"
+                value={form.telefon}
+                onChange={(v) => updateField("telefon", v)}
+                error={errors.telefon}
+              />
+
+              <InputField
+                label="Datum rođenja *"
+                type="date"
+                value={form.datumRodjenja}
+                onChange={(v) => updateField("datumRodjenja", v)}
+                error={errors.datumRodjenja}
+              />
+            </>
+          )}
+
+          {/* STEP 3 */}
           {step === 3 && (
-            <div className="space-y-6">
-              <p className="text-neutral-300 text-sm">
-                Koji su tvoji ciljevi u treningu ili rehabilitaciji?
-              </p>
-
-              <textarea
-                value={goals}
-                onChange={(e) => setGoals(e.target.value)}
-                rows={4}
-                className="w-full rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
-              />
-
-              <div className="flex gap-3">
-                <button
-                  onClick={prevStep}
-                  className="w-full rounded-2xl bg-neutral-700 py-3 text-white"
-                >
-                  ← Nazad
-                </button>
-                <button
-                  onClick={nextStep}
-                  className="w-full rounded-2xl bg-brand-blue-500 py-3 text-white"
-                >
-                  Dalje →
-                </button>
-              </div>
-            </div>
+            <TextareaField
+              label="Koji su tvoji ciljevi u treningu ili rehabilitaciji?"
+              value={form.ciljevi}
+              onChange={(v) => updateField("ciljevi", v)}
+            />
           )}
 
-          {/* STEP 4 — Health */}
+          {/* STEP 4 */}
           {step === 4 && (
-            <div className="space-y-6">
-              <p className="text-neutral-300 text-sm">
-                Da li imaš povrede, zdravstvene tegobe ili nešto što bi trebalo da znamo?
-              </p>
-
-              <textarea
-                value={healthNotes}
-                onChange={(e) => setHealthNotes(e.target.value)}
-                rows={4}
-                className="w-full rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
-              />
-
-              <div className="flex gap-3">
-                <button
-                  onClick={prevStep}
-                  className="w-full rounded-2xl bg-neutral-700 py-3 text-white"
-                >
-                  ← Nazad
-                </button>
-                <button
-                  onClick={register}
-                  disabled={loading}
-                  className="w-full rounded-2xl bg-brand-green-600 py-3 text-white font-semibold transition hover:bg-brand-green-700 disabled:opacity-50"
-                >
-                  {loading ? "Registracija..." : "Registruj se"}
-                </button>
-              </div>
-            </div>
+            <TextareaField
+              label="Da li imaš povrede, zdravstvene tegobe ili nešto važno što bi trebalo da znamo?"
+              value={form.zdravstveneNapomene}
+              onChange={(v) =>
+                updateField("zdravstveneNapomene", v)
+              }
+            />
           )}
+        </div>
 
-          {/* Back to login */}
-          <div className="mt-10 text-center text-sm text-neutral-400">
-            Već imaš nalog?
-            <div className="mt-3">
-              <Link
-                to="/login"
-                className="inline-block rounded-full bg-brand-blue-900/50 px-6 py-3 font-medium text-brand-blue-300 transition hover:bg-brand-blue-900/70"
-              >
-                Prijavi se
-              </Link>
-            </div>
+        {/* NAV */}
+        <div className="mt-8 flex justify-between">
+          <button
+            onClick={back}
+            disabled={step === 1}
+            className="rounded-xl bg-neutral-700 px-6 py-3 text-sm text-white disabled:opacity-40"
+          >
+            ← Nazad
+          </button>
+
+          {step < 4 ? (
+            <button
+              onClick={next}
+              className="rounded-xl bg-brand-blue-500 px-6 py-3 text-sm font-semibold text-white"
+            >
+              Dalje →
+            </button>
+          ) : (
+            <button
+              onClick={submitRegister}
+              disabled={loading}
+              className="rounded-xl bg-brand-blue-500 px-6 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {loading ? "Završavanje..." : "Završi registraciju"}
+            </button>
+          )}
+        </div>
+
+        {/* FOOTER */}
+        <div className="mt-6 text-center text-sm text-neutral-400">
+          Već imaš nalog?
+          <div className="mt-3">
+            <Link
+              to="/login"
+              className="inline-block rounded-full bg-brand-blue-900/40 px-6 py-2.5 text-brand-blue-300"
+            >
+              Prijavi se
+            </Link>
           </div>
         </div>
       </div>

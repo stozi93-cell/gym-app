@@ -1,67 +1,45 @@
-// src/components/BottomNav.jsx
-import { Link, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
-export default function BottomNav({ role, user }) {
-  const { pathname } = useLocation();
-
-  const linkClass = (path) =>
-    `flex flex-col items-center text-xs ${
-      pathname === path
-        ? "text-brand-blue-700"
-        : "text-text-secondaryLight dark:text-text-secondaryDark"
-    }`;
-
+function NavItem({ to, label, icon }) {
   return (
-    <nav
-      className="
-        fixed bottom-0 inset-x-0
-        bg-surface-light dark:bg-surface-dark
-        border-t border-border-light dark:border-border-dark
-        flex justify-around py-2
-      "
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `flex flex-col items-center justify-center gap-1 text-xs transition ${
+          isActive
+            ? "text-brand-blue-500"
+            : "text-text-secondaryDark hover:text-white"
+        }`
+      }
     >
-      {role === "client" && (
-        <>
-          <Link to="/" className={linkClass("/")}>
-            Rezervacije
-          </Link>
+      <span className="text-xl">{icon}</span>
+      <span>{label}</span>
+    </NavLink>
+  );
+}
 
-          <Link to="/forum" className={linkClass("/forum")}>
-            Forum
-          </Link>
+export default function BottomNav({ role }) {
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border-dark bg-surface-dark">
+      <div className="flex h-20 items-center justify-around">
+        {role === "client" && (
+          <>
+            <NavItem to="/" label="Rezervacije" icon="📅" />
+            <NavItem to="/profil/me" label="Profil" icon="👤" />
+            <NavItem to="/forum" label="Forum" icon="💬" />
+          </>
+        )}
 
-          <Link
-            to={`/profil/${user.uid}`}
-            className={linkClass(`/profil/${user.uid}`)}
-          >
-            Profil
-          </Link>
-        </>
-      )}
-
-      {role === "admin" && (
-        <>
-          <Link to="/raspored" className={linkClass("/raspored")}>
-            Raspored
-          </Link>
-
-          <Link to="/klijenti" className={linkClass("/klijenti")}>
-            Klijenti
-          </Link>
-
-          <Link to="/paketi" className={linkClass("/paketi")}>
-            Paketi
-          </Link>
-
-          <Link to="/naplate" className={linkClass("/naplate")}>
-            Naplate
-          </Link>
-
-          <Link to="/forum" className={linkClass("/forum")}>
-            Forum
-          </Link>
-        </>
-      )}
+        {role === "admin" && (
+          <>
+            <NavItem to="/raspored" label="Raspored" icon="🗓️" />
+            <NavItem to="/klijenti" label="Klijenti" icon="👥" />
+            <NavItem to="/paketi" label="Paketi" icon="📦" />
+            <NavItem to="/naplate" label="Naplate" icon="💳" />
+            <NavItem to="/forum" label="Forum" icon="💬" />
+          </>
+        )}
+      </div>
     </nav>
   );
 }
