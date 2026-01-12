@@ -1,13 +1,31 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="sr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>gym-booking</title>
+
+    <!-- App favicon / icon -->
+    <link rel="icon" type="image/png" href="/brand/icon.png" />
+
+    <!-- Mobile viewport: CRITICAL for app-like feel -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+
+    <!-- Theme color (Android status bar, PWA prep) -->
+    <meta name="theme-color" content="#020617" />
+
+    <!-- App title -->
+    <title>ReMotion</title>
+
+    <!-- Optional: improve font rendering -->
+    <meta name="color-scheme" content="light dark" />
   </head>
+
   <body>
     <div id="root"></div>
+
+    <!-- Vite entry -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

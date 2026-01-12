@@ -1,7 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
-import { signOut } from "firebase/auth";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
-import { auth } from "./firebase";
 
 import Login from "./auth/Login";
 import Register from "./auth/Register";
@@ -15,82 +13,64 @@ import MySubscriptions from "./pages/MySubscriptions";
 import AdminBilling from "./pages/AdminBilling";
 import Forum from "./pages/Forum";
 
+import AppShell from "./components/AppShell";
+
 export default function App() {
   const { user, profile, loading } = useAuth();
 
-  if (loading) return <div>Učitavanje...</div>;
+  if (loading) return null;
 
+  // ─────────────────────────────
+  // NOT AUTHENTICATED
+  // ─────────────────────────────
   if (!user) {
     return (
-      <div>
-        <h1>Gym App</h1>
-        <Register />
-        <Login />
-      </div>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/register" element={<Register />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      </BrowserRouter>
     );
   }
 
   const role = profile?.role;
 
+  // ─────────────────────────────
+  // AUTHENTICATED
+  // ─────────────────────────────
   return (
     <BrowserRouter>
-      <h1>Dobrodošli, {profile?.name}</h1>
-      <button onClick={() => signOut(auth)}>Odjava</button>
+      <AppShell>
+        <Routes>
+          {/* Forum — accessible to all */}
+          <Route path="/forum" element={<Forum />} />
 
-      <nav style={{ marginBottom: 20 }}>
-        {role === "client" && (
-          <>
-            <Link to="/">Rezervacije</Link>{" | "}
-            <Link to={`/profil/${user.uid}`}>Moj profil</Link>{" | "}
-          </>
-        )}
+          {/* CLIENT */}
+          {role === "client" && (
+            <>
+              <Route path="/" element={<Bookings />} />
+              <Route path="/profil/:uid" element={<ClientProfile />} />
+              <Route path="/moje-pretplate" element={<MySubscriptions />} />
+            </>
+          )}
 
-        {role === "admin" && (
-          <>
-            <Link to="/raspored">Raspored</Link>{" | "}
-            <Link to="/klijenti">Lista klijenata</Link>{" | "}
-            <Link to="/paketi">Paketi</Link>{" | "}
-            <Link to="/naplate">Naplate</Link>{" | "}
-          </>
-        )}
+          {/* ADMIN */}
+          {role === "admin" && (
+            <>
+              <Route path="/" element={<AdminSlots />} />
+              <Route path="/raspored" element={<AdminSlots />} />
+              <Route path="/klijenti" element={<AdminClients />} />
+              <Route path="/paketi" element={<AdminPackages />} />
+              <Route path="/naplate" element={<AdminBilling />} />
+              <Route path="/profil/:uid" element={<ClientProfile />} />
+            </>
+          )}
 
-        {/* ALWAYS LAST */}
-        <Link to="/forum">📢 Forum</Link>
-      </nav>
-
-      <Routes>
-        {/* FORUM — accessible to all */}
-        <Route path="/forum" element={<Forum />} />
-
-        {/* CLIENT ONLY ROUTES */}
-        {role === "client" && (
-          <>
-            <Route path="/" element={<Bookings />} />
-            <Route path="/moje-pretplate" element={<MySubscriptions />} />
-          </>
-        )}
-
-        {/* PROFILE ROUTE — accessible to both */}
-        <Route path="/profil/:uid" element={<ClientProfile />} />
-
-        {/* ADMIN ONLY ROUTES */}
-        {role === "admin" && (
-          <>
-            <Route path="/raspored" element={<AdminSlots />} />
-            <Route path="/klijenti" element={<AdminClients />} />
-            <Route path="/paketi" element={<AdminPackages />} />
-            <Route path="/naplate" element={<AdminBilling />} />
-
-            <Route path="/" element={<Navigate to="/raspored" />} />
-            <Route path="/moje-pretplate" element={<Navigate to="/raspored" />} />
-          </>
-        )}
-
-        <Route
-          path="*"
-          element={<Navigate to={role === "client" ? "/" : "/raspored"} />}
-        />
-      </Routes>
+          {/* FALLBACK */}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </AppShell>
     </BrowserRouter>
   );
 }
