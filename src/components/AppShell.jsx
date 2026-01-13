@@ -8,9 +8,25 @@ export default function AppShell({ children }) {
   const { profile } = useAuth();
 
   return (
-    <div className="flex h-screen flex-col bg-background-dark text-text-primaryDark">
+    <div
+      className="
+        flex h-screen flex-col
+        bg-gradient-to-br
+        from-brand-blue-900
+        via-brand-blue-700
+        to-brand-green-900
+        text-text-primaryDark
+      "
+    >
       {/* TOP BAR */}
-      <header className="flex h-14 items-center justify-between border-b border-border-dark px-4">
+      <header
+        className="
+          flex h-14 items-center justify-between
+          border-b border-border-dark
+          bg-black/20 backdrop-blur-md
+          px-4
+        "
+      >
         <div className="flex items-center gap-2">
           <Logo className="h-8" />
         </div>
