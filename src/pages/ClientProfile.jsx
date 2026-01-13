@@ -84,17 +84,10 @@ export default function ClientProfile() {
       const pkg = subSnap.data();
       if (!pkg) continue;
 
-      const checkInsArray = Array.isArray(cs.checkInsArray)
-        ? cs.checkInsArray
-        : [];
-
       let weeklyCheckIns = cs.weeklyCheckIns;
       if (!weeklyCheckIns || weeklyCheckIns === "default") {
         weeklyCheckIns = pkg.defaultCheckIns || "unlimited";
       }
-
-      const startDate = cs.startDate.toDate();
-      const endDate = cs.endDate.toDate();
 
       const billingSnap = await getDocs(
         query(
@@ -104,20 +97,15 @@ export default function ClientProfile() {
         )
       );
 
-      const payments = billingSnap.docs.map((b) => ({
-        id: b.id,
-        ...b.data(),
-      }));
-
       subs.push({
         id: d.id,
         ...pkg,
-        startDate,
-        endDate,
+        startDate: cs.startDate.toDate(),
+        endDate: cs.endDate.toDate(),
         active: cs.active,
-        checkInsArray,
+        checkInsArray: cs.checkInsArray || [],
         weeklyCheckIns,
-        payments,
+        payments: billingSnap.docs.map((b) => ({ id: b.id, ...b.data() })),
       });
     }
 
@@ -130,6 +118,13 @@ export default function ClientProfile() {
   }
 
   /* helpers */
+
+  const formatShortDate = (d) =>
+  new Date(d).toLocaleDateString("sr-Latn-RS", {
+    day: "2-digit",
+    month: "long",
+  });
+
 
   const formatDate = (d) =>
     d
@@ -207,46 +202,54 @@ export default function ClientProfile() {
 
   return (
     <div className="mx-auto max-w-[420px] space-y-5 px-1">
+      {/* HEADER + PERSONAL INFO */}
       {/* HEADER */}
-      <div className="rounded-2xl bg-neutral-900/90 p-5 shadow">
+<CollapsibleSection
+  header={
+    <div className="flex items-start justify-between">
+      <div>
         <h2 className="text-xl font-semibold text-white">
           {user.name} {user.surname}
         </h2>
         <p className={`mt-1 text-sm ${lastVisitColor()}`}>
-          Poslednja poseta: {formatDate(lastVisit)}
+          Poslednji trening: {formatDate(lastVisit)}
         </p>
       </div>
 
-      {/* ACTIONS */}
+      {/* EDIT CONTROLS */}
       {!editMode ? (
         <button
           onClick={() => setEditMode(true)}
-          className="w-full rounded-xl bg-blue-600 py-2.5 text-white font-medium"
+          className="text-neutral-400 hover:text-white transition"
+          aria-label="Uredi profil"
         >
-          Uredi profil
+          ✏️
         </button>
       ) : (
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <button
             onClick={saveProfile}
-            className="flex-1 rounded-xl bg-green-600 py-2.5 text-white font-medium"
+            className="text-green-400 hover:text-green-300"
+            aria-label="Sačuvaj"
           >
-            Sačuvaj
+            ✔️
           </button>
           <button
             onClick={() => {
               setEditMode(false);
               setFormData(user);
             }}
-            className="flex-1 rounded-xl bg-neutral-700 py-2.5 text-white"
+            className="text-red-400 hover:text-red-300"
+            aria-label="Otkaži"
           >
-            Otkaži
+            ✖️
           </button>
         </div>
       )}
-
-      {/* SECTIONS */}
-      <CollapsibleSection title="Lični podaci">
+    </div>
+  }
+  defaultOpen={false}
+>
         <ProfileField label="Ime">
           {editMode ? (
             <Input value={formData.name} onChange={(v)=>setFormData({...formData,name:v})}/>
@@ -283,7 +286,8 @@ export default function ClientProfile() {
         </ProfileField>
       </CollapsibleSection>
 
-      <CollapsibleSection title="Pretplate" defaultOpen>
+      {/* PRETPLATE */}
+      <CollapsibleSection title="Članarina" defaultOpen>
         {visibleSubs.map((s) => {
           const active = s.active && s.endDate >= today;
           const allowed =
@@ -307,10 +311,12 @@ export default function ClientProfile() {
                     <span>
                       Nedelja {i + 1}: {c || 0} / {allowed}
                     </span>
+                    
+                    
                     {role === "admin" && (
                       <span className="flex gap-2">
-                        <button className="px-2" onClick={()=>changeCheckIn(s.id,i,1)}>+</button>
-                        <button className="px-2" onClick={()=>changeCheckIn(s.id,i,-1)}>-</button>
+                        <button onClick={()=>changeCheckIn(s.id,i,1)}>+</button>
+                        <button onClick={()=>changeCheckIn(s.id,i,-1)}>-</button>
                       </span>
                     )}
                   </li>
@@ -341,12 +347,13 @@ export default function ClientProfile() {
             className="w-full text-sm text-blue-400"
           >
             {showAllSubs
-              ? "Sakrij prethodne pretplate"
-              : "Prikaži prethodne pretplate"}
+              ? "Sakrij prethodne članarine"
+              : "Prikaži prethodne članarine"}
           </button>
         )}
       </CollapsibleSection>
 
+      {/* NAPOMENE */}
       <CollapsibleSection title="Napomene">
         <ProfileField label="Ciljevi">
           {editMode ? (
@@ -359,12 +366,6 @@ export default function ClientProfile() {
             <Textarea value={formData.healthNotes} onChange={(v)=>setFormData({...formData,healthNotes:v})}/>
           ) : renderText(user.healthNotes)}
         </ProfileField>
-
-        <ProfileField label="Trenažne napomene">
-          {editMode && role === "admin" ? (
-            <Textarea value={formData.trainingNotes} onChange={(v)=>setFormData({...formData,trainingNotes:v})}/>
-          ) : renderText(user.trainingNotes)}
-        </ProfileField>
       </CollapsibleSection>
     </div>
   );
@@ -372,16 +373,18 @@ export default function ClientProfile() {
 
 /* UI helpers */
 
-function CollapsibleSection({ title, children, defaultOpen = false }) {
+function CollapsibleSection({ title, header, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div className="rounded-2xl bg-neutral-900/90 p-5 shadow">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between"
+        className="flex w-full items-center justify-between text-left"
       >
-        <h3 className="text-sm font-medium text-neutral-300">{title}</h3>
+        <div>
+          {header || <h3 className="text-sm font-medium text-neutral-300">{title}</h3>}
+        </div>
         <span
           className={`text-neutral-400 transition-transform ${
             open ? "rotate-180" : ""
@@ -390,6 +393,7 @@ function CollapsibleSection({ title, children, defaultOpen = false }) {
           ▾
         </span>
       </button>
+
       {open && <div className="mt-4 space-y-3">{children}</div>}
     </div>
   );
