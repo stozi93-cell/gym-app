@@ -198,6 +198,12 @@ export default function ClientProfile() {
 
     load();
   };
+const PAYMENT_STATUS_LABELS = {
+  paid: "Plaćeno",
+  partially_paid: "Delimično plaćeno",
+  unpaid: "Nije plaćeno",
+  pending: "Na čekanju",
+};
 
   const paymentColor = (status) => {
     switch (status) {
@@ -371,7 +377,8 @@ export default function ClientProfile() {
                   <ul className="ml-4 list-disc">
                     {s.payments.map((p) => (
                       <li key={p.id} className={paymentColor(p.status)}>
-                        {p.paidAmount || 0} / {p.amount} RSD — {p.status}
+                        {p.paidAmount || 0} / {p.amount} RSD —{" "}
+{PAYMENT_STATUS_LABELS[p.status] ?? p.status}
                       </li>
                     ))}
                   </ul>
@@ -432,7 +439,7 @@ export default function ClientProfile() {
           ) : renderText(user.goals)}
         </ProfileField>
 
-        <ProfileField label="Zdravstvene napomene">
+        <ProfileField label="Zdravlje">
           {editMode ? (
             <Textarea value={formData.healthNotes} onChange={(v)=>setFormData({...formData,healthNotes:v})}/>
           ) : renderText(user.healthNotes)}

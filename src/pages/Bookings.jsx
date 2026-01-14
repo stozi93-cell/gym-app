@@ -12,7 +12,7 @@ import {
 import { auth, db } from "../firebase";
 import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 
-const WINDOW_DAYS = 3;
+const WINDOW_DAYS = 7;
 const MAX_CAPACITY = 5;
 const BOOKING_CUTOFF_HOURS = 1;
 
@@ -28,51 +28,52 @@ export default function Bookings() {
     loadData();
   }, []);
 
-  /* -------------------- helpers -------------------- */
+  /* ---------------- helpers ---------------- */
+
+  const toDate = (ts) => (ts instanceof Date ? ts : ts.toDate());
 
   function sameTimestamp(a, b) {
     return a.getTime() === b.getTime();
   }
 
   function generateSlotsFromTemplates(templates, startDate, days) {
-    const result = [];
+    const out = [];
 
     for (let i = 0; i < days; i++) {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + i);
-      const weekday = d.getDay(); // 0–6
+      const base = new Date(startDate);
+      base.setDate(base.getDate() + i);
+      const weekday = base.getDay();
 
       templates.forEach((tpl) => {
         if (!tpl.active) return;
         if (!tpl.days.includes(weekday)) return;
 
         const [h, m] = tpl.time.split(":");
-        const slotDate = new Date(d);
-        slotDate.setHours(Number(h), Number(m), 0, 0);
+        const d = new Date(base);
+        d.setHours(Number(h), Number(m), 0, 0);
 
-        result.push({
-          id: `tpl_${tpl.id}_${slotDate.toISOString()}`,
-          timestamp: slotDate,
-          capacity: tpl.capacity ?? MAX_CAPACITY,
+        out.push({
+          id: `tpl_${tpl.id}_${d.toISOString()}`,
+          timestamp: d,
           generated: true,
           templateId: tpl.id,
         });
       });
     }
 
-    return result;
+    return out;
   }
 
-  /* -------------------- data load -------------------- */
+  /* ---------------- data load ---------------- */
 
   async function loadData(dateOverride) {
     setLoading(true);
 
     const start = dateOverride ?? new Date();
-    const endDate = new Date(start);
-    endDate.setDate(start.getDate() + WINDOW_DAYS);
+    const end = new Date(start);
+    end.setDate(start.getDate() + WINDOW_DAYS);
 
-    // 1️⃣ templates
+    // templates
     const tplSnap = await getDocs(collection(db, "slotTemplates"));
     const tplData = tplSnap.docs.map((d) => ({
       id: d.id,
@@ -80,12 +81,12 @@ export default function Bookings() {
     }));
     setTemplates(tplData);
 
-    // 2️⃣ real slots
+    // real slots
     const slotSnap = await getDocs(
       query(
         collection(db, "slots"),
         where("timestamp", ">=", start),
-        where("timestamp", "<=", endDate),
+        where("timestamp", "<=", end),
         orderBy("timestamp")
       )
     );
@@ -97,7 +98,7 @@ export default function Bookings() {
       generated: false,
     }));
 
-    // 3️⃣ generated slots (missing only)
+    // generated slots
     const generatedSlots = generateSlotsFromTemplates(
       tplData,
       start,
@@ -115,7 +116,7 @@ export default function Bookings() {
 
     setSlots(allSlots);
 
-    // 4️⃣ user bookings
+    // bookings
     const bookingSnap = await getDocs(
       query(
         collection(db, "bookings"),
@@ -129,20 +130,22 @@ export default function Bookings() {
     }));
     setBookings(userBookings);
 
-    // 5️⃣ booking counts (real slots only)
+    // counts (real slots only)
     const counts = {};
     const realSlotIds = realSlots.map((s) => s.id);
 
-    if (realSlotIds.length > 0) {
+    if (realSlotIds.length) {
       const CHUNK = 10;
       for (let i = 0; i < realSlotIds.length; i += CHUNK) {
-        const chunk = realSlotIds.slice(i, i + CHUNK);
         const snap = await getDocs(
-          query(collection(db, "bookings"), where("slotId", "in", chunk))
+          query(
+            collection(db, "bookings"),
+            where("slotId", "in", realSlotIds.slice(i, i + CHUNK))
+          )
         );
         snap.docs.forEach((b) => {
-          const sid = b.data().slotId;
-          counts[sid] = (counts[sid] || 0) + 1;
+          const id = b.data().slotId;
+          counts[id] = (counts[id] || 0) + 1;
         });
       }
     }
@@ -151,12 +154,14 @@ export default function Bookings() {
     setLoading(false);
   }
 
-  /* -------------------- booking -------------------- */
+  /* ---------------- booking ---------------- */
 
-  function canBook(date) {
-    const diff =
-      (date.getTime() - Date.now()) / (1000 * 60 * 60);
-    return diff >= BOOKING_CUTOFF_HOURS;
+  function canBook(ts) {
+    return (
+      (ts.getTime() - Date.now()) /
+        (1000 * 60 * 60) >=
+      BOOKING_CUTOFF_HOURS
+    );
   }
 
   async function book(slot) {
@@ -167,11 +172,10 @@ export default function Bookings() {
 
     let slotId = slot.id;
 
-    // generated → create real slot
     if (slot.generated) {
       const ref = await addDoc(collection(db, "slots"), {
         timestamp: slot.timestamp,
-        capacity: slot.capacity,
+        capacity: MAX_CAPACITY,
         createdFromTemplate: slot.templateId,
       });
       slotId = ref.id;
@@ -179,6 +183,7 @@ export default function Bookings() {
 
     await addDoc(collection(db, "bookings"), {
       slotId,
+      slotTimestamp: slot.timestamp,
       userId: auth.currentUser.uid,
       createdAt: new Date(),
     });
@@ -195,26 +200,39 @@ export default function Bookings() {
 
   if (loading) return <p className="text-neutral-400">Učitavanje...</p>;
 
-  /* -------------------- formatting -------------------- */
+  /* ---------------- formatting ---------------- */
 
-  function formatDate(d, opts) {
-    return d.toLocaleDateString("sr-Latn-RS", opts);
-  }
+  const formatDate = (d, o) =>
+    toDate(d).toLocaleDateString("sr-Latn-RS", o);
 
-  function formatTime(d) {
-    return d.toLocaleTimeString("sr-Latn-RS", {
+  const formatTime = (d) =>
+    toDate(d).toLocaleTimeString("sr-Latn-RS", {
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
 
-  function capitalize(s) {
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  }
+  const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-  /* -------------------- header data -------------------- */
+  /* ---------------- derived data ---------------- */
 
   const today = new Date();
+
+  const weeklyDone = bookings.filter((b) => {
+  if (!b.checkedIn) return false;
+  if (!b.slotTimestamp) return false;
+
+  const d = b.slotTimestamp.toDate();
+
+  return isWithinInterval(d, {
+    start: startOfWeek(today, { weekStartsOn: 1 }),
+    end: endOfWeek(today, { weekStartsOn: 1 }),
+  });
+});
+
+
+  const pastVisits = weeklyDone
+  .map((b) => b.slotTimestamp.toDate())
+  .sort((a, b) => b - a);
 
   const futureBookings = bookings
     .map((b) => slots.find((s) => s.id === b.slotId))
@@ -223,26 +241,6 @@ export default function Bookings() {
 
   const nextTraining = futureBookings[0];
   const additionalBookings = futureBookings.slice(1);
-
-  const weeklyDone = bookings.filter((b) => {
-    if (!b.checkedIn) return false;
-    const slot = slots.find((s) => s.id === b.slotId);
-    if (!slot) return false;
-    return isWithinInterval(slot.timestamp, {
-      start: startOfWeek(today, { weekStartsOn: 1 }),
-      end: endOfWeek(today, { weekStartsOn: 1 }),
-    });
-  });
-
-  const pastVisits = weeklyDone
-    .map((b) => {
-      const slot = slots.find((s) => s.id === b.slotId);
-      return slot?.timestamp;
-    })
-    .filter(Boolean)
-    .sort((a, b) => b - a);
-
-  /* -------------------- grouping -------------------- */
 
   const groupedSlots = slots.reduce((acc, slot) => {
     const key = capitalize(
@@ -253,18 +251,19 @@ export default function Bookings() {
         year: "numeric",
       })
     );
-    acc[key] = acc[key] || [];
-    acc[key].push(slot);
+    (acc[key] ||= []).push(slot);
     return acc;
   }, {});
 
-  const sortedDates = Object.entries(groupedSlots);
+  const sortedDates = Object.entries(groupedSlots).sort(
+    (a, b) => a[1][0].timestamp - b[1][0].timestamp
+  );
 
-  /* -------------------- render -------------------- */
+  /* ---------------- JSX ---------------- */
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Sledeći trening */}
       <div className="bg-neutral-800 ring-1 ring-neutral-700 rounded-xl px-4 py-3 space-y-3">
         <div>
           <div className="text-xs text-neutral-400">
@@ -292,11 +291,13 @@ export default function Bookings() {
             </div>
           )}
         </div>
+        <div className="border-t border-neutral-600" />
+
 
         {additionalBookings.length > 0 && (
           <div>
             <div className="text-xs font-medium mb-0.5 text-neutral-300">
-              Dodatne rezervacije
+              Ostale rezervacije:
             </div>
             <ul className="text-xs text-blue-400 space-y-0.5">
               {additionalBookings.map((s) => (
@@ -315,9 +316,11 @@ export default function Bookings() {
           </div>
         )}
 
+        <div className="border-t border-neutral-700/50 my-2" />
+
         <div>
           <div className="text-xs font-medium mb-0.5 text-neutral-300">
-            Odrađeni treninzi ove nedelje:
+            Odrađeni treninzi:
           </div>
 
           {pastVisits.length > 0 && (
@@ -341,89 +344,121 @@ export default function Bookings() {
 
       {/* Slots */}
       <div className="space-y-2">
-        {sortedDates.map(([date, daySlots]) => (
-          <details
-            key={date}
-            className="bg-neutral-900 border-l-4 border-neutral-600 pl-2 rounded-xl px-3 py-2"
-          >
-            <summary className="font-medium cursor-pointer text-sm leading-tight pl-1">
-              {date}
-            </summary>
+        {sortedDates.map(([date, daySlots]) => {
+          const hasUserBooking = daySlots.some((s) =>
+            bookings.some((b) => b.slotId === s.id)
+          );
+          const hasCheckedIn = daySlots.some((s) =>
+            bookings.some(
+              (b) => b.slotId === s.id && b.checkedIn
+            )
+          );
+const userBookingForDay = bookings.find((b) =>
+  daySlots.some((s) => s.id === b.slotId)
+);
 
-            <div className="mt-2 space-y-2">
-              {daySlots.map((slot) => {
-                const booked = bookings.some(
-                  (b) => b.slotId === slot.id
-                );
-                const count = slot.generated
-                  ? 0
-                  : bookingCounts[slot.id] || 0;
-                const full = count >= MAX_CAPACITY;
-                const allowed = canBook(slot.timestamp);
+          return (
+            <details
+              key={date}
+              className={`bg-neutral-900 border-l-4 pl-2 rounded-xl px-3 py-2.5 ${
+                hasCheckedIn
+                  ? "border-green-500"
+                  : hasUserBooking
+                  ? "border-blue-500"
+                  : "border-neutral-600"
+              }`}
+            >
+              <summary className="font-medium cursor-pointer text-sm pl-1">
+               {date}
+              </summary>
 
-                return (
-                  <div
-                    key={slot.id}
-                    className="flex justify-between items-center bg-neutral-800 rounded-lg px-3 py-1.5"
-                  >
-                    <span className="text-sm">
-                      {formatTime(slot.timestamp)} —{" "}
-                      <span className="text-neutral-400">
-                        {count}/{MAX_CAPACITY}
+              <div className="mt-2 space-y-2">
+                {daySlots.map((slot) => {
+                  const booking = bookings.find(
+  (b) => b.slotId === slot.id
+);
+
+const booked = !!booking;
+const checkedIn = booking?.checkedIn === true;
+
+const hasBookingThatDay = !!userBookingForDay;
+const isUsersSlotForDay =
+  userBookingForDay?.slotId === slot.id;
+
+
+                  const count = bookingCounts[slot.id] || 0;
+                  const full = count >= MAX_CAPACITY;
+                  const allowed = canBook(slot.timestamp);
+
+                  return (
+                    <div
+  key={slot.id}
+  className={`flex justify-between items-center rounded-lg px-3 py-1 transition-opacity ${
+    !allowed && !booked && !full
+      ? "bg-neutral-900 text-neutral-500"
+      : "bg-neutral-800"
+  } ${
+    hasBookingThatDay && !isUsersSlotForDay
+      ? "opacity-40 pointer-events-none"
+      : ""
+  }`}
+>
+
+                      <span className="text-sm">
+                        {formatTime(slot.timestamp)} —{" "}
+                        <span className="text-neutral-400">
+                          {count}/{MAX_CAPACITY}
+                        </span>
                       </span>
-                    </span>
 
-                    {!booked && !full && allowed && (
-                      <button
-                        className="text-sm text-green-400"
-                        onClick={() => book(slot)}
-                      >
-                        Rezerviši
-                      </button>
-                    )}
+                      {!booked &&
+  !full &&
+  allowed &&
+  !hasBookingThatDay && (
 
-                    {booked && (
-                      <button
-                        className="text-sm text-red-400"
-                        onClick={() => cancel(slot.id)}
-                      >
-                        Otkaži
-                      </button>
-                    )}
+                        <button
+                          className="text-sm text-green-400"
+                          onClick={() => book(slot)}
+                        >
+                          Rezerviši
+                        </button>
+                      )}
 
-                    {!booked && full && (
-                      <span className="text-xs text-red-400">
-                        Popunjeno
-                      </span>
-                    )}
+                      {/* Booked but NOT checked in */}
+{booked && !checkedIn && (
+  <button
+    className="text-sm text-red-400"
+    onClick={() => cancel(slot.id)}
+  >
+    Otkaži
+  </button>
+)}
 
-                    {!booked && !allowed && !full && (
-                      <span className="text-xs text-amber-400">
-                        Zatvoreno
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </details>
-        ))}
-      </div>
+{/* Checked in */}
+{checkedIn && (
+  <span className="text-xs text-green-500 font-medium">
+    Trening odrađen
+  </span>
+)}
 
-      {/* Calendar */}
-      <div className="bg-neutral-900 rounded-xl p-3">
-        <label className="text-xs text-neutral-400 block mb-1">
-          Izaberi drugi datum
-        </label>
-        <input
-          type="date"
-          className="w-full bg-neutral-800 text-white rounded-lg p-2"
-          onChange={(e) => {
-            const d = new Date(e.target.value);
-            setSelectedDate(d);
-            loadData(d);
-          }}
-        />
+                      {!booked && full && (
+                        <span className="text-xs text-red-400">
+                          Popunjeno
+                        </span>
+                      )}
+
+                      {!booked && !allowed && !full && (
+                        <span className="text-xs text-neutral-500">
+                          Zatvoreno
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          );
+        })}
       </div>
     </div>
   );
