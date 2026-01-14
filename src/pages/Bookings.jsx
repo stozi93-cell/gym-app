@@ -12,7 +12,7 @@ import {
 import { auth, db } from "../firebase";
 import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 
-const WINDOW_DAYS = 7;
+const WINDOW_DAYS = 3;
 const MAX_CAPACITY = 5;
 const BOOKING_CUTOFF_HOURS = 1;
 
@@ -21,29 +21,23 @@ export default function Bookings() {
   const [bookings, setBookings] = useState([]);
   const [bookingCounts, setBookingCounts] = useState({});
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(new Date());
-  const [openHeader, setOpenHeader] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-
-  async function loadData() {
+  async function loadData(dateOverride) {
     setLoading(true);
 
-    const now = new Date();
-    const endDate = new Date();
-    endDate.setDate(now.getDate() + WINDOW_DAYS);
+    const start = dateOverride ?? new Date();
+    const endDate = new Date(start);
+    endDate.setDate(start.getDate() + WINDOW_DAYS);
 
     const slotSnap = await getDocs(
       query(
         collection(db, "slots"),
-        where("timestamp", ">=", now),
+        where("timestamp", ">=", start),
         where("timestamp", "<=", endDate),
         orderBy("timestamp")
       )
@@ -90,15 +84,13 @@ export default function Bookings() {
   }
 
   function canBook(slotTimestamp) {
-    const slotTime = slotTimestamp.toDate();
     const diffHours =
-      (slotTime.getTime() - new Date().getTime()) /
+      (slotTimestamp.toDate().getTime() - Date.now()) /
       (1000 * 60 * 60);
     return diffHours >= BOOKING_CUTOFF_HOURS;
   }
 
   async function book(slotId, slotTimestamp) {
-
     if (!canBook(slotTimestamp)) {
       alert("Rezervacija nije moguća manje od 1h pre početka treninga.");
       return;
@@ -119,14 +111,14 @@ export default function Bookings() {
       createdAt: new Date(),
     });
 
-    loadData();
+    loadData(selectedDate);
   }
 
   async function cancel(slotId) {
     const b = bookings.find((b) => b.slotId === slotId);
     if (!b) return;
     await deleteDoc(doc(db, "bookings", b.id));
-    loadData();
+    loadData(selectedDate);
   }
 
   if (loading) return <p className="text-neutral-400">Učitavanje...</p>;
@@ -144,20 +136,6 @@ export default function Bookings() {
 
   function capitalize(s) {
     return s.charAt(0).toUpperCase() + s.slice(1);
-  }
-
-  function formatCountdown(date) {
-    const diff = date - now;
-    if (diff <= 0) return null;
-
-    const totalMin = Math.floor(diff / 60000);
-    const d = Math.floor(totalMin / 1440);
-    const h = Math.floor((totalMin % 1440) / 60);
-    const m = totalMin % 60;
-
-    if (d > 0) return `${d}d ${h}h ${m}m`;
-    if (h > 0) return `${h}h ${m}m`;
-    return `Počinje za ${m} min`;
   }
 
   const today = new Date();
@@ -188,9 +166,6 @@ export default function Bookings() {
 
   const nextTraining = futureBookings[0];
   const additionalBookings = futureBookings.slice(1);
-  const countdown = nextTraining
-    ? formatCountdown(nextTraining.timestamp.toDate())
-    : null;
 
   const groupedSlots = slots.reduce((acc, slot) => {
     const key = capitalize(
@@ -214,121 +189,90 @@ export default function Bookings() {
 
   return (
     <div className="space-y-4">
-      {/* Sledeći trening */}
-      <div className="bg-neutral-800 ring-1 ring-green-700 rounded-xl p-4">
-        <button
-          onClick={() => setOpenHeader(!openHeader)}
-          className="flex w-full items-center justify-between text-left"
-        >
+      {/* Sledeći trening – always open */}
+      <div className="bg-neutral-800 ring-1 ring-neutral-700 rounded-xl px-4 py-3 space-y-3">
+        <div>
+          <div className="text-xs text-neutral-400">
+            Sledeći trening
+          </div>
+
+          {nextTraining ? (
+            <>
+              <div className="text-2xl font-semibold leading-tight">
+                {formatTime(nextTraining.timestamp.toDate())}
+              </div>
+              <div className="text-xs text-neutral-400">
+                {capitalize(
+                  formatDate(nextTraining.timestamp.toDate(), {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "long",
+                  })
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-red-400 mt-1">
+              Nemate zakazanih treninga.
+            </div>
+          )}
+        </div>
+
+        {additionalBookings.length > 0 && (
           <div>
-            <div className="text-sm text-neutral-400">
-              Sledeći trening
+            <div className="text-xs font-medium mb-0.5 text-neutral-300">
+              Dodatne rezervacije
             </div>
-
-            {nextTraining ? (
-              <>
-                <div className="text-2xl font-semibold">
-                  {formatTime(
-                    nextTraining.timestamp.toDate()
-                  )}
-                </div>
-                <div className="text-sm text-neutral-400">
+            <ul className="text-xs text-blue-400 space-y-0.5">
+              {additionalBookings.map((s) => (
+                <li key={s.id}>
+                  {formatTime(s.timestamp.toDate())} —{" "}
                   {capitalize(
-                    formatDate(
-                      nextTraining.timestamp.toDate(),
-                      {
-                        weekday: "long",
-                        day: "2-digit",
-                        month: "long",
-                      }
-                    )
+                    formatDate(s.timestamp.toDate(), {
+                      weekday: "long",
+                      day: "2-digit",
+                      month: "long",
+                    })
                   )}
-                </div>
-              </>
-            ) : (
-              <div className="text-sm text-neutral-400 mt-1">
-                Nemate zakazanih treninga.
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-7">
-            <span
-              className={`text-neutral-400 text-2xl transition-transform ${
-                openHeader ? "rotate-180" : ""
-              }`}
-            >
-              ⌄
-            </span>
-          </div>
-        </button>
-
-        {openHeader && (
-          <div className="mt-4 space-y-4">
-            {additionalBookings.length > 0 && (
-              <div>
-                <div className="text-sm font-medium mb-1">
-                  Dodatne rezervacije
-                </div>
-                <ul className="text-sm text-blue-400 space-y-1">
-                  {additionalBookings.map((s) => (
-                    <li key={s.id}>
-                      {formatTime(
-                        s.timestamp.toDate()
-                      )}{" "}
-                      —{" "}
-                      {capitalize(
-                        formatDate(
-                          s.timestamp.toDate(),
-                          {
-                            weekday: "long",
-                            day: "2-digit",
-                            month: "long",
-                          }
-                        )
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div>
-              <div className="text-sm font-medium mb-1">
-                Odrađeni treninzi ove nedelje:
-              </div>
-
-              {pastVisits.length > 0 && (
-                <ul className="text-sm text-green-500 space-y-1">
-                  {pastVisits.map((d, i) => (
-                    <li key={i}>
-                      {formatTime(d)} —{" "}
-                      {capitalize(
-                        formatDate(d, {
-                          weekday: "long",
-                          day: "2-digit",
-                          month: "long",
-                        })
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
+
+        <div>
+          <div className="text-xs font-medium mb-0.5 text-neutral-300">
+            Odrađeni treninzi ove nedelje:{" "}
+          </div>
+
+          {pastVisits.length > 0 && (
+            <ul className="text-xs text-green-500 space-y-0.5">
+              {pastVisits.map((d, i) => (
+                <li key={i}>
+                  {formatTime(d)} —{" "}
+                  {capitalize(
+                    formatDate(d, {
+                      weekday: "long",
+                      day: "2-digit",
+                      month: "long",
+                    })
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
-      {/* Slots */}
-      
+      {/* Slots (next 3 days) */}
       <div className="space-y-2">
         {sortedDates.map(([date, daySlots]) => (
           <details
             key={date}
-            className="bg-neutral-900 border-l-4 border-neutral-600 pl-2 rounded-xl p-3"
+            className="bg-neutral-900 border-l-4 border-neutral-600 pl-2 rounded-xl px-3 py-2"
           >
-            <summary className="font-medium cursor-pointer pl-1">
-               {date}
+            <summary className="font-medium cursor-pointer text-sm leading-tight pl-1">
+              {date}
             </summary>
 
             <div className="mt-2 space-y-2">
@@ -336,48 +280,37 @@ export default function Bookings() {
                 const booked = bookings.some(
                   (b) => b.slotId === slot.id
                 );
-                const count =
-                  bookingCounts[slot.id] || 0;
+                const count = bookingCounts[slot.id] || 0;
                 const full = count >= MAX_CAPACITY;
                 const allowed = canBook(slot.timestamp);
 
                 return (
                   <div
                     key={slot.id}
-                    className="flex justify-between items-center bg-neutral-800 rounded-lg px-3 py-2"
+                    className="flex justify-between items-center bg-neutral-800 rounded-lg px-3 py-1.5"
                   >
                     <span className="text-sm">
-                      {formatTime(
-                        slot.timestamp.toDate()
-                      )}{" "}
-                      —{" "}
+                      {formatTime(slot.timestamp.toDate())} —{" "}
                       <span className="text-neutral-400">
                         {count}/{MAX_CAPACITY}
                       </span>
                     </span>
 
-                    {!booked &&
-                      !full &&
-                      allowed && (
-                        <button
-                          className="text-sm text-green-400"
-                          onClick={() =>
-                            book(
-                              slot.id,
-                              slot.timestamp
-                            )
-                          }
-                        >
-                          Rezerviši
-                        </button>
-                      )}
+                    {!booked && !full && allowed && (
+                      <button
+                        className="text-sm text-green-400"
+                        onClick={() =>
+                          book(slot.id, slot.timestamp)
+                        }
+                      >
+                        Rezerviši
+                      </button>
+                    )}
 
                     {booked && (
                       <button
                         className="text-sm text-red-400"
-                        onClick={() =>
-                          cancel(slot.id)
-                        }
+                        onClick={() => cancel(slot.id)}
                       >
                         Otkaži
                       </button>
@@ -389,19 +322,33 @@ export default function Bookings() {
                       </span>
                     )}
 
-                    {!booked &&
-                      !allowed &&
-                      !full && (
-                        <span className="text-xs text-amber-400">
-                          Zatvoreno
-                        </span>
-                      )}
+                    {!booked && !allowed && !full && (
+                      <span className="text-xs text-amber-400">
+                        Zatvoreno
+                      </span>
+                    )}
                   </div>
                 );
               })}
             </div>
           </details>
         ))}
+      </div>
+
+      {/* Calendar escape hatch */}
+      <div className="bg-neutral-900 rounded-xl p-3">
+        <label className="text-xs text-neutral-400 block mb-1">
+          Izaberi drugi datum
+        </label>
+        <input
+          type="date"
+          className="w-full bg-neutral-800 text-white rounded-lg p-2"
+          onChange={(e) => {
+            const d = new Date(e.target.value);
+            setSelectedDate(d);
+            loadData(d);
+          }}
+        />
       </div>
     </div>
   );
