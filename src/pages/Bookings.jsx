@@ -98,6 +98,7 @@ export default function Bookings() {
   }
 
   async function book(slotId, slotTimestamp) {
+
     if (!canBook(slotTimestamp)) {
       alert("Rezervacija nije moguća manje od 1h pre početka treninga.");
       return;
@@ -214,7 +215,7 @@ export default function Bookings() {
   return (
     <div className="space-y-4">
       {/* Sledeći trening */}
-      <div className="bg-neutral-800 rounded-xl p-4">
+      <div className="bg-neutral-800 ring-1 ring-green-700 rounded-xl p-4">
         <button
           onClick={() => setOpenHeader(!openHeader)}
           className="flex w-full items-center justify-between text-left"
@@ -253,7 +254,7 @@ export default function Bookings() {
 
           <div className="flex items-center gap-7">
             <span
-              className={`text-neutral-400 text-3xl transition-transform ${
+              className={`text-neutral-400 text-2xl transition-transform ${
                 openHeader ? "rotate-180" : ""
               }`}
             >
@@ -319,14 +320,15 @@ export default function Bookings() {
       </div>
 
       {/* Slots */}
+      
       <div className="space-y-2">
         {sortedDates.map(([date, daySlots]) => (
           <details
             key={date}
-            className="bg-neutral-900 rounded-xl p-3"
+            className="bg-neutral-900 border-l-4 border-neutral-600 pl-2 rounded-xl p-3"
           >
-            <summary className="font-medium cursor-pointer">
-              📅 {date}
+            <summary className="font-medium cursor-pointer pl-1">
+               {date}
             </summary>
 
             <div className="mt-2 space-y-2">
