@@ -20,12 +20,50 @@ export default function Bookings() {
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [bookingCounts, setBookingCounts] = useState({});
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  /* -------------------- helpers -------------------- */
+
+  function sameTimestamp(a, b) {
+    return a.getTime() === b.getTime();
+  }
+
+  function generateSlotsFromTemplates(templates, startDate, days) {
+    const result = [];
+
+    for (let i = 0; i < days; i++) {
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + i);
+      const weekday = d.getDay(); // 0–6
+
+      templates.forEach((tpl) => {
+        if (!tpl.active) return;
+        if (!tpl.days.includes(weekday)) return;
+
+        const [h, m] = tpl.time.split(":");
+        const slotDate = new Date(d);
+        slotDate.setHours(Number(h), Number(m), 0, 0);
+
+        result.push({
+          id: `tpl_${tpl.id}_${slotDate.toISOString()}`,
+          timestamp: slotDate,
+          capacity: tpl.capacity ?? MAX_CAPACITY,
+          generated: true,
+          templateId: tpl.id,
+        });
+      });
+    }
+
+    return result;
+  }
+
+  /* -------------------- data load -------------------- */
 
   async function loadData(dateOverride) {
     setLoading(true);
@@ -34,6 +72,15 @@ export default function Bookings() {
     const endDate = new Date(start);
     endDate.setDate(start.getDate() + WINDOW_DAYS);
 
+    // 1️⃣ templates
+    const tplSnap = await getDocs(collection(db, "slotTemplates"));
+    const tplData = tplSnap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+    setTemplates(tplData);
+
+    // 2️⃣ real slots
     const slotSnap = await getDocs(
       query(
         collection(db, "slots"),
@@ -43,14 +90,32 @@ export default function Bookings() {
       )
     );
 
-    const slotData = slotSnap.docs.map((d) => ({
+    const realSlots = slotSnap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
+      timestamp: d.data().timestamp.toDate(),
+      generated: false,
     }));
-    setSlots(slotData);
 
-    const slotIds = slotData.map((s) => s.id);
+    // 3️⃣ generated slots (missing only)
+    const generatedSlots = generateSlotsFromTemplates(
+      tplData,
+      start,
+      WINDOW_DAYS
+    ).filter(
+      (g) =>
+        !realSlots.some((s) =>
+          sameTimestamp(s.timestamp, g.timestamp)
+        )
+    );
 
+    const allSlots = [...realSlots, ...generatedSlots].sort(
+      (a, b) => a.timestamp - b.timestamp
+    );
+
+    setSlots(allSlots);
+
+    // 4️⃣ user bookings
     const bookingSnap = await getDocs(
       query(
         collection(db, "bookings"),
@@ -64,11 +129,14 @@ export default function Bookings() {
     }));
     setBookings(userBookings);
 
+    // 5️⃣ booking counts (real slots only)
     const counts = {};
-    if (slotIds.length > 0) {
-      const CHUNK_SIZE = 10;
-      for (let i = 0; i < slotIds.length; i += CHUNK_SIZE) {
-        const chunk = slotIds.slice(i, i + CHUNK_SIZE);
+    const realSlotIds = realSlots.map((s) => s.id);
+
+    if (realSlotIds.length > 0) {
+      const CHUNK = 10;
+      for (let i = 0; i < realSlotIds.length; i += CHUNK) {
+        const chunk = realSlotIds.slice(i, i + CHUNK);
         const snap = await getDocs(
           query(collection(db, "bookings"), where("slotId", "in", chunk))
         );
@@ -83,26 +151,30 @@ export default function Bookings() {
     setLoading(false);
   }
 
-  function canBook(slotTimestamp) {
-    const diffHours =
-      (slotTimestamp.toDate().getTime() - Date.now()) /
-      (1000 * 60 * 60);
-    return diffHours >= BOOKING_CUTOFF_HOURS;
+  /* -------------------- booking -------------------- */
+
+  function canBook(date) {
+    const diff =
+      (date.getTime() - Date.now()) / (1000 * 60 * 60);
+    return diff >= BOOKING_CUTOFF_HOURS;
   }
 
-  async function book(slotId, slotTimestamp) {
-    if (!canBook(slotTimestamp)) {
+  async function book(slot) {
+    if (!canBook(slot.timestamp)) {
       alert("Rezervacija nije moguća manje od 1h pre početka treninga.");
       return;
     }
-    if (bookings.some((b) => b.slotId === slotId)) {
-      alert("Već ste rezervisali ovaj trening.");
-      return;
-    }
-    const count = bookingCounts[slotId] || 0;
-    if (count >= MAX_CAPACITY) {
-      alert("Trening je popunjen.");
-      return;
+
+    let slotId = slot.id;
+
+    // generated → create real slot
+    if (slot.generated) {
+      const ref = await addDoc(collection(db, "slots"), {
+        timestamp: slot.timestamp,
+        capacity: slot.capacity,
+        createdFromTemplate: slot.templateId,
+      });
+      slotId = ref.id;
     }
 
     await addDoc(collection(db, "bookings"), {
@@ -123,6 +195,8 @@ export default function Bookings() {
 
   if (loading) return <p className="text-neutral-400">Učitavanje...</p>;
 
+  /* -------------------- formatting -------------------- */
+
   function formatDate(d, opts) {
     return d.toLocaleDateString("sr-Latn-RS", opts);
   }
@@ -138,14 +212,23 @@ export default function Bookings() {
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
+  /* -------------------- header data -------------------- */
+
   const today = new Date();
+
+  const futureBookings = bookings
+    .map((b) => slots.find((s) => s.id === b.slotId))
+    .filter((s) => s && s.timestamp >= today)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  const nextTraining = futureBookings[0];
+  const additionalBookings = futureBookings.slice(1);
 
   const weeklyDone = bookings.filter((b) => {
     if (!b.checkedIn) return false;
     const slot = slots.find((s) => s.id === b.slotId);
     if (!slot) return false;
-    const d = slot.timestamp.toDate();
-    return isWithinInterval(d, {
+    return isWithinInterval(slot.timestamp, {
       start: startOfWeek(today, { weekStartsOn: 1 }),
       end: endOfWeek(today, { weekStartsOn: 1 }),
     });
@@ -154,22 +237,16 @@ export default function Bookings() {
   const pastVisits = weeklyDone
     .map((b) => {
       const slot = slots.find((s) => s.id === b.slotId);
-      return slot ? slot.timestamp.toDate() : null;
+      return slot?.timestamp;
     })
     .filter(Boolean)
     .sort((a, b) => b - a);
 
-  const futureBookings = bookings
-    .map((b) => slots.find((s) => s.id === b.slotId))
-    .filter((s) => s && s.timestamp.toDate() >= today)
-    .sort((a, b) => a.timestamp.toDate() - b.timestamp.toDate());
-
-  const nextTraining = futureBookings[0];
-  const additionalBookings = futureBookings.slice(1);
+  /* -------------------- grouping -------------------- */
 
   const groupedSlots = slots.reduce((acc, slot) => {
     const key = capitalize(
-      formatDate(slot.timestamp.toDate(), {
+      formatDate(slot.timestamp, {
         weekday: "long",
         day: "2-digit",
         month: "long",
@@ -181,15 +258,13 @@ export default function Bookings() {
     return acc;
   }, {});
 
-  const sortedDates = Object.entries(groupedSlots).sort(
-    (a, b) =>
-      a[1][0].timestamp.toDate() -
-      b[1][0].timestamp.toDate()
-  );
+  const sortedDates = Object.entries(groupedSlots);
+
+  /* -------------------- render -------------------- */
 
   return (
     <div className="space-y-4">
-      {/* Sledeći trening – always open */}
+      {/* Header */}
       <div className="bg-neutral-800 ring-1 ring-neutral-700 rounded-xl px-4 py-3 space-y-3">
         <div>
           <div className="text-xs text-neutral-400">
@@ -199,11 +274,11 @@ export default function Bookings() {
           {nextTraining ? (
             <>
               <div className="text-2xl font-semibold leading-tight">
-                {formatTime(nextTraining.timestamp.toDate())}
+                {formatTime(nextTraining.timestamp)}
               </div>
               <div className="text-xs text-neutral-400">
                 {capitalize(
-                  formatDate(nextTraining.timestamp.toDate(), {
+                  formatDate(nextTraining.timestamp, {
                     weekday: "long",
                     day: "2-digit",
                     month: "long",
@@ -226,9 +301,9 @@ export default function Bookings() {
             <ul className="text-xs text-blue-400 space-y-0.5">
               {additionalBookings.map((s) => (
                 <li key={s.id}>
-                  {formatTime(s.timestamp.toDate())} —{" "}
+                  {formatTime(s.timestamp)} —{" "}
                   {capitalize(
-                    formatDate(s.timestamp.toDate(), {
+                    formatDate(s.timestamp, {
                       weekday: "long",
                       day: "2-digit",
                       month: "long",
@@ -242,7 +317,7 @@ export default function Bookings() {
 
         <div>
           <div className="text-xs font-medium mb-0.5 text-neutral-300">
-            Odrađeni treninzi ove nedelje:{" "}
+            Odrađeni treninzi ove nedelje:
           </div>
 
           {pastVisits.length > 0 && (
@@ -264,7 +339,7 @@ export default function Bookings() {
         </div>
       </div>
 
-      {/* Slots (next 3 days) */}
+      {/* Slots */}
       <div className="space-y-2">
         {sortedDates.map(([date, daySlots]) => (
           <details
@@ -280,7 +355,9 @@ export default function Bookings() {
                 const booked = bookings.some(
                   (b) => b.slotId === slot.id
                 );
-                const count = bookingCounts[slot.id] || 0;
+                const count = slot.generated
+                  ? 0
+                  : bookingCounts[slot.id] || 0;
                 const full = count >= MAX_CAPACITY;
                 const allowed = canBook(slot.timestamp);
 
@@ -290,7 +367,7 @@ export default function Bookings() {
                     className="flex justify-between items-center bg-neutral-800 rounded-lg px-3 py-1.5"
                   >
                     <span className="text-sm">
-                      {formatTime(slot.timestamp.toDate())} —{" "}
+                      {formatTime(slot.timestamp)} —{" "}
                       <span className="text-neutral-400">
                         {count}/{MAX_CAPACITY}
                       </span>
@@ -299,9 +376,7 @@ export default function Bookings() {
                     {!booked && !full && allowed && (
                       <button
                         className="text-sm text-green-400"
-                        onClick={() =>
-                          book(slot.id, slot.timestamp)
-                        }
+                        onClick={() => book(slot)}
                       >
                         Rezerviši
                       </button>
@@ -335,7 +410,7 @@ export default function Bookings() {
         ))}
       </div>
 
-      {/* Calendar escape hatch */}
+      {/* Calendar */}
       <div className="bg-neutral-900 rounded-xl p-3">
         <label className="text-xs text-neutral-400 block mb-1">
           Izaberi drugi datum
