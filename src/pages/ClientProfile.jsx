@@ -119,12 +119,10 @@ export default function ClientProfile() {
 
   /* helpers */
 
-  const formatShortDate = (d) =>
-  new Date(d).toLocaleDateString("sr-Latn-RS", {
-    day: "2-digit",
-    month: "long",
-  });
-
+  const toRoman = (n) => {
+  const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+  return romans[n - 1] || n;
+};
 
   const formatDate = (d) =>
     d
@@ -134,6 +132,18 @@ export default function ClientProfile() {
           year: "numeric",
         })
       : "—";
+
+      const formatShortDate = (d) =>
+  new Date(d).toLocaleDateString("sr-Latn-RS", {
+    day: "2-digit",
+    month: "long",
+  });
+
+  const formatShortDate3 = (d) =>
+  new Date(d).toLocaleDateString("sr-Latn-RS", {
+    day: "2-digit",
+    month: "short",
+  });
 
   const renderText = (v) =>
     v instanceof Timestamp ? formatDate(v) : v || "—";
@@ -217,39 +227,40 @@ export default function ClientProfile() {
       </div>
 
       {/* EDIT CONTROLS */}
-      {!editMode ? (
-        <button
-          onClick={() => setEditMode(true)}
-          className="text-neutral-400 hover:text-white transition"
-          aria-label="Uredi profil"
-        >
-          ✏️
-        </button>
-      ) : (
-        <div className="flex gap-3">
-          <button
-            onClick={saveProfile}
-            className="text-green-400 hover:text-green-300"
-            aria-label="Sačuvaj"
-          >
-            ✔️
-          </button>
-          <button
-            onClick={() => {
-              setEditMode(false);
-              setFormData(user);
-            }}
-            className="text-red-400 hover:text-red-300"
-            aria-label="Otkaži"
-          >
-            ✖️
-          </button>
-        </div>
-      )}
+      
     </div>
   }
   defaultOpen={false}
 >
+<div className="flex justify-end gap-4 mb-2">
+  {!editMode ? (
+    <button
+      onClick={() => setEditMode(true)}
+      className="text-sm text-blue-400"
+    >
+    Izmeni
+    </button>
+  ) : (
+    <>
+      <button
+        onClick={saveProfile}
+        className="text-sm text-blue-400"
+      >
+        ✔️ Sačuvaj
+      </button>
+      <button
+        onClick={() => {
+          setEditMode(false);
+          setFormData(user);
+        }}
+        className="text-sm text-red-400"
+      >
+        ✖️ Otkaži
+      </button>
+    </>
+  )}
+</div>
+
         <ProfileField label="Ime">
           {editMode ? (
             <Input value={formData.name} onChange={(v)=>setFormData({...formData,name:v})}/>
@@ -307,12 +318,43 @@ export default function ClientProfile() {
 
               <ul className="mt-3 space-y-1 text-sm">
                 {s.checkInsArray.map((c, i) => (
-                  <li key={i} className="flex justify-between">
-                    <span>
-                      Nedelja {i + 1}: {c || 0} / {allowed}
-                    </span>
-                    
-                    
+                  <li key={i} className="flex items-center gap-3">
+  {(() => {
+    const ws = new Date(s.startDate);
+    ws.setDate(ws.getDate() + i * 7);
+    const we = new Date(ws);
+    we.setDate(ws.getDate() + 6);
+
+    return (
+      <>
+        {/* FIXED-WIDTH LABEL */}
+        <span className="w-40 shrink-0 text-white-400">
+          {toRoman(i + 1)} nedelja
+          <span className="ml-1 text-xs text-neutral-400">
+            ({formatShortDate3(ws)} – {formatShortDate3(we)})
+          </span>
+        </span>
+
+        {/* RIGHT-ALIGNED VALUE */}
+        {allowed !== "∞" && (
+  <div className="mt-0 ml-0 w-11 h-1.5 rounded bg-neutral-700 overflow-hidden">
+    <div
+      className="h-full bg-green-500"
+      style={{
+        width: `${Math.min(((c || 0) / allowed) * 100, 100)}%`,
+      }}
+    />
+  </div>
+)}
+        <span className="ml-auto font-medium text-white">
+          {c || 0} / {allowed}
+        </span>
+        
+      </>
+    );
+  })()}
+
+
                     {role === "admin" && (
                       <span className="flex gap-2">
                         <button onClick={()=>changeCheckIn(s.id,i,1)}>+</button>
@@ -324,7 +366,7 @@ export default function ClientProfile() {
               </ul>
 
               <div className="mt-3 text-sm">
-                <p className="text-neutral-400">Fakture:</p>
+                <p className="text-neutral-400">Uplata:</p>
                 {s.payments?.length ? (
                   <ul className="ml-4 list-disc">
                     {s.payments.map((p) => (
@@ -355,6 +397,35 @@ export default function ClientProfile() {
 
       {/* NAPOMENE */}
       <CollapsibleSection title="Napomene">
+      <div className="flex justify-end gap-4 mb-2">
+  {!editMode ? (
+    <button
+      onClick={() => setEditMode(true)}
+      className="text-sm text-blue-400"
+    >
+     Izmeni
+    </button>
+  ) : (
+    <>
+      <button
+        onClick={saveProfile}
+        className="text-sm text-blue-400"
+      >
+        ✔️ Sačuvaj
+      </button>
+      <button
+        onClick={() => {
+          setEditMode(false);
+          setFormData(user);
+        }}
+        className="text-sm text-red-400"
+      >
+        ✖️ Otkaži
+      </button>
+    </>
+  )}
+</div>
+
         <ProfileField label="Ciljevi">
           {editMode ? (
             <Textarea value={formData.goals} onChange={(v)=>setFormData({...formData,goals:v})}/>
@@ -386,12 +457,13 @@ function CollapsibleSection({ title, header, children, defaultOpen = false }) {
           {header || <h3 className="text-sm font-medium text-neutral-300">{title}</h3>}
         </div>
         <span
-          className={`text-neutral-400 transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
-        >
-          ▾
-        </span>
+  className={`text-neutral-400 text-2xl transition-transform ${
+    open ? "rotate-180" : ""
+  }`}
+>
+  ⌄
+</span>
+
       </button>
 
       {open && <div className="mt-4 space-y-3">{children}</div>}
