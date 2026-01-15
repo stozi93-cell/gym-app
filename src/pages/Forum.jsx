@@ -12,6 +12,15 @@ import {
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
+/**
+ * VESTI v1
+ * - Announcements-first
+ * - Admin-only posting
+ * - Optional flat comments (feature-flagged)
+ */
+
+const COMMENTS_ENABLED = true;
+
 export default function Forum() {
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === "admin";
@@ -19,38 +28,31 @@ export default function Forum() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // create post
+  // create / edit
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [pinned, setPinned] = useState(false);
 
-  // edit post
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
 
-  const [showArchived, setShowArchived] = useState(false);
-
-  // comments state
-  const [commentOpen, setCommentOpen] = useState({});
+  const [expanded, setExpanded] = useState({});
   const [commentText, setCommentText] = useState({});
-  const [replyOpen, setReplyOpen] = useState({});
-  const [replyText, setReplyText] = useState({});
 
-  const [expandedPosts, setExpandedPosts] = useState({}); // click-to-expand
-
-  // Refs for post content
   const contentRefs = useRef({});
 
-  // --- Load posts ---
   useEffect(() => {
     loadPosts();
-  }, [showArchived]);
+  }, []);
 
   async function loadPosts() {
     try {
       setLoading(true);
-      const q = query(collection(db, "forumPosts"), orderBy("createdAt", "desc"));
+      const q = query(
+        collection(db, "forumPosts"),
+        orderBy("createdAt", "desc")
+      );
       const snap = await getDocs(q);
 
       let data = snap.docs.map((d) => ({
@@ -59,21 +61,20 @@ export default function Forum() {
         comments: d.data().comments || [],
       }));
 
-      data = data.filter((post) =>
-        isAdmin ? showArchived || !post.archived : !post.archived
-      );
+      data = data.filter((p) => !p.archived);
       data.sort((a, b) => (b.pinned === true) - (a.pinned === true));
 
       setPosts(data);
     } catch (err) {
-      console.error("Forum load error:", err);
-      alert("Greška pri učitavanju foruma.");
+      console.error(err);
+      alert("Greška pri učitavanju vesti.");
     } finally {
       setLoading(false);
     }
   }
 
-  // --- Post functions ---
+  // --- Admin actions ---
+
   async function createPost() {
     if (!title.trim() || !content.trim())
       return alert("Naslov i sadržaj su obavezni.");
@@ -103,204 +104,141 @@ export default function Forum() {
       title: editTitle,
       content: editContent,
     });
+
     setEditingId(null);
     loadPosts();
   }
 
   async function togglePin(post) {
-    await updateDoc(doc(db, "forumPosts", post.id), { pinned: !post.pinned });
+    await updateDoc(doc(db, "forumPosts", post.id), {
+      pinned: !post.pinned,
+    });
     loadPosts();
   }
 
   async function archivePost(post) {
-    if (!window.confirm(post.archived ? "Vratiti ovu objavu?" : "Arhivirati ovu objavu?"))
-      return;
-    await updateDoc(doc(db, "forumPosts", post.id), { archived: !post.archived });
+    if (!window.confirm("Arhivirati ovu vest?")) return;
+    await updateDoc(doc(db, "forumPosts", post.id), { archived: true });
     loadPosts();
   }
 
-  // --- Comments ---
-  async function sendComment(postId, parentIds = []) {
-    const text = parentIds.length === 0 ? commentText[postId] : replyText[parentIds.join("-")];
+  // --- Comments (flat, optional) ---
+
+  async function sendComment(post) {
+    const text = commentText[post.id];
     if (!text || !text.trim()) return;
-
-    const postRef = doc(db, "forumPosts", postId);
-    const postData = posts.find((p) => p.id === postId);
-
-    let comments = [...(postData.comments || [])];
 
     const newComment = {
       id: Date.now().toString(),
-      authorId: user.uid,
       authorName: `${profile?.name || ""} ${profile?.surname || ""}`.trim(),
       content: text,
       createdAt: new Date(),
-      replies: [],
     };
 
-    if (parentIds.length === 0) {
-      comments.push(newComment);
-      setCommentText((prev) => ({ ...prev, [postId]: "" }));
-    } else {
-      let parent = comments;
-      for (let i = 0; i < parentIds.length; i++) {
-        parent = parent.find((c) => c.id === parentIds[i]).replies;
-      }
-      parent.push(newComment);
-      setReplyText((prev) => ({ ...prev, [parentIds.join("-")]: "" }));
-    }
+    await updateDoc(doc(db, "forumPosts", post.id), {
+      comments: [...(post.comments || []), newComment],
+    });
 
-    await updateDoc(postRef, { comments });
+    setCommentText((p) => ({ ...p, [post.id]: "" }));
     loadPosts();
   }
 
-  function renderComments(commentsArray, postId, parentIds = []) {
-    if (!commentsArray) return null;
-    return commentsArray.map((comment) => {
-      const currentIds = [...parentIds, comment.id];
-      const fieldId = currentIds.join("-");
-
-      return (
-        <div
-          key={comment.id}
-          className={`ml-${parentIds.length * 4} mt-3 border-l ${
-            parentIds.length ? "border-gray-300 dark:border-gray-600 pl-2" : ""
-          }`}
-        >
-          <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-            {comment.authorName} •{" "}
-            <span className="text-gray-500 dark:text-gray-400 text-xs">
-              {comment.createdAt?.toDate
-                ? comment.createdAt.toDate().toLocaleString("sr-RS")
-                : comment.createdAt?.toLocaleString?.()}
-            </span>
-          </div>
-          <div className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-            {comment.content}
-          </div>
-
-          {replyOpen[fieldId] && (
-            <div className="mt-2">
-              <textarea
-                value={replyText[fieldId] || ""}
-                onChange={(e) =>
-                  setReplyText((prev) => ({ ...prev, [fieldId]: e.target.value }))
-                }
-                className="w-full px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                placeholder="Odgovori..."
-              />
-              <button
-                onClick={() => sendComment(postId, currentIds)}
-                className="mt-1 px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-sm"
-              >
-                Pošalji
-              </button>
-            </div>
-          )}
-
-          {renderComments(comment.replies, postId, currentIds)}
-        </div>
-      );
-    });
-  }
-
-  if (loading)
+  if (loading) {
     return (
       <p className="text-center mt-10 text-gray-700 dark:text-gray-300">
-        Učitavanje objava...
+        Učitavanje vesti...
       </p>
     );
+  }
 
   return (
-    <div className="min-h-screen px-4 py-6 flex justify-center bg-gray-100 dark:bg-gray-900">
+    <div className="min-h-screen px-4 py-6 flex justify-center bg-neutral-900">
       <div className="w-full max-w-md">
-        <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-gray-100 mb-6">
-          📢 Forum
+        <h2 className="text-2xl font-bold text-center text-gray-100 mb-6">
+          Vesti
         </h2>
 
         {isAdmin && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 mb-6 space-y-3">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Nova objava</h3>
+          <div className="bg-neutral-800 rounded-xl p-4 mb-6 space-y-3">
+            <h3 className="font-semibold text-gray-100">Nova vest</h3>
+
             <input
-              type="text"
-              placeholder="Naslov"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Naslov"
+              className="w-full px-3 py-2 rounded-lg bg-neutral-700 text-gray-100 focus:outline-none"
             />
+
             <textarea
-              placeholder="Sadržaj objave"
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              placeholder="Sadržaj"
               rows={3}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              className="w-full px-3 py-2 rounded-lg bg-neutral-700 text-gray-100 resize-none focus:outline-none"
             />
-            <label className="flex items-center space-x-2">
+
+            <label className="flex items-center gap-2 text-sm text-gray-300">
               <input
                 type="checkbox"
                 checked={pinned}
                 onChange={(e) => setPinned(e.target.checked)}
               />
-              <span className="text-gray-700 dark:text-gray-300">Pinuj objavu</span>
+              Istaknuta vest
             </label>
+
             <button
               onClick={createPost}
-              className="w-full py-2 mt-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg"
+              className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
             >
               Objavi
             </button>
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={(e) => setShowArchived(e.target.checked)}
-              />
-              <span className="text-gray-700 dark:text-gray-300">Prikaži arhivirane objave</span>
-            </label>
           </div>
         )}
 
         {posts.length === 0 && (
-          <p className="text-center text-gray-600 dark:text-gray-400">Nema objava.</p>
+          <p className="text-center text-gray-400">
+            Trenutno nema objava.
+          </p>
         )}
 
         {posts.map((post) => {
           if (!contentRefs.current[post.id]) {
             contentRefs.current[post.id] = { current: null };
           }
+
+          const isOpen = expanded[post.id];
           const contentRef = contentRefs.current[post.id];
-          const isExpanded = expandedPosts[post.id];
 
           return (
             <div
               key={post.id}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow mb-4 overflow-hidden"
+              className="bg-neutral-800 rounded-xl mb-4 overflow-hidden"
             >
-              {/* Title */}
               <div
                 onClick={() =>
-                  setExpandedPosts((prev) => ({ ...prev, [post.id]: !prev[post.id] }))
+                  setExpanded((p) => ({ ...p, [post.id]: !p[post.id] }))
                 }
-                className="px-4 py-3 flex justify-between items-center cursor-pointer select-none"
+                className="px-4 py-3 flex justify-between items-center cursor-pointer"
               >
                 <h3
-                  className={`font-semibold text-gray-900 dark:text-gray-100 ${
-                    post.pinned ? "text-indigo-600" : ""
+                  className={`font-semibold ${
+                    post.pinned ? "text-blue-400" : "text-gray-100"
                   }`}
                 >
-                  {post.pinned && "📌 "} {post.title}
+                  {post.pinned && "• "} {post.title}
                 </h3>
-                <span className="text-gray-500 dark:text-gray-400 text-sm">
-                  {isExpanded ? "▲" : "▼"}
+                <span className="text-gray-400 text-sm">
+                  {isOpen ? "▲" : "▼"}
                 </span>
               </div>
 
-              {/* Collapsible Content */}
               <div
                 ref={contentRef}
-                className={`transition-all duration-300 ease-in-out px-4 overflow-hidden`}
+                className="px-4 overflow-hidden transition-all"
                 style={{
-                  maxHeight: isExpanded ? `${contentRef.current?.scrollHeight}px` : 0,
+                  maxHeight: isOpen
+                    ? `${contentRef.current?.scrollHeight}px`
+                    : 0,
                 }}
               >
                 <div className="pb-4 pt-2">
@@ -309,89 +247,93 @@ export default function Forum() {
                       <input
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full px-3 py-2 mb-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-full px-3 py-2 mb-2 rounded bg-neutral-700 text-gray-100"
                       />
                       <textarea
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
                         rows={3}
-                        className="w-full px-3 py-2 mb-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                        className="w-full px-3 py-2 mb-2 rounded bg-neutral-700 text-gray-100 resize-none"
                       />
                       <div className="flex gap-2">
                         <button
                           onClick={() => saveEdit(post.id)}
-                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded"
+                          className="px-3 py-1 bg-blue-600 text-white rounded"
                         >
-                          💾 Sačuvaj
+                          Sačuvaj
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="px-3 py-1 border rounded"
+                          className="px-3 py-1 border border-gray-500 text-gray-300 rounded"
                         >
-                          ❌ Otkaži
+                          Otkaži
                         </button>
                       </div>
                     </>
                   ) : (
                     <>
-                      <p className="text-gray-700 dark:text-gray-300 mb-2 whitespace-pre-wrap">
+                      <p className="text-gray-300 whitespace-pre-wrap mb-3">
                         {post.content}
                       </p>
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {isAdmin && (
-                          <>
-                            <button
-                              onClick={() => {
-                                setEditingId(post.id);
-                                setEditTitle(post.title);
-                                setEditContent(post.content);
-                              }}
-                              className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-sm"
-                            >
-                              ✏️ Izmeni
-                            </button>
-                            <button
-                              onClick={() => togglePin(post)}
-                              className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm"
-                            >
-                              {post.pinned ? "📍 Unpinuj" : "📌 Pinuj"}
-                            </button>
-                            <button
-                              onClick={() => archivePost(post)}
-                              className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm"
-                            >
-                              {post.archived ? "♻️ Vrati" : "🗑 Arhiviraj"}
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() =>
-                            setCommentOpen((prev) => ({ ...prev, [post.id]: !prev[post.id] }))
-                          }
-                          className="px-2 py-1 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100 rounded text-sm"
-                        >
-                          💬 {post.comments?.length || 0}
-                        </button>
-                      </div>
 
-                      {commentOpen[post.id] && (
-                        <div className="max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-200 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-700">
+                      {isAdmin && (
+                        <div className="flex gap-2 mb-3">
+                          <button
+                            onClick={() => {
+                              setEditingId(post.id);
+                              setEditTitle(post.title);
+                              setEditContent(post.content);
+                            }}
+                            className="px-2 py-1 bg-neutral-700 text-gray-200 rounded text-sm"
+                          >
+                            Izmeni
+                          </button>
+                          <button
+                            onClick={() => togglePin(post)}
+                            className="px-2 py-1 bg-blue-600 text-white rounded text-sm"
+                          >
+                            {post.pinned ? "Ukloni pin" : "Pinuj"}
+                          </button>
+                          <button
+                            onClick={() => archivePost(post)}
+                            className="px-2 py-1 bg-red-600 text-white rounded text-sm"
+                          >
+                            Arhiviraj
+                          </button>
+                        </div>
+                      )}
+
+                      {COMMENTS_ENABLED && (
+                        <div className="border-t border-neutral-700 pt-3">
+                          {post.comments?.map((c) => (
+                            <div key={c.id} className="mb-2">
+                              <div className="text-xs text-gray-400">
+                                {c.authorName}
+                              </div>
+                              <div className="text-sm text-gray-300">
+                                {c.content}
+                              </div>
+                            </div>
+                          ))}
+
                           <textarea
-                            placeholder="Napiši komentar..."
+                            placeholder="Dodaj komentar..."
                             value={commentText[post.id] || ""}
                             onChange={(e) =>
-                              setCommentText((prev) => ({ ...prev, [post.id]: e.target.value }))
+                              setCommentText((p) => ({
+                                ...p,
+                                [post.id]: e.target.value,
+                              }))
                             }
-                            className="w-full px-3 py-2 mb-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                            rows={2}
+                            className="w-full px-3 py-2 mt-2 rounded bg-neutral-700 text-gray-100 resize-none"
                           />
                           <button
-                            onClick={() => sendComment(post.id)}
-                            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-sm mb-2"
+                            onClick={() => sendComment(post)}
+                            className="mt-1 px-3 py-1 bg-blue-600 text-white rounded text-sm"
                           >
                             Pošalji
                           </button>
-
-                          {renderComments(post.comments, post.id)}
                         </div>
                       )}
                     </>
