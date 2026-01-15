@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  arrayUnion,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
@@ -25,9 +26,23 @@ export default function Forum() {
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // 🔑 LOCAL read state (source of truth for UI)
+  const [readAnnouncements, setReadAnnouncements] = useState([]);
+
+  // create
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [pinned, setPinned] = useState(false);
+
+  // edit
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+
+  // init read state from profile
+  useEffect(() => {
+    setReadAnnouncements(profile?.readAnnouncements || []);
+  }, [profile?.readAnnouncements]);
 
   useEffect(() => {
     loadData();
@@ -36,21 +51,23 @@ export default function Forum() {
   async function loadData() {
     setLoading(true);
 
-    const postsSnap = await getDocs(
+    const snap = await getDocs(
       query(collection(db, "forumPosts"), orderBy("createdAt", "desc"))
     );
 
-    let postData = postsSnap.docs.map((d) => ({
+    let data = snap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
     }));
 
     if (!showArchived) {
-      postData = postData.filter((p) => !p.archived);
+      data = data.filter((p) => !p.archived);
     }
 
-    postData.sort((a, b) => (b.pinned === true) - (a.pinned === true));
-    setPosts(postData.slice(0, MAX_VISIBLE_POSTS));
+    data.sort((a, b) => (b.pinned === true) - (a.pinned === true));
+
+    // IMPORTANT: limit only for non-admin
+    setPosts(isAdmin ? data : data.slice(0, MAX_VISIBLE_POSTS));
 
     if (isAdmin) {
       const usersSnap = await getDocs(collection(db, "users"));
@@ -58,6 +75,38 @@ export default function Forum() {
     }
 
     setLoading(false);
+  }
+
+  async function markRead(postId) {
+    if (!user || readAnnouncements.includes(postId)) return;
+
+    // optimistic UI update
+    setReadAnnouncements((prev) => [...prev, postId]);
+
+    await updateDoc(doc(db, "users", user.uid), {
+      readAnnouncements: arrayUnion(postId),
+    });
+  }
+
+  function toggleExpand(postId) {
+    const next = expandedId === postId ? null : postId;
+    setExpandedId(next);
+    if (next) markRead(postId);
+  }
+
+  function isUnread(post) {
+    return !readAnnouncements.includes(post.id);
+  }
+
+  function readStats(post) {
+    const total = users.length;
+    const read = users.filter((u) =>
+      u.readAnnouncements?.includes(post.id)
+    );
+    const unread = users.filter(
+      (u) => !u.readAnnouncements?.includes(post.id)
+    );
+    return { total, read, unread };
   }
 
   async function createPost() {
@@ -74,6 +123,18 @@ export default function Forum() {
     setTitle("");
     setContent("");
     setPinned(false);
+    loadData();
+  }
+
+  async function saveEdit(postId) {
+    if (!editTitle.trim() || !editContent.trim()) return;
+
+    await updateDoc(doc(db, "forumPosts", postId), {
+      title: editTitle,
+      content: editContent,
+    });
+
+    setEditingId(null);
     loadData();
   }
 
@@ -95,38 +156,6 @@ export default function Forum() {
     loadData();
   }
 
-  async function markRead(postId) {
-    if (!user || profile?.readAnnouncements?.includes(postId)) return;
-
-    await updateDoc(doc(db, "users", user.uid), {
-      readAnnouncements: [
-        ...(profile?.readAnnouncements || []),
-        postId,
-      ],
-    });
-  }
-
-  function toggleExpand(postId) {
-    const next = expandedId === postId ? null : postId;
-    setExpandedId(next);
-    if (next) markRead(postId);
-  }
-
-  function isUnread(post) {
-    return !profile?.readAnnouncements?.includes(post.id);
-  }
-
-  function readStats(post) {
-    const total = users.length;
-    const read = users.filter((u) =>
-      u.readAnnouncements?.includes(post.id)
-    );
-    const unread = users.filter(
-      (u) => !u.readAnnouncements?.includes(post.id)
-    );
-    return { total, read, unread };
-  }
-
   if (loading) {
     return (
       <p className="text-center mt-10 text-gray-500">
@@ -138,7 +167,6 @@ export default function Forum() {
   return (
     <div className="px-4 py-6 flex justify-center">
       <div className="w-full max-w-md">
-
         <div className="bg-neutral-900 rounded-2xl p-4">
 
           <h2 className="text-lg font-semibold text-gray-100 mb-4 text-center">
@@ -181,9 +209,7 @@ export default function Forum() {
                 onClick={() => setShowArchived((p) => !p)}
                 className="text-sm text-gray-400 underline"
               >
-                {showArchived
-                  ? "Sakrij arhivirana"
-                  : "Prikaži arhivirana"}
+                {showArchived ? "Sakrij arhivirana" : "Prikaži arhivirana"}
               </button>
             </div>
           )}
@@ -198,22 +224,21 @@ export default function Forum() {
                 <div
                   key={post.id}
                   className={`rounded-xl bg-neutral-800 ${
-                    unread
-                      ? "border border-neutral-500"
-                      : "opacity-70"
+                    unread ? "border border-neutral-500" : "opacity-70"
                   }`}
                 >
                   <button
                     onClick={() => toggleExpand(post.id)}
-                    className="w-full px-4 py-3 flex justify-between text-left"
+                    className="w-full px-4 py-3 flex justify-between items-center text-left"
                   >
                     <span className="font-medium text-gray-100">
                       {post.pinned && "📌 "}
                       {post.title}
                     </span>
+
                     <div className="flex items-center gap-2">
                       {unread && (
-                        <span className="w-2 h-2 bg-gray-300 rounded-full" />
+                        <span className="w-2 h-2 rounded-full bg-gray-300" />
                       )}
                       <span className="text-gray-400 text-sm">
                         {open ? "▲" : "▼"}
@@ -223,54 +248,96 @@ export default function Forum() {
 
                   {open && (
                     <div className="px-4 pb-4 text-sm text-gray-300 space-y-3">
-                      <p className="whitespace-pre-wrap">
-                        {post.content}
-                      </p>
-
-                      {isAdmin && (
+                      {editingId === post.id ? (
                         <>
-                          <div className="text-xs text-gray-400">
-                            Pročitano: {stats.read.length} / {stats.total}
-                          </div>
-
-                          {stats.unread.length > 0 && (
-                            <div className="text-xs text-gray-400">
-                              Nisu pročitali:
-                              <ul className="ml-3 list-disc">
-                                {stats.unread.map((u) => (
-                                  <li key={u.id}>
-                                    {u.name} {u.surname}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          <div className="flex gap-4 text-sm pt-2">
+                          <input
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            className="w-full px-3 py-2 rounded bg-neutral-700 text-gray-100"
+                          />
+                          <textarea
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            rows={3}
+                            className="w-full px-3 py-2 rounded bg-neutral-700 text-gray-100 resize-none"
+                          />
+                          <div className="flex gap-3">
                             <button
-                              onClick={() => togglePin(post)}
+                              onClick={() => saveEdit(post.id)}
                               className="text-blue-400 underline"
                             >
-                              {post.pinned
-                                ? "Ukloni isticanje"
-                                : "Istakni"}
+                              Sačuvaj
                             </button>
-                            {!post.archived ? (
-                              <button
-                                onClick={() => archivePost(post)}
-                                className="text-yellow-400 underline"
-                              >
-                                Arhiviraj
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => deletePost(post)}
-                                className="text-red-400 underline"
-                              >
-                                Obriši trajno
-                              </button>
-                            )}
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="text-gray-400 underline"
+                            >
+                              Otkaži
+                            </button>
                           </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="whitespace-pre-wrap">
+                            {post.content}
+                          </p>
+
+                          {isAdmin && (
+                            <>
+                              <div className="text-xs text-gray-400">
+                                Pročitano: {stats.read.length} / {stats.total}
+                              </div>
+
+                              {stats.unread.length > 0 && (
+                                <div className="text-xs text-gray-400">
+                                  Nisu pročitali:
+                                  <ul className="ml-3 list-disc">
+                                    {stats.unread.map((u) => (
+                                      <li key={u.id}>
+                                        {u.name} {u.surname}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              <div className="flex gap-4 text-sm pt-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingId(post.id);
+                                    setEditTitle(post.title);
+                                    setEditContent(post.content);
+                                  }}
+                                  className="text-blue-400 underline"
+                                >
+                                  Izmeni
+                                </button>
+                                <button
+                                  onClick={() => togglePin(post)}
+                                  className="text-blue-400 underline"
+                                >
+                                  {post.pinned
+                                    ? "Ukloni pin"
+                                    : "Istakni"}
+                                </button>
+                                {!post.archived ? (
+                                  <button
+                                    onClick={() => archivePost(post)}
+                                    className="text-yellow-400 underline"
+                                  >
+                                    Arhiviraj
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => deletePost(post)}
+                                    className="text-red-400 underline"
+                                  >
+                                    Obriši trajno
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </>
                       )}
                     </div>
