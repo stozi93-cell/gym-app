@@ -12,6 +12,9 @@ import AdminPackages from "./pages/AdminPackages";
 import MySubscriptions from "./pages/MySubscriptions";
 import AdminBilling from "./pages/AdminBilling";
 import Forum from "./pages/Forum";
+import ClientChat from "./pages/ClientChat";
+import AdminChat from "./pages/AdminChat";
+import AdminChats from "./pages/AdminChats";
 
 import AppShell from "./components/AppShell";
 
@@ -52,6 +55,7 @@ export default function App() {
               <Route path="/" element={<Bookings />} />
               <Route path="/profil/:uid" element={<ClientProfile />} />
               <Route path="/moje-pretplate" element={<MySubscriptions />} />
+              <Route path="/chat" element={<ClientChat />} />
             </>
           )}
 
@@ -64,6 +68,9 @@ export default function App() {
               <Route path="/paketi" element={<AdminPackages />} />
               <Route path="/naplate" element={<AdminBilling />} />
               <Route path="/profil/:uid" element={<ClientProfile />} />
+              <Route path="/poruke" element={<AdminChats />} />
+              <Route path="/admin-chat/:conversationId" element={<AdminChat />} />
+
             </>
           )}
 

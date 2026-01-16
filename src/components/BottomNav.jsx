@@ -27,6 +27,7 @@ export default function BottomNav({ role }) {
             <NavItem to="/" label="Rezervacije" icon="📅" />
             <NavItem to="/profil/me" label="Profil" icon="👤" />
             <NavItem to="/forum" label="Forum" icon="💬" />
+            <NavItem to="/chat" label="Poruke" icon="💬" />
           </>
         )}
 
@@ -37,6 +38,7 @@ export default function BottomNav({ role }) {
             <NavItem to="/paketi" label="Paketi" icon="📦" />
             <NavItem to="/naplate" label="Naplate" icon="💳" />
             <NavItem to="/forum" label="Forum" icon="💬" />
+            <NavItem to="/poruke" label="Poruke" icon="💬" />
           </>
         )}
       </div>
