@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   collection,
   addDoc,
@@ -39,6 +39,10 @@ export default function Forum() {
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
 
+  // 🔧 textarea refs (ADMIN ONLY UX)
+  const createTextareaRef = useRef(null);
+  const editTextareaRef = useRef(null);
+
   // init read state from profile
   useEffect(() => {
     setReadAnnouncements(profile?.readAnnouncements || []);
@@ -47,6 +51,13 @@ export default function Forum() {
   useEffect(() => {
     loadData();
   }, [showArchived]);
+
+  // 🔧 auto-resize helper
+  function autoResize(el) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }
 
   async function loadData() {
     setLoading(true);
@@ -123,6 +134,11 @@ export default function Forum() {
     setTitle("");
     setContent("");
     setPinned(false);
+
+    if (createTextareaRef.current) {
+      createTextareaRef.current.style.height = "";
+    }
+
     loadData();
   }
 
@@ -135,6 +151,11 @@ export default function Forum() {
     });
 
     setEditingId(null);
+
+    if (editTextareaRef.current) {
+      editTextareaRef.current.style.height = "";
+    }
+
     loadData();
   }
 
@@ -182,11 +203,15 @@ export default function Forum() {
                 className="w-full px-3 py-2 rounded-lg bg-neutral-800 text-gray-100"
               />
               <textarea
+                ref={createTextareaRef}
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  autoResize(e.target);
+                }}
                 placeholder="Tekst obaveštenja"
                 rows={3}
-                className="w-full px-3 py-2 rounded-lg bg-neutral-800 text-gray-100 resize-none"
+                className="w-full px-3 py-2 rounded-lg bg-neutral-800 text-gray-100 resize-none overflow-hidden"
               />
               <div className="flex justify-between items-center">
                 <label className="text-sm text-gray-400 flex items-center gap-2">
@@ -256,10 +281,14 @@ export default function Forum() {
                             className="w-full px-3 py-2 rounded bg-neutral-700 text-gray-100"
                           />
                           <textarea
+                            ref={editTextareaRef}
                             value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
+                            onChange={(e) => {
+                              setEditContent(e.target.value);
+                              autoResize(e.target);
+                            }}
                             rows={3}
-                            className="w-full px-3 py-2 rounded bg-neutral-700 text-gray-100 resize-none"
+                            className="w-full px-3 py-2 rounded bg-neutral-700 text-gray-100 resize-none overflow-hidden"
                           />
                           <div className="flex gap-3">
                             <button
@@ -269,7 +298,12 @@ export default function Forum() {
                               Sačuvaj
                             </button>
                             <button
-                              onClick={() => setEditingId(null)}
+                              onClick={() => {
+                                setEditingId(null);
+                                if (editTextareaRef.current) {
+                                  editTextareaRef.current.style.height = "";
+                                }
+                              }}
                               className="text-gray-400 underline"
                             >
                               Otkaži
@@ -307,6 +341,10 @@ export default function Forum() {
                                     setEditingId(post.id);
                                     setEditTitle(post.title);
                                     setEditContent(post.content);
+                                    setTimeout(
+                                      () => autoResize(editTextareaRef.current),
+                                      0
+                                    );
                                   }}
                                   className="text-blue-400 underline"
                                 >
@@ -316,9 +354,7 @@ export default function Forum() {
                                   onClick={() => togglePin(post)}
                                   className="text-blue-400 underline"
                                 >
-                                  {post.pinned
-                                    ? "Ukloni pin"
-                                    : "Istakni"}
+                                  {post.pinned ? "Ukloni pin" : "Pinuj"}
                                 </button>
                                 {!post.archived ? (
                                   <button

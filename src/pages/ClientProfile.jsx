@@ -166,7 +166,6 @@ export default function ClientProfile() {
       dob: formData.dob ? new Date(formData.dob) : null,
       goals: formData.goals,
       healthNotes: formData.healthNotes,
-      ...(role === "admin" && { trainingNotes: formData.trainingNotes }),
     });
 
     setUser(formData);

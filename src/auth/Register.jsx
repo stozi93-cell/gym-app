@@ -1,6 +1,7 @@
+import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
 import { useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebase";
 import { Logo } from "../components/Logo";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -92,29 +93,50 @@ export default function Register() {
   }
 
   async function submitRegister() {
-    setLoading(true);
-    setStatus(null);
+  setLoading(true);
+  setStatus(null);
 
-    try {
-      await createUserWithEmailAndPassword(auth, form.email, form.password);
+  try {
+    const cred = await createUserWithEmailAndPassword(
+      auth,
+      form.email.trim().toLowerCase(),
+      form.password
+    );
 
-      setStatus({
-        type: "success",
-        message: "Registracija uspešna 🎉 Dobrodošao u ReMotion",
-      });
+    // Merge full registration data into existing user doc
+    await setDoc(
+      doc(db, "users", cred.user.uid),
+      {
+        name: form.ime || "",
+        surname: form.prezime || "",
+        phone: form.telefon || "",
+        dob: form.datumRodjenja ? new Date(form.datumRodjenja) : null,
+        goals: form.ciljevi || "",
+        healthNotes: form.zdravstveneNapomene || "",
+        email: form.email.trim().toLowerCase(),
+      },
+      { merge: true }
+    );
 
-      setTimeout(() => {
-        navigate("/app"); // adjust route if needed
-      }, 1500);
-    } catch (err) {
-      setStatus({
-        type: "error",
-        message: "Došlo je do greške. Pokušaj ponovo.",
-      });
-    } finally {
-      setLoading(false);
-    }
+    setStatus({
+      type: "success",
+      message: "Registracija uspešna 🎉",
+    });
+
+    setTimeout(() => {
+      navigate("/profil");
+    }, 800);
+  } catch (err) {
+    console.error("REGISTER ERROR:", err);
+    setStatus({
+      type: "error",
+      message: "Došlo je do greške. Pokušaj ponovo.",
+    });
+  } finally {
+    setLoading(false);
   }
+}
+
 
   const progress = (step / 4) * 100;
 
