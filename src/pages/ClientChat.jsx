@@ -16,7 +16,7 @@ import { useAuth } from "../context/AuthContext";
 import { ensureConversation } from "../chat/ensureConversation";
 
 export default function ClientChat() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -24,19 +24,8 @@ export default function ClientChat() {
 
   const bottomRef = useRef(null);
 
+  // conversationId === clientId
   const conversationId = user?.uid;
-
-  /* ─────────────────────────────
-     Ensure conversation exists
-  ───────────────────────────── */
-  useEffect(() => {
-    if (!user?.uid || !profile?.coachId) return;
-
-    ensureConversation({
-      clientId: user.uid,
-      coachId: profile.coachId,
-    });
-  }, [user?.uid, profile?.coachId]);
 
   /* ─────────────────────────────
      Listen to messages
@@ -51,18 +40,24 @@ export default function ClientChat() {
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      setMessages(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      );
+      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setLoading(false);
-
-      // mark as read for client
-      updateDoc(doc(db, "conversations", conversationId), {
-        clientUnread: 0,
-      });
     });
 
     return () => unsub();
+  }, [conversationId]);
+
+  /* ─────────────────────────────
+     Clear unread SAFELY on open
+  ───────────────────────────── */
+  useEffect(() => {
+    if (!conversationId) return;
+
+    updateDoc(doc(db, "conversations", conversationId), {
+      clientUnread: 0,
+    }).catch(() => {
+      // conversation might not exist yet — ignore safely
+    });
   }, [conversationId]);
 
   /* ─────────────────────────────
@@ -76,10 +71,16 @@ export default function ClientChat() {
      Send message
   ───────────────────────────── */
   async function send() {
-    if (!text.trim()) return;
+    if (!text.trim() || !user?.uid) return;
 
     const msg = text.trim();
     setText("");
+
+    // 🔑 ensure conversation exists BEFORE updates
+    await ensureConversation({
+      clientId: user.uid,
+      coachId: "A2g7h5o43mVc0bDGWM7al12bvPp1", // 👈 replace with your admin UID
+    });
 
     await addDoc(collection(db, "messages"), {
       conversationId,
@@ -93,16 +94,20 @@ export default function ClientChat() {
       lastSenderId: user.uid,
       updatedAt: serverTimestamp(),
       coachUnread: increment(1),
+      clientUnread: 0,
     });
   }
 
   if (loading) {
-    return <div className="p-6 text-neutral-400">Učitavanje poruka…</div>;
+    return (
+      <div className="p-6 text-neutral-400">
+        Učitavanje poruka…
+      </div>
+    );
   }
 
   return (
     <div className="flex h-[100dvh] flex-col bg-neutral-900">
-
       {/* HEADER */}
       <div className="border-b border-neutral-800 px-4 py-3 text-center text-sm font-medium text-white">
         Chat sa trenerom
@@ -121,15 +126,13 @@ export default function ClientChat() {
                   : "mr-auto bg-neutral-800 text-neutral-100"
               }`}
             >
-              <div className="space-y-1">
-                <p>{m.text}</p>
-                <p className="text-[10px] opacity-60">
-                  {m.createdAt?.toDate?.().toLocaleTimeString("sr-RS", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
+              <p>{m.text}</p>
+              <p className="text-[10px] opacity-60">
+                {m.createdAt?.toDate?.().toLocaleTimeString("sr-RS", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
             </div>
           );
         })}
@@ -142,7 +145,7 @@ export default function ClientChat() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Napiši poruku…"
-          className="flex-1 rounded-xl bg-neutral-800 px-4 py-2 text-sm text-white outline-none"
+          className="flex-1 bg-transparent px-4 py-2 text-sm text-white outline-none"
         />
         <button
           onClick={send}

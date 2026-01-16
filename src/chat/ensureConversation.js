@@ -1,14 +1,16 @@
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "../firebase";
 
 /**
  * Ensures a conversation exists for a client.
  * conversationId === clientId
  */
-export async function ensureConversation({
-  clientId,
-  coachId,
-}) {
+export async function ensureConversation({ clientId, coachId }) {
   if (!clientId || !coachId) return;
 
   const ref = doc(db, "conversations", clientId);

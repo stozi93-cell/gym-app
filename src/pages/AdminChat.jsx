@@ -16,16 +16,13 @@ import { useParams } from "react-router-dom";
 
 export default function AdminChat() {
   const { conversationId } = useParams();
-
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
-
   const bottomRef = useRef(null);
 
-  /* ─────────────────────────────
-     Listen to messages
-  ───────────────────────────── */
   useEffect(() => {
+    if (!conversationId) return;
+
     const q = query(
       collection(db, "messages"),
       where("conversationId", "==", conversationId),
@@ -33,11 +30,8 @@ export default function AdminChat() {
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      setMessages(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      );
+      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
 
-      // mark as read for coach
       updateDoc(doc(db, "conversations", conversationId), {
         coachUnread: 0,
       });
@@ -46,16 +40,10 @@ export default function AdminChat() {
     return () => unsub();
   }, [conversationId]);
 
-  /* ─────────────────────────────
-     Auto-scroll
-  ───────────────────────────── */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /* ─────────────────────────────
-     Send message
-  ───────────────────────────── */
   async function send() {
     if (!text.trim()) return;
 
@@ -79,7 +67,7 @@ export default function AdminChat() {
 
   return (
     <div className="flex h-[100dvh] flex-col bg-neutral-900">
-      <div className="border-b border-neutral-800 px-4 py-3 text-white text-sm">
+      <div className="border-b border-neutral-800 px-4 py-3 text-sm text-white">
         Chat
       </div>
 
@@ -95,15 +83,13 @@ export default function AdminChat() {
                   : "mr-auto bg-neutral-800 text-neutral-100"
               }`}
             >
-              <div className="space-y-1">
-                <p>{m.text}</p>
-                <p className="text-[10px] opacity-60">
-                  {m.createdAt?.toDate?.().toLocaleTimeString("sr-RS", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
+              <p>{m.text}</p>
+              <p className="text-[10px] opacity-60">
+                {m.createdAt?.toDate?.().toLocaleTimeString("sr-RS", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
             </div>
           );
         })}
@@ -115,7 +101,7 @@ export default function AdminChat() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Napiši poruku…"
-          className="flex-1 rounded-xl bg-neutral-800 px-4 py-2 text-sm text-white"
+          className="flex-1 bg-transparent px-4 py-2 text-sm text-white outline-none"
         />
         <button
           onClick={send}
