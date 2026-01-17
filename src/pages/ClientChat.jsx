@@ -15,6 +15,24 @@ import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { ensureConversation } from "../chat/ensureConversation";
 
+function SendIcon({ className }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M6 12L3 21l18-9L3 3l3 9z" />
+      <path d="M6 12h12" />
+    </svg>
+  );
+}
+
 function getInitials(name = "") {
   const parts = name.trim().split(" ").filter(Boolean);
   if (!parts.length) return "?";
@@ -116,7 +134,7 @@ export default function ClientChat() {
   return (
     <div className="flex h-full flex-col">
       {/* HEADER */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border-dark">
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-border-dark">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
           {getInitials("Trener")}
         </div>
@@ -152,12 +170,12 @@ export default function ClientChat() {
       </div>
 
       {/* INPUT */}
-      <div className="border-t border-neutral-800 p-3 flex gap-2">
+      <div className="border-t border-neutral-800 p-1 flex gap-2">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Napiši poruku…"
-          className="flex-1 bg-transparent px-4 py-2 text-sm text-white outline-none"
+          className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-neutral-400"
         />
         <button
   onClick={send}
@@ -167,13 +185,12 @@ export default function ClientChat() {
     ${text.trim() ? "shadow-[0_0_0_1px_rgba(59,130,246,0.4)]" : ""}
   `}
 >
-  <span
-    className={`text-lg ${
-      text.trim() ? "text-blue-400" : "text-neutral-500"
-    }`}
-  >
-    ➤
-  </span>
+  <SendIcon
+  className={`h-5 w-5 ${
+    text.trim() ? "text-blue-400" : "text-neutral-400"
+  }`}
+/>
+
 </button>
 
       </div>

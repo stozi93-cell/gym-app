@@ -16,6 +16,24 @@ import { db } from "../firebase";
 import { useParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 
+function SendIcon({ className }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M6 12L3 21l18-9L3 3l3 9z" />
+      <path d="M6 12h12" />
+    </svg>
+  );
+}
+
 function getInitials(name = "Klijent") {
   return name
     .split(" ")
@@ -101,7 +119,7 @@ export default function AdminChat() {
     <div className="flex h-full flex-col">
 
       {/* HEADER */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border-dark">
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-border-dark">
   <Link
     to={`/profil/${conversationId}`}
     className="flex items-center gap-3 group"
@@ -119,6 +137,7 @@ export default function AdminChat() {
 
 
       {/* MESSAGES */}
+      
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-none">
         {messages.map((m) => {
           const mine = m.senderId === "admin";
@@ -145,7 +164,7 @@ export default function AdminChat() {
       </div>
 
       {/* INPUT */}
-      <div className="flex gap-2 items-center px-3 py-2 border-t border-border-dark">
+      <div className="border-t border-neutral-800 p-1 flex gap-2">
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -155,18 +174,17 @@ export default function AdminChat() {
         <button
           onClick={send}
           className={`
-            flex h-10 w-10 items-center justify-center
-            rounded-full bg-black transition
+            flex h-10 w-10 items-center justify-center 
+            rounded-full bg-black transition 
             ${text.trim() ? "shadow-[0_0_0_1px_rgba(59,130,246,0.4)]" : ""}
           `}
         >
-          <span
-            className={`text-lg ${
-              text.trim() ? "text-blue-400" : "text-neutral-500"
-            }`}
-          >
-            ➤
-          </span>
+          <SendIcon
+  className={`h-5 w-5 ${
+    text.trim() ? "text-blue-400" : "text-neutral-400"
+  }`}
+/>
+
         </button>
       </div>
     </div>
