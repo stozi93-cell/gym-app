@@ -7,7 +7,14 @@ import {
   query,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+
+function getInitials(name = "") {
+  const parts = name.trim().split(" ").filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
 
 export default function AdminChats() {
   const [conversations, setConversations] = useState([]);
@@ -24,9 +31,8 @@ export default function AdminChats() {
 
       snap.docs.forEach((d) => {
         const u = d.data();
-        const name =
-          `${u.name || ""} ${u.surname || ""}`.trim() || d.id;
-        map[d.id] = name;
+        map[d.id] =
+          `${u.name || ""} ${u.surname || ""}`.trim() || "Klijent";
       });
 
       setUsersMap(map);
@@ -66,30 +72,58 @@ export default function AdminChats() {
       )}
 
       <div className="space-y-3">
-        {conversations.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => navigate(`/admin-chat/${c.id}`)}
-            className="w-full rounded-xl bg-neutral-900 p-4 text-left hover:bg-neutral-800 transition"
-          >
-            <div className="flex justify-between items-start gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-white truncate">
-                  {usersMap[c.clientId] || c.clientId}
-                </p>
-                <p className="text-xs text-neutral-400 truncate mt-0.5">
-                  {c.lastMessage || "—"}
-                </p>
-              </div>
+        {conversations.map((c) => {
+          const fullName = usersMap[c.clientId] || "Klijent";
+          const unread = c.coachUnread > 0;
 
-              {c.coachUnread > 0 && (
-                <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">
-                  {c.coachUnread}
-                </span>
-              )}
+          return (
+            <div
+              key={c.id}
+              onClick={() => navigate(`/admin-chat/${c.id}`)}
+              className={`w-full rounded-xl p-4 transition cursor-pointer ${
+                unread
+                  ? "bg-neutral-900"
+                  : "bg-neutral-900/70"
+              } hover:bg-neutral-800`}
+            >
+              <div className="flex items-center gap-3">
+                {/* AVATAR → PROFILE */}
+                <Link
+                  to={`/profil/${c.clientId}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white hover:ring-2 hover:ring-blue-500 transition"
+                >
+                  {getInitials(fullName)}
+                </Link>
+
+                {/* TEXT */}
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p
+                      className={`truncate text-sm ${
+                        unread
+                          ? "font-medium text-white"
+                          : "text-neutral-300"
+                      }`}
+                    >
+                      {fullName}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-neutral-400">
+                      {c.lastMessage || "—"}
+                    </p>
+                  </div>
+
+                  {/* UNREAD BADGE */}
+                  {unread && (
+                    <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">
+                      {c.coachUnread}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-          </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

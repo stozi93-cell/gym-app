@@ -15,6 +15,13 @@ import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { ensureConversation } from "../chat/ensureConversation";
 
+function getInitials(name = "") {
+  const parts = name.trim().split(" ").filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 export default function ClientChat() {
   const { user } = useAuth();
 
@@ -107,10 +114,15 @@ export default function ClientChat() {
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-neutral-900">
+    <div className="flex h-full flex-col">
       {/* HEADER */}
-      <div className="border-b border-neutral-800 px-4 py-3 text-center text-sm font-medium text-white">
-        Chat sa trenerom
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border-dark">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
+          {getInitials("Trener")}
+        </div>
+        <div>
+          <p className="text-sm font-medium text-white">Trener</p>
+        </div>
       </div>
 
       {/* MESSAGES */}
@@ -120,10 +132,10 @@ export default function ClientChat() {
           return (
             <div
               key={m.id}
-              className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+              className={`max-w-[78%] px-4 py-2 text-sm leading-relaxed ${
                 mine
-                  ? "ml-auto bg-blue-600 text-white"
-                  : "mr-auto bg-neutral-800 text-neutral-100"
+                  ? "ml-auto bg-blue-600 text-white rounded-2xl rounded-br-sm"
+                  : "mr-auto bg-neutral-800 text-neutral-100 rounded-2xl rounded-bl-sm"
               }`}
             >
               <p>{m.text}</p>
@@ -149,16 +161,19 @@ export default function ClientChat() {
         />
         <button
   onClick={send}
-  className="
-    flex h-9 w-9 items-center justify-center
-    rounded-full
-    text-blue-500 text-xl
-    hover:bg-neutral-900
-    transition
-  "
-  aria-label="Pošalji poruku"
+  className={`
+    flex h-10 w-10 items-center justify-center
+    rounded-full bg-black transition
+    ${text.trim() ? "shadow-[0_0_0_1px_rgba(59,130,246,0.4)]" : ""}
+  `}
 >
-  ➤
+  <span
+    className={`text-lg ${
+      text.trim() ? "text-blue-400" : "text-neutral-500"
+    }`}
+  >
+    ➤
+  </span>
 </button>
 
       </div>

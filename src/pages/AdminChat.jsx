@@ -10,9 +10,11 @@ import {
   updateDoc,
   where,
   increment,
+  getDoc, // 👈 added
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 function getInitials(name = "Klijent") {
   return name
@@ -25,10 +27,35 @@ function getInitials(name = "Klijent") {
 
 export default function AdminChat() {
   const { conversationId } = useParams();
+
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+  const [clientName, setClientName] = useState("Klijent"); // 👈 added
+
   const bottomRef = useRef(null);
 
+  /* ─────────────────────────────
+     Load client name
+  ───────────────────────────── */
+  useEffect(() => {
+    async function loadClient() {
+      if (!conversationId) return;
+
+      const snap = await getDoc(doc(db, "users", conversationId));
+      if (snap.exists()) {
+        const u = snap.data();
+        const fullName =
+          `${u.name || ""} ${u.surname || ""}`.trim() || "Klijent";
+        setClientName(fullName);
+      }
+    }
+
+    loadClient();
+  }, [conversationId]);
+
+  /* ─────────────────────────────
+     Listen to messages
+  ───────────────────────────── */
   useEffect(() => {
     const q = query(
       collection(db, "messages"),
@@ -73,23 +100,32 @@ export default function AdminChat() {
   return (
     <div className="flex h-full flex-col">
 
+      {/* HEADER */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border-dark">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
-          {getInitials("Klijent")}
-        </div>
-        <div>
-          <p className="text-sm font-medium text-white">Klijent</p>
-          <p className="text-xs text-neutral-400">Direktna poruka</p>
-        </div>
-      </div>
+  <Link
+    to={`/profil/${conversationId}`}
+    className="flex items-center gap-3 group"
+  >
+    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white group-hover:ring-2 group-hover:ring-blue-500 transition">
+      {getInitials(clientName || "Klijent")}
+    </div>
+    <div>
+      <p className="text-sm font-medium text-white group-hover:underline">
+        {clientName || "Klijent"}
+      </p>
+    </div>
+  </Link>
+</div>
 
+
+      {/* MESSAGES */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-none">
         {messages.map((m) => {
           const mine = m.senderId === "admin";
           return (
             <div
               key={m.id}
-              className={`max-w-[78%] px-4 py-2 text-sm leading-relaxed ${
+              className={`max-w-[78%] px-4 py-1.5 text-sm leading-relaxed ${
                 mine
                   ? "ml-auto bg-blue-600 text-white rounded-2xl rounded-br-sm"
                   : "mr-auto bg-neutral-800 text-neutral-100 rounded-2xl rounded-bl-sm"
@@ -108,6 +144,7 @@ export default function AdminChat() {
         <div ref={bottomRef} />
       </div>
 
+      {/* INPUT */}
       <div className="flex gap-2 items-center px-3 py-2 border-t border-border-dark">
         <input
           value={text}
@@ -116,19 +153,21 @@ export default function AdminChat() {
           className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-neutral-400"
         />
         <button
-  onClick={send}
-  className="
-    flex h-10 w-14 items-center justify-center
-    rounded-full
-    text-blue-500 text-xl
-    hover:bg-neutral-900
-    transition
-  "
-  aria-label="Pošalji poruku"
->
-  ➤
-</button>
-
+          onClick={send}
+          className={`
+            flex h-10 w-10 items-center justify-center
+            rounded-full bg-black transition
+            ${text.trim() ? "shadow-[0_0_0_1px_rgba(59,130,246,0.4)]" : ""}
+          `}
+        >
+          <span
+            className={`text-lg ${
+              text.trim() ? "text-blue-400" : "text-neutral-500"
+            }`}
+          >
+            ➤
+          </span>
+        </button>
       </div>
     </div>
   );

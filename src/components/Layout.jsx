@@ -17,7 +17,7 @@ export default function Layout() {
 
         {profile?.role === "client" && (
           <>
-            <Link to="/profil">Moj profil</Link>{" | "}
+            <Link to="/profil/me">Profil</Link>{" | "}
             <Link to="/moje-pretplate">Moje pretplate</Link>{" | "}
             <Link to="/rezervacije">Rezervacije</Link>
           </>

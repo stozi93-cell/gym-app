@@ -18,11 +18,4 @@ body {
   overscroll-behavior: none;
 }
 
-/* global.css */
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+

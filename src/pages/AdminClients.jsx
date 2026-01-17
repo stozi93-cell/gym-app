@@ -162,12 +162,16 @@ export default function AdminClients() {
             <tr key={c.id}>
               <td>
                 <Link
-                  to={`/profil/${c.id}`}
-                  target="_blank"
-                  style={{ fontWeight: "bold", textDecoration: "none", color: "#007bff" }}
-                >
-                  {c.name} {c.surname}
-                </Link>
+  to={`/profil/${c.id}`}
+  style={{
+    fontWeight: "bold",
+    textDecoration: "none",
+    color: "#007bff",
+  }}
+>
+  {c.name} {c.surname}
+</Link>
+
               </td>
               <td>{c.email}</td>
               <td>
