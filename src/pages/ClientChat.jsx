@@ -148,11 +148,19 @@ export default function ClientChat() {
           className="flex-1 bg-transparent px-4 py-2 text-sm text-white outline-none"
         />
         <button
-          onClick={send}
-          className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white"
-        >
-          Pošalji
-        </button>
+  onClick={send}
+  className="
+    flex h-9 w-9 items-center justify-center
+    rounded-full
+    text-blue-500 text-xl
+    hover:bg-neutral-900
+    transition
+  "
+  aria-label="Pošalji poruku"
+>
+  ➤
+</button>
+
       </div>
     </div>
   );
