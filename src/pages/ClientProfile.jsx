@@ -113,9 +113,7 @@ export default function ClientProfile() {
     setSubscriptions(subs);
   }
 
-  if (authLoading || !user) {
-    return <div className="p-6 text-neutral-400">Učitavanje…</div>;
-  }
+  if (authLoading || !user) return null;
 
   /* helpers */
 

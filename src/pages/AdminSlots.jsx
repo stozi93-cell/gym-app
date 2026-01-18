@@ -255,7 +255,16 @@ export default function AdminSlots() {
       ? todayStr
       : orderedKeys[0];
 
-  if (loading) return <p className="p-4 text-neutral-400">Učitavanje…</p>;
+  if (loading) {
+  return (
+    <div className="space-y-4">
+      <div className="h-4 w-2/3 rounded bg-neutral-700/50" />
+      <div className="h-4 w-full rounded bg-neutral-700/50" />
+      <div className="h-4 w-5/6 rounded bg-neutral-700/50" />
+    </div>
+  );
+}
+
 
   return (
     <div className="px-2 py-1 space-y-6">

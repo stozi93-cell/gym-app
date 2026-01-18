@@ -16,12 +16,13 @@ import ClientChat from "./pages/ClientChat";
 import AdminChat from "./pages/AdminChat";
 import AdminChats from "./pages/AdminChats";
 
+import Splash from "./components/Splash";
 import AppShell from "./components/AppShell";
 
 export default function App() {
   const { user, profile, loading } = useAuth();
 
-  if (loading) return null;
+  if (loading) return <Splash />;
 
   // ─────────────────────────────
   // NOT AUTHENTICATED

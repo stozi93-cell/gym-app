@@ -123,13 +123,8 @@ export default function ClientChat() {
     });
   }
 
-  if (loading) {
-    return (
-      <div className="p-6 text-neutral-400">
-        Učitavanje poruka…
-      </div>
-    );
-  }
+  if (loading) return null;
+
 
   return (
     <div className="flex h-full flex-col">

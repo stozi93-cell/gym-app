@@ -177,13 +177,8 @@ export default function Forum() {
     loadData();
   }
 
-  if (loading) {
-    return (
-      <p className="text-center mt-10 text-gray-500">
-        Učitavanje obaveštenja…
-      </p>
-    );
-  }
+  if (loading) return null;
+
 
   return (
     <div className="px-4 py-6 flex justify-center">
