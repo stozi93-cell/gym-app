@@ -8,13 +8,21 @@ import {
   doc,
   query,
   where,
-  getDoc
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useSearchParams } from "react-router-dom";
 
 export default function AdminPackages() {
   const [packages, setPackages] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [currentSubs, setCurrentSubs] = useState([]);
+
+  const [userId, setUserId] = useState("");
+  const [packageId, setPackageId] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [checkInOption, setCheckInOption] = useState("default");
+
   const [newPackage, setNewPackage] = useState({
     name: "",
     durationDays: "",
@@ -22,25 +30,18 @@ export default function AdminPackages() {
     defaultCheckIns: "default",
   });
 
-  const checkInOptions = [
-    { value: "default", label: "Koristi podrazumevano" },
-    { value: "1", label: "Jednom nedeljno" },
-    { value: "2", label: "Dva puta nedeljno" },
-    { value: "3", label: "Tri puta nedeljno" },
-    { value: "4", label: "Četiri puta nedeljno" },
-    { value: "5", label: "Pet puta nedeljno" },
-    { value: "unlimited", label: "Neograničeno" },
-  ];
-
-  const [users, setUsers] = useState([]);
-  const [userId, setUserId] = useState("");
-  const [packageId, setPackageId] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [checkInOption, setCheckInOption] = useState("default");
-  const [currentSubs, setCurrentSubs] = useState([]);
-
   const [searchParams] = useSearchParams();
   const clientIdFromParam = searchParams.get("clientId");
+
+  const checkInOptions = [
+    { value: "default", label: "Podrazumevano" },
+    { value: "1", label: "1× nedeljno" },
+    { value: "2", label: "2× nedeljno" },
+    { value: "3", label: "3× nedeljno" },
+    { value: "4", label: "4× nedeljno" },
+    { value: "5", label: "5× nedeljno" },
+    { value: "unlimited", label: "Neograničeno" },
+  ];
 
   useEffect(() => {
     loadPackages();
@@ -48,137 +49,110 @@ export default function AdminPackages() {
   }, []);
 
   useEffect(() => {
+    if (clientIdFromParam) setUserId(clientIdFromParam);
+  }, [clientIdFromParam]);
+
+  useEffect(() => {
     if (userId) loadCurrentSubs(userId);
     else setCurrentSubs([]);
   }, [userId]);
 
-  useEffect(() => {
-    if (clientIdFromParam) setUserId(clientIdFromParam);
-  }, [clientIdFromParam]);
-
-  // ---------------- Packages ----------------
+  /* ─────────────────────────────
+     LOADERS
+  ───────────────────────────── */
   async function loadPackages() {
     const snap = await getDocs(collection(db, "subscriptions"));
-    let data = snap.docs.map((d, i) => ({ id: d.id, ...d.data() }));
-    data = data.map((p, i) => ({ ...p, order: p.order ?? i }));
+    let data = snap.docs.map((d, i) => ({
+      id: d.id,
+      ...d.data(),
+      order: d.data().order ?? i,
+    }));
     data.sort((a, b) => a.order - b.order);
     setPackages(data);
   }
 
-  async function createPackage() {
-    const { name, durationDays, price, defaultCheckIns } = newPackage;
-    if (!name || !durationDays || !price) return alert("Popunite sva polja");
-
-    const newOrder = packages.length;
-    await addDoc(collection(db, "subscriptions"), {
-      name,
-      durationDays: Number(durationDays),
-      price: Number(price),
-      defaultCheckIns,
-      active: true,
-      order: newOrder,
-    });
-
-    setNewPackage({ name: "", durationDays: "", price: "", defaultCheckIns: "default" });
-    loadPackages();
-  }
-
-  async function toggleActive(pkg) {
-    await updateDoc(doc(db, "subscriptions", pkg.id), { active: !pkg.active });
-    loadPackages();
-  }
-
-  async function updatePackage(pkgId, field, value) {
-    const data =
-      field === "name"
-        ? { [field]: value }
-        : field === "defaultCheckIns"
-        ? { [field]: value }
-        : { [field]: Number(value) };
-    await updateDoc(doc(db, "subscriptions", pkgId), data);
-    loadPackages();
-  }
-
-  async function movePackage(pkgId, direction) {
-    const index = packages.findIndex(p => p.id === pkgId);
-    if (index === -1) return;
-
-    let swapIndex;
-    if (direction === "up" && index > 0) swapIndex = index - 1;
-    if (direction === "down" && index < packages.length - 1) swapIndex = index + 1;
-    if (swapIndex === undefined) return;
-
-    const current = packages[index];
-    const swapWith = packages[swapIndex];
-
-    const currentOrder = current.order ?? index;
-    const swapOrder = swapWith.order ?? swapIndex;
-
-    await updateDoc(doc(db, "subscriptions", current.id), { order: swapOrder });
-    await updateDoc(doc(db, "subscriptions", swapWith.id), { order: currentOrder });
-
-    loadPackages();
-  }
-
-  // ---------------- Clients ----------------
   async function loadClients() {
-    const uSnap = await getDocs(
-      query(collection(db, "users"), where("role", "==", "client"), where("active", "==", true))
+    const snap = await getDocs(
+      query(
+        collection(db, "users"),
+        where("role", "==", "client"),
+        where("active", "==", true)
+      )
     );
-    setUsers(uSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
 
   async function loadCurrentSubs(uid) {
     const snap = await getDocs(
-      query(collection(db, "clientSubscriptions"), where("userId", "==", uid), where("active", "==", true))
+      query(
+        collection(db, "clientSubscriptions"),
+        where("userId", "==", uid),
+        where("active", "==", true)
+      )
     );
 
     const subs = [];
     for (const d of snap.docs) {
-      const subData = d.data();
-      const pkgSnap = await getDoc(doc(db, "subscriptions", subData.subscriptionId));
-      const pkg = pkgSnap.data();
-      if (pkg) {
-        const start = subData.startDate?.toDate ? subData.startDate.toDate() : new Date(subData.startDate);
-        const end = subData.endDate?.toDate ? subData.endDate.toDate() : new Date(subData.endDate);
+      const sub = d.data();
+      const pkgSnap = await getDoc(
+        doc(db, "subscriptions", sub.subscriptionId)
+      );
+      if (!pkgSnap.exists()) continue;
 
-        subs.push({
-          ...pkg,
-          startDate: start,
-          endDate: end,
-          checkIns: subData.checkIns || [],
-        });
-      }
+      subs.push({
+        ...pkgSnap.data(),
+        startDate: sub.startDate?.toDate(),
+        endDate: sub.endDate?.toDate(),
+      });
     }
-    subs.sort((a, b) => b.endDate - a.endDate);
 
-    // keep only the active one
-    setCurrentSubs(subs.length > 0 ? [subs[0]] : []);
+    subs.sort((a, b) => b.endDate - a.endDate);
+    setCurrentSubs(subs.length ? [subs[0]] : []);
   }
 
+  /* ─────────────────────────────
+     ACTIONS
+  ───────────────────────────── */
   async function assignSubscription() {
     if (!userId || !packageId) return alert("Sva polja su obavezna");
 
-    const pkg = packages.find(p => p.id === packageId);
-    if (!pkg) return alert("Paket nije pronađen");
+    const pkg = packages.find((p) => p.id === packageId);
+    if (!pkg) return;
 
     const start = startDate ? new Date(startDate) : new Date();
     const end = new Date(start);
-    end.setDate(end.getDate() + (pkg.durationDays || 30));
+    end.setDate(end.getDate() + pkg.durationDays);
 
-    const weeklyCheckIns = checkInOption === "default" ? pkg.defaultCheckIns || "unlimited" : checkInOption;
+    const weeklyCheckIns =
+      checkInOption === "default"
+        ? pkg.defaultCheckIns || "unlimited"
+        : checkInOption;
 
-    const weeks = Math.ceil((end - start) / (7 * 24 * 60 * 60 * 1000));
-    const checkInsArray = Array.from({ length: weeks }, () => (weeklyCheckIns === "unlimited" ? "unlimited" : 0));
+    const weeks = Math.ceil(
+      (end - start) / (7 * 24 * 60 * 60 * 1000)
+    );
+
+    const checkInsArray = Array.from(
+      { length: weeks },
+      () =>
+        weeklyCheckIns === "unlimited" ? "unlimited" : 0
+    );
 
     const existing = await getDocs(
-      query(collection(db, "clientSubscriptions"), where("userId", "==", userId), where("active", "==", true))
+      query(
+        collection(db, "clientSubscriptions"),
+        where("userId", "==", userId),
+        where("active", "==", true)
+      )
     );
+
     for (const d of existing.docs) {
-      await updateDoc(doc(db, "clientSubscriptions", d.id), { active: false });
+      await updateDoc(doc(db, "clientSubscriptions", d.id), {
+        active: false,
+      });
     }
 
-    const subRef = await addDoc(collection(db, "clientSubscriptions"), {
+    await addDoc(collection(db, "clientSubscriptions"), {
       userId,
       subscriptionId: packageId,
       startDate: start,
@@ -188,24 +162,23 @@ export default function AdminPackages() {
       checkInsArray,
     });
 
-    // --- Create billing record ---
     const auth = getAuth();
-    const adminId = auth.currentUser?.uid || null;
-
     await addDoc(collection(db, "billing"), {
       clientId: userId,
-      clientName: `${users.find(u => u.id === userId)?.name || ""} ${users.find(u => u.id === userId)?.surname || ""}`,
+      clientName: `${users.find((u) => u.id === userId)?.name || ""} ${
+        users.find((u) => u.id === userId)?.surname || ""
+      }`,
       subscriptionId: packageId,
       subscriptionName: pkg.name,
       amount: Number(pkg.price),
       currency: "RSD",
       status: "pending",
       createdAt: new Date(),
-      createdBy: adminId,
+      createdBy: auth.currentUser?.uid || null,
       note: "",
     });
 
-    alert("Pretplata dodeljena i faktura kreirana");
+    alert("Pretplata dodeljena");
     setUserId("");
     setPackageId("");
     setStartDate("");
@@ -213,144 +186,296 @@ export default function AdminPackages() {
     setCurrentSubs([]);
   }
 
+  async function createPackage() {
+    if (!newPackage.name || !newPackage.durationDays || !newPackage.price)
+      return alert("Popunite sva polja");
+
+    await addDoc(collection(db, "subscriptions"), {
+      ...newPackage,
+      durationDays: Number(newPackage.durationDays),
+      price: Number(newPackage.price),
+      active: true,
+      order: packages.length,
+    });
+
+    setNewPackage({
+      name: "",
+      durationDays: "",
+      price: "",
+      defaultCheckIns: "default",
+    });
+    loadPackages();
+  }
+
+  async function updatePackage(id, field, value) {
+    await updateDoc(doc(db, "subscriptions", id), {
+      [field]:
+        field === "name" || field === "defaultCheckIns"
+          ? value
+          : Number(value),
+    });
+    loadPackages();
+  }
+
+  async function toggleActive(pkg) {
+    await updateDoc(doc(db, "subscriptions", pkg.id), {
+      active: !pkg.active,
+    });
+    loadPackages();
+  }
+
+  async function movePackage(id, dir) {
+    const i = packages.findIndex((p) => p.id === id);
+    const j = dir === "up" ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= packages.length) return;
+
+    await updateDoc(doc(db, "subscriptions", packages[i].id), {
+      order: packages[j].order,
+    });
+    await updateDoc(doc(db, "subscriptions", packages[j].id), {
+      order: packages[i].order,
+    });
+
+    loadPackages();
+  }
+
   const formatDate = (d) =>
-    d?.toDate
-      ? d.toDate().toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
-      : d instanceof Date
-      ? d.toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
-      : "—";
+    d?.toLocaleDateString("sr-Latn-RS", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
 
   return (
-    <div>
-      <h2>Upravljanje paketima i dodela pretplate</h2>
+    <div className="px-2 py-1 space-y-6">
+      <h1 className="px-2 text-xl font-semibold text-white">
+        Paketi
+      </h1>
 
-      {/* Assign Subscription */}
-      <div style={{ border: "1px solid #ccc", padding: 10, marginBottom: 20 }}>
-        <h3>Dodeli pretplatu klijentu</h3>
-        <div style={{ marginBottom: 10 }}>
-          <label>Izaberite klijenta: </label>
-          <select value={userId} onChange={e => setUserId(e.target.value)}>
-            <option value="">-- Odaberite klijenta --</option>
-            {users.map(u => (
-              <option key={u.id} value={u.id}>
-                {u.name} {u.surname} ({u.email})
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* ASSIGN */}
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
+        <p className="font-medium text-white">Dodela pretplate</p>
 
-        {Array.isArray(currentSubs) && currentSubs.length > 0 && (
-          <div style={{ marginBottom: 10 }}>
-            <b>Trenutne aktivne pretplate:</b>
-            <ul>
-              {currentSubs.map((s, i) => (
-                <li key={i}>
-                  {s.name} — {formatDate(s.startDate)} – {formatDate(s.endDate)}
-                </li>
-              ))}
-            </ul>
-          </div>
+        <select
+          value={userId}
+          onChange={(e) => setUserId(e.target.value)}
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+        >
+          <option value="">Klijent</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name} {u.surname}
+            </option>
+          ))}
+        </select>
+
+        {currentSubs.length > 0 && (
+          <p className="text-xs text-neutral-400">
+            Aktivna: {currentSubs[0].name} do{" "}
+            {formatDate(currentSubs[0].endDate)}
+          </p>
         )}
 
-        <div style={{ marginBottom: 10 }}>
-          <label>Izaberite pretplatu: </label>
-          <select value={packageId} onChange={e => setPackageId(e.target.value)}>
-            <option value="">-- Odaberite pretplatu --</option>
-            {packages.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.durationDays || 30} dana)
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={packageId}
+          onChange={(e) => setPackageId(e.target.value)}
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+        >
+          <option value="">Paket</option>
+          {packages.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name} ({p.durationDays} dana)
+            </option>
+          ))}
+        </select>
 
-        <div style={{ marginBottom: 10 }}>
-          <label>Izaberite broj dolazaka nedeljno: </label>
-          <select value={checkInOption} onChange={e => setCheckInOption(e.target.value)}>
-            {checkInOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={checkInOption}
+          onChange={(e) => setCheckInOption(e.target.value)}
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+        >
+          {checkInOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
 
-        <div style={{ marginBottom: 10 }}>
-          <label>Datum početka (opciono): </label>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-        </div>
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+        />
 
-        <button onClick={assignSubscription}>Dodeli</button>
+        <button
+          onClick={assignSubscription}
+          className="rounded bg-blue-600 py-2 text-sm text-white"
+        >
+          Dodeli pretplatu
+        </button>
       </div>
 
-      {/* Create Package */}
-      <div style={{ marginBottom: 10 }}>
+      {/* CREATE PACKAGE */}
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
+        <p className="font-medium text-white">Novi paket</p>
+
         <input
-          placeholder="Naziv paketa"
+          placeholder="Naziv"
           value={newPackage.name}
-          onChange={e => setNewPackage({ ...newPackage, name: e.target.value })}
-          style={{ marginRight: 5 }}
+          onChange={(e) =>
+            setNewPackage({ ...newPackage, name: e.target.value })
+          }
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
         />
         <input
           type="number"
           placeholder="Trajanje (dani)"
           value={newPackage.durationDays}
-          onChange={e => setNewPackage({ ...newPackage, durationDays: e.target.value })}
-          style={{ marginRight: 5 }}
+          onChange={(e) =>
+            setNewPackage({
+              ...newPackage,
+              durationDays: e.target.value,
+            })
+          }
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
         />
         <input
           type="number"
           placeholder="Cena"
           value={newPackage.price}
-          onChange={e => setNewPackage({ ...newPackage, price: e.target.value })}
-          style={{ marginRight: 5 }}
+          onChange={(e) =>
+            setNewPackage({ ...newPackage, price: e.target.value })
+          }
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
         />
+
         <select
           value={newPackage.defaultCheckIns}
-          onChange={e => setNewPackage({ ...newPackage, defaultCheckIns: e.target.value })}
-          style={{ marginRight: 5 }}
+          onChange={(e) =>
+            setNewPackage({
+              ...newPackage,
+              defaultCheckIns: e.target.value,
+            })
+          }
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
         >
-          {checkInOptions.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          {checkInOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
           ))}
         </select>
-        <button onClick={createPackage}>Kreiraj paket</button>
+
+        <button
+          onClick={createPackage}
+          className="rounded bg-green-600 py-2 text-sm text-white"
+        >
+          Kreiraj paket
+        </button>
       </div>
 
-      {/* Packages Table */}
-      <table border="1" cellPadding="5" style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th>Naziv</th>
-            <th>Trajanje (dani)</th>
-            <th>Cena</th>
-            <th>Podrazumevani dolasci nedeljno</th>
-            <th>Status</th>
-            <th>Akcija</th>
-            <th>Redosled</th>
-          </tr>
-        </thead>
-        <tbody>
-          {packages.map((p, i) => (
-            <tr key={p.id}>
-              <td><input value={p.name} onChange={e => updatePackage(p.id, "name", e.target.value)} /></td>
-              <td><input type="number" value={p.durationDays} onChange={e => updatePackage(p.id, "durationDays", e.target.value)} style={{ width: 60 }} /></td>
-              <td><input type="number" value={p.price} onChange={e => updatePackage(p.id, "price", e.target.value)} style={{ width: 80 }} /></td>
-              <td>
-                <select value={p.defaultCheckIns || "default"} onChange={e => updatePackage(p.id, "defaultCheckIns", e.target.value)}>
-                  {checkInOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                </select>
-              </td>
-              <td>{p.active ? "Aktivan" : "Neaktivan"}</td>
-              <td><button onClick={() => toggleActive(p)}>{p.active ? "Deaktiviraj" : "Aktiviraj"}</button></td>
-              <td>
-                <button onClick={() => movePackage(p.id, "up")} disabled={i === 0}>⬆</button>
-                <button onClick={() => movePackage(p.id, "down")} disabled={i === packages.length - 1}>⬇</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* PACKAGE LIST */}
+      {/* PACKAGE LIST */}
+<div className="space-y-3">
+  {packages.map((p, i) => (
+    <div
+      key={p.id}
+      className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3"
+    >
+      {/* NAME */}
+      <input
+        value={p.name}
+        onChange={(e) =>
+          updatePackage(p.id, "name", e.target.value)
+        }
+        className="w-full rounded bg-neutral-800 px-2 py-2 text-sm"
+      />
+
+      {/* DURATION + PRICE */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          type="number"
+          value={p.durationDays}
+          onChange={(e) =>
+            updatePackage(
+              p.id,
+              "durationDays",
+              e.target.value
+            )
+          }
+          className="w-full sm:flex-1 rounded bg-neutral-800 px-2 py-2 text-sm"
+          placeholder="Trajanje (dani)"
+        />
+
+        <input
+          type="number"
+          value={p.price}
+          onChange={(e) =>
+            updatePackage(p.id, "price", e.target.value)
+          }
+          className="w-full sm:flex-1 rounded bg-neutral-800 px-2 py-2 text-sm"
+          placeholder="Cena"
+        />
+      </div>
+
+      {/* CHECK-INS */}
+      <select
+        value={p.defaultCheckIns || "default"}
+        onChange={(e) =>
+          updatePackage(
+            p.id,
+            "defaultCheckIns",
+            e.target.value
+          )
+        }
+        className="w-full rounded bg-neutral-800 px-2 py-2 text-sm"
+      >
+        {checkInOptions.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+
+      {/* STATUS + ACTIONS */}
+      <div className="flex items-center justify-between pt-2">
+        <span
+          className={`text-sm font-medium ${
+            p.active ? "text-green-500" : "text-red-400"
+          }`}
+        >
+          {p.active ? "Aktivan" : "Neaktivan"}
+        </span>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => toggleActive(p)}
+            className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-blue-400 hover:bg-neutral-700 transition"
+          >
+            {p.active ? "Deaktiviraj" : "Aktiviraj"}
+          </button>
+
+          <button
+            disabled={i === 0}
+            onClick={() => movePackage(p.id, "up")}
+            className="rounded-md bg-neutral-800 px-2 py-1.5 text-lg disabled:opacity-40 hover:bg-neutral-700 transition"
+          >
+            ⬆
+          </button>
+
+          <button
+            disabled={i === packages.length - 1}
+            onClick={() => movePackage(p.id, "down")}
+            className="rounded-md bg-neutral-800 px-2 py-1.5 text-lg disabled:opacity-40 hover:bg-neutral-700 transition"
+          >
+            ⬇
+          </button>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
     </div>
   );
 }

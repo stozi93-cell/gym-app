@@ -50,7 +50,7 @@ export default function Login() {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-brand-blue-900 via-brand-blue-700 to-brand-green-900 px-4">
       <div className="flex w-full max-w-md flex-col items-center -mt-10">
-        <Logo className="-mb-4 h-40 select-none" />
+        <Logo className="-mb-4 h-28 select-none" />
 
         <div className="w-full rounded-3xl bg-neutral-900/90 p-8 shadow-2xl backdrop-blur-md">
           <h1 className="mb-6 text-center text-3xl font-semibold text-white">
@@ -66,7 +66,7 @@ export default function Login() {
               value={email}
               onChange={(v) => updateField("email", v)}
               error={errors.email}
-              placeholder="vas@email.com"
+              placeholder="vaš@email.com"
             />
 
             <InputField

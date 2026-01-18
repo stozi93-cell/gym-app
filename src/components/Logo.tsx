@@ -1,11 +1,17 @@
 type LogoProps = {
+  variant?: "full" | "icon";
   className?: string;
 };
 
-export function Logo({ className }: LogoProps) {
+export function Logo({ variant = "icon", className }: LogoProps) {
+  const src =
+    variant === "full"
+      ? "/assets/brand/full-logo.png"
+      : "/assets/brand/icon.png";
+
   return (
     <img
-      src="/brand/logo-r.png"
+      src={src}
       alt="ReMotion"
       className={className}
       draggable={false}

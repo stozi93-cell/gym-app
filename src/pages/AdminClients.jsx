@@ -25,7 +25,10 @@ export default function AdminClients() {
   async function load() {
     const userSnap = await getDocs(collection(db, "users"));
     const subSnap = await getDocs(
-      query(collection(db, "clientSubscriptions"), where("active", "==", true))
+      query(
+        collection(db, "clientSubscriptions"),
+        where("active", "==", true)
+      )
     );
 
     const activeSubs = {};
@@ -38,7 +41,10 @@ export default function AdminClients() {
         : new Date(cs.endDate);
 
       if (endDate >= today) {
-        activeSubs[cs.userId] = { endDate, subId: d.id };
+        activeSubs[cs.userId] = {
+          endDate,
+          subId: d.id,
+        };
       }
     }
 
@@ -61,38 +67,44 @@ export default function AdminClients() {
 
   function applySort(list) {
     const sorted = [...list];
+
     if (sort === "name-asc") {
       sorted.sort((a, b) =>
-        `${a.name} ${a.surname}`.localeCompare(`${b.name} ${b.surname}`)
+        `${a.name} ${a.surname}`.localeCompare(
+          `${b.name} ${b.surname}`
+        )
       );
     }
+
     if (sort === "name-desc") {
       sorted.sort((a, b) =>
-        `${b.name} ${b.surname}`.localeCompare(`${a.name} ${a.surname}`)
+        `${b.name} ${b.surname}`.localeCompare(
+          `${a.name} ${a.surname}`
+        )
       );
     }
+
     if (sort === "sub") {
       sorted.sort(
-        (a, b) => (b.hasActiveSub === true) - (a.hasActiveSub === true)
+        (a, b) =>
+          (b.hasActiveSub === true) -
+          (a.hasActiveSub === true)
       );
     }
+
     return sorted;
   }
 
-  const visibleClients = applySort(applyFilter(clients)).filter((c) =>
+  const visibleClients = applySort(
+    applyFilter(clients)
+  ).filter((c) =>
     `${c.name} ${c.surname} ${c.email}`
       .toLowerCase()
       .includes(search.toLowerCase())
   );
 
   const formatDate = (d) =>
-    d?.toDate
-      ? d.toDate().toLocaleDateString("sr-Latn-RS", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        })
-      : d instanceof Date
+    d instanceof Date
       ? d.toLocaleDateString("sr-Latn-RS", {
           day: "2-digit",
           month: "long",
@@ -100,7 +112,6 @@ export default function AdminClients() {
         })
       : "—";
 
-  // ✅ EXTEND BY 7 DAYS (FIXED)
   const prolongSubscription = async (subId) => {
     const subRef = doc(db, "clientSubscriptions", subId);
     const subSnap = await getDoc(subRef);
@@ -111,7 +122,7 @@ export default function AdminClients() {
       : new Date(subData.endDate);
 
     const newEnd = new Date(currentEnd);
-    newEnd.setDate(newEnd.getDate() + 7); // ⬅️ 7 days
+    newEnd.setDate(newEnd.getDate() + 7);
 
     await updateDoc(subRef, { endDate: newEnd });
     alert("Pretplata produžena 7 dana");
@@ -119,95 +130,111 @@ export default function AdminClients() {
   };
 
   return (
-    <div>
-      <h2>Lista klijenata</h2>
+    <div className="px-2 py-1 space-y-6">
+      <h1 className="px-2 text-xl font-semibold text-white">
+        Klijenti
+      </h1>
 
-      <div style={{ marginBottom: 15 }}>
+      {/* TOOLS */}
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
         <input
           type="text"
-          placeholder="Pretraga..."
+          placeholder="Pretraga…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ marginRight: 10 }}
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm text-white placeholder:text-neutral-400"
         />
 
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          style={{ marginRight: 10 }}
-        >
-          <option value="all">Svi klijenti</option>
-          <option value="active">Samo aktivni</option>
-          <option value="inactive">Bez pretplate</option>
-        </select>
+        <div className="flex gap-2">
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="flex-1 rounded bg-neutral-800 px-2 py-1 text-sm"
+          >
+            <option value="all">Svi</option>
+            <option value="active">Aktivni</option>
+            <option value="inactive">Bez pretplate</option>
+          </select>
 
-        <select value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="name-asc">Ime A–Z</option>
-          <option value="name-desc">Ime Z–A</option>
-          <option value="sub">Aktivne pretplate prve</option>
-        </select>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="flex-1 rounded bg-neutral-800 px-2 py-1 text-sm"
+          >
+            <option value="name-asc">Ime A–Z</option>
+            <option value="name-desc">Ime Z–A</option>
+            <option value="sub">Aktivne prve</option>
+          </select>
+        </div>
       </div>
 
-      <table border="1" cellPadding="6" style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th>Ime</th>
-            <th>Email</th>
-            <th>Pretplata</th>
-            <th>Akcije</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visibleClients.map((c) => (
-            <tr key={c.id}>
-              <td>
+      {/* CLIENT LIST */}
+      <div className="space-y-3">
+        {visibleClients.map((c) => (
+          <div
+            key={c.id}
+            className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-2"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
                 <Link
-  to={`/profil/${c.id}`}
-  style={{
-    fontWeight: "bold",
-    textDecoration: "none",
-    color: "#007bff",
-  }}
->
-  {c.name} {c.surname}
-</Link>
+                  to={`/profil/${c.id}`}
+                  className="block truncate font-medium text-blue-400"
+                >
+                  {c.name} {c.surname}
+                </Link>
+                <p className="truncate text-xs text-neutral-400">
+                  {c.email}
+                </p>
+              </div>
 
-              </td>
-              <td>{c.email}</td>
-              <td>
-                {c.hasActiveSub ? (
-                  <span style={{ color: "green" }}>
-                    Aktivna (do {formatDate(c.subEnd)})
-                  </span>
-                ) : (
-                  <span style={{ color: "red" }}>Nema</span>
-                )}
-              </td>
-              <td>
-                {c.hasActiveSub && (
-                  <button
-                    style={{ marginLeft: 5 }}
-                    onClick={() => prolongSubscription(c.activeSubId)}
-                  >
-                    Produži
-                  </button>
-                )}
+              {c.hasActiveSub ? (
+                <span className="text-xs font-medium text-green-500">
+                  Aktivna
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-red-400">
+                  Nema
+                </span>
+              )}
+            </div>
 
+            {c.hasActiveSub && (
+              <p className="text-xs text-neutral-400">
+                Važi do {formatDate(c.subEnd)}
+              </p>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              {c.hasActiveSub && (
                 <button
-  style={{ marginLeft: 5 }}
-  onClick={() => navigate(`/paketi?clientId=${c.id}`)}
->
-  + Pretplata
-</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                  onClick={() =>
+                    prolongSubscription(c.activeSubId)
+                  }
+                  className="text-sm text-green-400"
+                >
+                  Produži
+                </button>
+              )}
 
-      {!visibleClients.length && (
-        <p style={{ marginTop: 10 }}>Nema rezultata.</p>
-      )}
+              <button
+                onClick={() =>
+                  navigate(`/paketi?clientId=${c.id}`)
+                }
+                className="text-sm text-blue-400"
+              >
+                Dodeli paket
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {!visibleClients.length && (
+          <p className="px-4 text-sm text-neutral-400">
+            Nema rezultata.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

@@ -4,15 +4,28 @@ import { useAuth } from "../context/AuthContext";
 import BottomNav from "./BottomNav";
 import { Logo } from "./Logo";
 import { useLocation } from "react-router-dom";
+import LogoutIcon from "./icons/LogoutIcon";
 
 export default function AppShell({ children }) {
   const { profile } = useAuth();
   const location = useLocation();
 
-  // Adjust this if your chat route path differs
+  // Chat pages: hide header entirely
   const isChatPage =
-  location.pathname === "/chat" ||
-  location.pathname.startsWith("/admin-chat/");
+    location.pathname === "/chat" ||
+    location.pathname.startsWith("/admin-chat/");
+
+  // Full logo on core sections
+  const showFullLogo =
+    location.pathname === "/" ||
+    location.pathname.startsWith("/bookings") ||
+    location.pathname.startsWith("/profil") ||
+    location.pathname.startsWith("/raspored") ||
+    location.pathname.startsWith("/klijenti") ||
+    location.pathname.startsWith("/paketi") ||
+    location.pathname.startsWith("/naplate") ||
+    location.pathname.startsWith("/poruke") ||
+    location.pathname.startsWith("/forum");
 
   return (
     <div
@@ -32,19 +45,28 @@ export default function AppShell({ children }) {
             flex h-14 items-center justify-between
             border-b border-border-dark
             bg-black/20 backdrop-blur-md
-            px-4
+            px-1
           "
         >
-          <div className="flex items-center gap-2">
-            <Logo className="h-8" />
+          <div className="flex items-center">
+            <Logo
+              variant={showFullLogo ? "full" : "icon"}
+              className={showFullLogo ? "h-20" : "h-16"}
+            />
           </div>
 
           <button
-            onClick={() => signOut(auth)}
-            className="text-sm text-text-secondaryDark hover:text-white transition"
-          >
-            Odjava
-          </button>
+  onClick={() => signOut(auth)}
+  aria-label="Odjava"
+  className="
+    p-2
+    text-text-secondaryDark
+    hover:text-white
+    transition
+  "
+>
+  <LogoutIcon className="h-5 w-5" />
+</button>
         </header>
       )}
 

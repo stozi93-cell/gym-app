@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
-import {
-  collection,
-  getDocs,
-  updateDoc,
-  doc
-} from "firebase/firestore";
+import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Link } from "react-router-dom";
+
+const INITIAL_LIMIT = 1;
 
 export default function AdminBilling() {
   const [invoices, setInvoices] = useState([]);
@@ -14,10 +11,9 @@ export default function AdminBilling() {
 
   const [searchClient, setSearchClient] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-
   const [showAll, setShowAll] = useState(false);
 
-  // Payments overview
+  // overview
   const [overviewInvoices, setOverviewInvoices] = useState([]);
   const [overviewStart, setOverviewStart] = useState("");
   const [overviewEnd, setOverviewEnd] = useState("");
@@ -36,56 +32,49 @@ export default function AdminBilling() {
 
   async function loadInvoices() {
     const snap = await getDocs(collection(db, "billing"));
+    const data = snap.docs
+      .map((d) => {
+        const b = d.data();
+        return {
+          id: d.id,
+          clientId: b.clientId,
+          clientName: b.clientName || "—",
+          subscriptionName: b.subscriptionName || "—",
+          amount: b.amount || 0,
+          paidAmount: b.paidAmount || 0,
+          status: b.status,
+          createdAt: b.createdAt?.toDate?.() || null,
+          paidAt: b.paidAt?.toDate?.() || null,
+        };
+      })
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
-    const data = snap.docs.map(d => {
-      const b = d.data();
-      return {
-        id: d.id,
-        clientId: b.clientId,
-        clientName: b.clientName || "-",
-        subscriptionName: b.subscriptionName || "-",
-        amount: b.amount || 0,
-        paidAmount: b.paidAmount || 0,
-        status: b.status,
-        createdAt: b.createdAt?.toDate ? b.createdAt.toDate() : null,
-        paidAt: b.paidAt?.toDate ? b.paidAt.toDate() : null
-      };
-    });
-
-    data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     setInvoices(data);
   }
 
-  const formatDate = d =>
-    d instanceof Date
+  const statusMeta = {
+    pending: { label: "Na čekanju", color: "bg-red-900/30 text-red-300" },
+    partially_paid: {
+      label: "Delimično plaćeno",
+      color: "bg-yellow-900/30 text-yellow-300",
+    },
+    paid: { label: "Plaćeno", color: "bg-green-900/30 text-green-300" },
+    cancelled: {
+      label: "Otkazano",
+      color: "bg-neutral-800 text-neutral-400",
+    },
+  };
+
+  const formatDate = (d) =>
+    d
       ? d.toLocaleDateString("sr-Latn-RS", {
           day: "2-digit",
           month: "long",
-          year: "numeric"
+          year: "numeric",
         })
       : "—";
 
-  const statusLabel = status => {
-    switch (status) {
-      case "pending": return "Na čekanju";
-      case "partially_paid": return "Delimično plaćeno";
-      case "paid": return "Plaćeno";
-      case "cancelled": return "Otkazano";
-      default: return status;
-    }
-  };
-
-  const statusColor = status => {
-    switch (status) {
-      case "pending": return "#f8d7da";
-      case "partially_paid": return "#fff3cd";
-      case "paid": return "#d4edda";
-      case "cancelled": return "#e2e3e5";
-      default: return "transparent";
-    }
-  };
-
-  const handlePartialPayment = async inv => {
+  async function handlePartialPayment(inv) {
     const max = inv.amount - inv.paidAmount;
     const input = prompt(`Unesite iznos (maks ${max} RSD):`);
     if (!input) return;
@@ -101,93 +90,112 @@ export default function AdminBilling() {
     await updateDoc(doc(db, "billing", inv.id), {
       paidAmount: newPaid,
       status: newPaid === inv.amount ? "paid" : "partially_paid",
-      paidAt: new Date()
+      paidAt: new Date(),
     });
 
     loadInvoices();
-  };
+  }
 
-  const handleCancel = async inv => {
+  async function handleCancel(inv) {
     if (!window.confirm("Otkaži fakturu?")) return;
 
     await updateDoc(doc(db, "billing", inv.id), {
-      status: "cancelled"
+      status: "cancelled",
     });
 
     loadInvoices();
-  };
+  }
 
-  const applyFilters = () => {
+  function applyFilters() {
     let list = [...invoices];
 
     if (searchClient) {
-      const s = searchClient.toLowerCase();
-      list = list.filter(i => i.clientName.toLowerCase().includes(s));
+      list = list.filter((i) =>
+        i.clientName.toLowerCase().includes(searchClient.toLowerCase())
+      );
     }
 
     if (filterStatus !== "all") {
-      list = list.filter(i => i.status === filterStatus);
+      list = list.filter((i) => i.status === filterStatus);
     }
 
     setFilteredInvoices(list);
-  };
+  }
 
-  // ---- Payments Overview ----
-
-  const applyPresetFilter = preset => {
-    const today = new Date();
+  // ─────────────────────────────
+  // Overview helpers
+  // ─────────────────────────────
+  function applyOverviewPreset(preset) {
+    const now = new Date();
     let start, end;
 
     switch (preset) {
       case "today":
-        start = new Date(today.setHours(0, 0, 0, 0));
-        end = new Date(today.setHours(23, 59, 59, 999));
+        start = new Date(now.setHours(0, 0, 0, 0));
+        end = new Date(now.setHours(23, 59, 59, 999));
         break;
-      case "thisWeek": {
-        const d = today.getDay() || 7;
-        start = new Date(today);
-        start.setDate(today.getDate() - d + 1);
+
+      case "week": {
+        const day = now.getDay() || 7;
+        start = new Date(now);
+        start.setDate(now.getDate() - day + 1);
         start.setHours(0, 0, 0, 0);
         end = new Date(start);
         end.setDate(start.getDate() + 6);
         end.setHours(23, 59, 59, 999);
         break;
       }
-      case "thisMonth":
-        start = new Date(today.getFullYear(), today.getMonth(), 1);
-        end = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+
+      case "month":
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        end = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59
+        );
         break;
+
       case "lastMonth":
-        start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        end = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
+        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        end = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          0,
+          23,
+          59,
+          59
+        );
         break;
+
       default:
-        start = null;
-        end = null;
+        return;
     }
 
-    setOverviewStart(start ? start.toISOString().slice(0, 10) : "");
-    setOverviewEnd(end ? end.toISOString().slice(0, 10) : "");
-  };
+    setOverviewStart(start.toISOString().slice(0, 10));
+    setOverviewEnd(end.toISOString().slice(0, 10));
+  }
 
-  const applyOverviewFilter = () => {
+  function applyOverviewFilter() {
     let list = invoices.filter(
-      i => i.status === "paid" || i.status === "partially_paid"
+      (i) => i.status === "paid" || i.status === "partially_paid"
     );
 
     if (overviewStart) {
       const s = new Date(overviewStart);
-      list = list.filter(i => i.paidAt && i.paidAt >= s);
+      list = list.filter((i) => i.paidAt && i.paidAt >= s);
     }
 
     if (overviewEnd) {
       const e = new Date(overviewEnd);
       e.setHours(23, 59, 59, 999);
-      list = list.filter(i => i.paidAt && i.paidAt <= e);
+      list = list.filter((i) => i.paidAt && i.paidAt <= e);
     }
 
     setOverviewInvoices(list);
-  };
+  }
 
   const overviewTotal = overviewInvoices.reduce(
     (sum, i) => sum + i.paidAmount,
@@ -196,20 +204,26 @@ export default function AdminBilling() {
 
   const visibleInvoices = showAll
     ? filteredInvoices
-    : filteredInvoices.slice(0, 10);
+    : filteredInvoices.slice(0, INITIAL_LIMIT);
 
   return (
-    <div>
-      <h2>Fakturisanje</h2>
+    <div className="px-2 py-1 space-y-6">
+      <h1 className="px-2 text-xl font-semibold text-white">Fakture</h1>
 
       {/* Filters */}
-      <div style={{ marginBottom: 10, display: "flex", gap: 10 }}>
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
         <input
           placeholder="Pretraga klijenta"
           value={searchClient}
-          onChange={e => setSearchClient(e.target.value)}
+          onChange={(e) => setSearchClient(e.target.value)}
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
         />
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+        >
           <option value="all">Sve</option>
           <option value="pending">Na čekanju</option>
           <option value="partially_paid">Delimično plaćeno</option>
@@ -218,104 +232,121 @@ export default function AdminBilling() {
         </select>
       </div>
 
-      {/* Billing Table */}
-      <table border="1" width="100%" cellPadding="5">
-        <thead>
-          <tr>
-            <th>Klijent</th>
-            <th>Pretplata</th>
-            <th>Iznos</th>
-            <th>Status</th>
-            <th>Akcija</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visibleInvoices.length === 0 ? (
-            <tr><td colSpan="5" align="center">Nema faktura</td></tr>
-          ) : (
-            visibleInvoices.map(inv => (
-              <tr key={inv.id} style={{ background: statusColor(inv.status) }}>
-                <td>
-                  <Link to={`/profil/${inv.clientId}`}>
-                    {inv.clientName}
-                  </Link>
-                </td>
-                <td>{inv.subscriptionName}</td>
-                <td>{inv.paidAmount} / {inv.amount}</td>
-                <td>{statusLabel(inv.status)}</td>
-                <td>
-                  {inv.status !== "paid" && inv.status !== "cancelled" && (
-                    <>
-                      <button onClick={() => handlePartialPayment(inv)}>Uplata</button>
-                      <button onClick={() => handleCancel(inv)}>Otkaži</button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+      {/* Invoice list */}
+      <div className="space-y-3">
+        {visibleInvoices.map((inv) => {
+          const meta = statusMeta[inv.status];
+          return (
+            <div
+              key={inv.id}
+              className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-2"
+            >
+              <Link
+                to={`/profil/${inv.clientId}`}
+                className="font-medium text-blue-400"
+              >
+                {inv.clientName}
+              </Link>
 
-      {filteredInvoices.length > 10 && (
-        <button style={{ marginTop: 10 }} onClick={() => setShowAll(!showAll)}>
+              <p className="text-sm text-neutral-300">
+                {inv.subscriptionName}
+              </p>
+
+              <p className="text-sm">
+                {inv.paidAmount} / {inv.amount} RSD
+              </p>
+
+              <span
+                className={`inline-block rounded px-2 py-0.5 text-xs ${meta.color}`}
+              >
+                {meta.label}
+              </span>
+
+              {inv.status !== "paid" && inv.status !== "cancelled" && (
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => handlePartialPayment(inv)}
+                    className="flex-1 rounded bg-blue-600 py-1.5 text-sm text-white"
+                  >
+                    Uplata
+                  </button>
+                  <button
+                    onClick={() => handleCancel(inv)}
+                    className="flex-1 rounded bg-red-600 py-1.5 text-sm text-white"
+                  >
+                    Otkaži
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {filteredInvoices.length > INITIAL_LIMIT && (
+        <button
+          onClick={() => setShowAll(!showAll)}
+          className="mx-2 text-sm text-blue-400"
+        >
           {showAll ? "Prikaži manje" : "Prikaži sve"}
         </button>
       )}
 
-      {/* Payments Overview */}
-      <h3 style={{ marginTop: 30 }}>Pregled uplata</h3>
+      {/* Payments overview */}
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
+        <h2 className="text-lg font-medium text-white">
+          Pregled uplata
+        </h2>
 
-      <div style={{ marginBottom: 10, display: "flex", gap: 10 }}>
-        <button onClick={() => applyPresetFilter("today")}>Danas</button>
-        <button onClick={() => applyPresetFilter("thisWeek")}>Ove nedelje</button>
-        <button onClick={() => applyPresetFilter("thisMonth")}>Ovaj mesec</button>
-        <button onClick={() => applyPresetFilter("lastMonth")}>Prošli mesec</button>
-        <label>
-          Od:
-          <input type="date" value={overviewStart} onChange={e => setOverviewStart(e.target.value)} />
-        </label>
-        <label>
-          Do:
-          <input type="date" value={overviewEnd} onChange={e => setOverviewEnd(e.target.value)} />
-        </label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => applyOverviewPreset("today")}
+            className="rounded bg-neutral-800 px-3 py-1 text-xs text-white"
+          >
+            Danas
+          </button>
+          <button
+            onClick={() => applyOverviewPreset("week")}
+            className="rounded bg-neutral-800 px-3 py-1 text-xs text-white"
+          >
+            Ova nedelja
+          </button>
+          <button
+            onClick={() => applyOverviewPreset("month")}
+            className="rounded bg-neutral-800 px-3 py-1 text-xs text-white"
+          >
+            Ovaj mesec
+          </button>
+          <button
+            onClick={() => applyOverviewPreset("lastMonth")}
+            className="rounded bg-neutral-800 px-3 py-1 text-xs text-white"
+          >
+            Prošli mesec
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="date"
+            value={overviewStart}
+            onChange={(e) => setOverviewStart(e.target.value)}
+            className="rounded bg-neutral-800 px-2 py-1 text-sm"
+          />
+          <input
+            type="date"
+            value={overviewEnd}
+            onChange={(e) => setOverviewEnd(e.target.value)}
+            className="rounded bg-neutral-800 px-2 py-1 text-sm"
+          />
+        </div>
+
+        <p className="text-sm text-neutral-300">
+          Ukupno naplaćeno:{" "}
+          <span className="font-medium text-green-400">
+            {overviewTotal} RSD
+          </span>
+        </p>
       </div>
-
-      <table border="1" width="100%" cellPadding="5">
-        <thead>
-          <tr>
-            <th>Klijent</th>
-            <th>Plaćeno (RSD)</th>
-            <th>Datum uplate</th>
-          </tr>
-        </thead>
-        <tbody>
-          {overviewInvoices.length === 0 ? (
-            <tr><td colSpan="3" align="center">Nema uplata</td></tr>
-          ) : (
-            overviewInvoices.map(inv => (
-              <tr key={inv.id}>
-                <td>
-                  <Link to={`/profil/${inv.clientId}`}>
-                    {inv.clientName}
-                  </Link>
-                </td>
-                <td>{inv.paidAmount}</td>
-                <td>{formatDate(inv.paidAt)}</td>
-              </tr>
-            ))
-          )}
-        </tbody>
-        {overviewInvoices.length > 0 && (
-          <tfoot>
-            <tr>
-              <td><b>Ukupno</b></td>
-              <td><b>{overviewTotal}</b></td>
-              <td></td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
     </div>
   );
 }

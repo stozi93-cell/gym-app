@@ -351,9 +351,11 @@ const PAYMENT_STATUS_LABELS = {
     />
   </div>
 )}
-        <span className="ml-auto font-medium text-white">
-          {c || 0} / {allowed}
-        </span>
+       <div className="ml-auto flex w-3 justify-end items-center gap-1 font-medium text-white tabular-nums">
+  <span className="w-2 text-right">{c || 0}</span>
+  <span className="opacity-60">/</span>
+  <span className="w-6 text-left">{allowed}</span>
+</div>
         
       </>
     );
@@ -361,11 +363,22 @@ const PAYMENT_STATUS_LABELS = {
 
 
                     {role === "admin" && (
-                      <span className="flex gap-2">
-                        <button onClick={()=>changeCheckIn(s.id,i,1)}>+</button>
-                        <button onClick={()=>changeCheckIn(s.id,i,-1)}>-</button>
-                      </span>
-                    )}
+  <div className="flex items-center gap-1 -mx-1.5">
+    <button
+      onClick={() => changeCheckIn(s.id, i, -1)}
+      className="h-8 w-8 rounded-md bg-neutral-800 text-white text-lg font-medium hover:bg-neutral-700 active:scale-95"
+    >
+      +
+    </button>
+    <button
+      onClick={() => changeCheckIn(s.id, i, 1)}
+      className="h-8 w-8 rounded-md bg-neutral-800 text-white text-lg font-medium hover:bg-neutral-700 active:scale-95"
+    >
+      -
+    </button>
+  </div>
+)}
+
                   </li>
                 ))}
               </ul>

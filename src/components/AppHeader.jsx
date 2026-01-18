@@ -1,9 +1,22 @@
 // src/components/AppHeader.jsx
 import { signOut } from "firebase/auth";
+import { useLocation, matchPath } from "react-router-dom";
 import { auth } from "../firebase";
 import { Logo } from "./Logo";
 
+const ROOT_ROUTES = [
+  "/",
+  "/bookings/*",
+  "/forum/*",
+];
+
 export default function AppHeader({ profile }) {
+  const location = useLocation();
+
+  const isRootScreen = ROOT_ROUTES.some(route =>
+    matchPath(route, location.pathname)
+  );
+
   return (
     <header
       className="
@@ -13,10 +26,15 @@ export default function AppHeader({ profile }) {
         bg-surface-light dark:bg-surface-dark
       "
     >
-      <div className="h-6">
-        <Logo />
+      {/* Logo */}
+      <div className="flex items-center">
+        <Logo
+          variant={isRootScreen ? "full" : "icon"}
+          className={isRootScreen ? "h-6" : "h-7"}
+        />
       </div>
 
+      {/* Logout */}
       <button
         onClick={() => signOut(auth)}
         className="

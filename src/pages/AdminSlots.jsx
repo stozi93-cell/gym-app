@@ -258,7 +258,7 @@ export default function AdminSlots() {
   if (loading) return <p className="p-4 text-neutral-400">Učitavanje…</p>;
 
   return (
-    <div className="px-2 py-6 space-y-6">
+    <div className="px-2 py-1 space-y-6">
       <h1 className="px-2 text-xl font-semibold text-white">
         Raspored
       </h1>
@@ -435,7 +435,7 @@ export default function AdminSlots() {
                                 </button>
                               ) : (
                                 <span className="text-green-500">
-                                  Čekiran
+                                  ✔︎
                                 </span>
                               )}
                               <button
