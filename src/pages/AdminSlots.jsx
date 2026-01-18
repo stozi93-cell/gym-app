@@ -14,11 +14,45 @@ import { Link } from "react-router-dom";
 import { db } from "../firebase";
 
 const MAX_CAPACITY = 5;
+const WINDOW_DAYS = 7;
+
+/* ─────────────────────────────
+   Slot generation (shared model)
+───────────────────────────── */
+function generateSlotsFromTemplates(templates, startDate, days) {
+  const out = [];
+
+  for (let i = 0; i < days; i++) {
+    const base = new Date(startDate);
+    base.setDate(base.getDate() + i);
+    const weekday = base.getDay();
+
+    templates.forEach((tpl) => {
+      if (!tpl.active) return;
+      if (!tpl.days.includes(weekday)) return;
+
+      const [h, m] = tpl.time.split(":");
+      const d = new Date(base);
+      d.setHours(Number(h), Number(m), 0, 0);
+
+      out.push({
+        id: `tpl_${tpl.id}_${d.toISOString()}`,
+        timestamp: d,
+        generated: true,
+        templateId: tpl.id,
+        locked: false,
+      });
+    });
+  }
+
+  return out;
+}
 
 export default function AdminSlots() {
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [users, setUsers] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [date, setDate] = useState("");
@@ -30,93 +64,134 @@ export default function AdminSlots() {
     loadData();
   }, []);
 
-  async function loadData() {
+  async function loadData(dateOverride) {
     setLoading(true);
 
+    const start = dateOverride ?? new Date();
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + WINDOW_DAYS);
+
+    const tplSnap = await getDocs(collection(db, "slotTemplates"));
+    const tplData = tplSnap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+    setTemplates(tplData);
+
     const slotSnap = await getDocs(
-      query(collection(db, "slots"), orderBy("timestamp"))
+      query(
+        collection(db, "slots"),
+        where("timestamp", ">=", start),
+        where("timestamp", "<=", end),
+        orderBy("timestamp")
+      )
     );
-    setSlots(slotSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+    const realSlots = slotSnap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+      timestamp: d.data().timestamp.toDate(),
+      generated: false,
+    }));
+
+    const generatedSlots = generateSlotsFromTemplates(
+      tplData,
+      start,
+      WINDOW_DAYS
+    ).filter(
+      (g) =>
+        !realSlots.some(
+          (s) => s.timestamp.getTime() === g.timestamp.getTime()
+        )
+    );
+
+    setSlots(
+      [...realSlots, ...generatedSlots].sort(
+        (a, b) => a.timestamp - b.timestamp
+      )
+    );
 
     const bookingSnap = await getDocs(collection(db, "bookings"));
-    setBookings(bookingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    setBookings(
+      bookingSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    );
 
     const userSnap = await getDocs(collection(db, "users"));
-    setUsers(userSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+    setUsers(
+      userSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    );
 
     setLoading(false);
   }
 
-  /* ─────────────────────────────
-     Helpers
-  ───────────────────────────── */
-  function getSlotBookings(slotId) {
-    return bookings.filter(b => b.slotId === slotId);
+  /* helpers */
+  const isPast = (slot) => slot.timestamp < new Date();
+  const slotBookings = (slotId) =>
+    bookings.filter((b) => b.slotId === slotId);
+
+  async function materializeSlot(slot, extra = {}) {
+    if (!slot.generated) return slot.id;
+
+    const ref = await addDoc(collection(db, "slots"), {
+      timestamp: slot.timestamp,
+      locked: false,
+      ...extra,
+    });
+
+    return ref.id;
   }
 
-  function getSlotState(slot) {
-    const now = new Date();
-    const slotTime = slot.timestamp.toDate();
-    const count = getSlotBookings(slot.id).length;
-
-    if (slot.locked) return "locked";
-    if (slotTime < now) return "past";
-    if (count >= MAX_CAPACITY && !overbook) return "full";
-    if (count >= MAX_CAPACITY - 1) return "warning";
-    return "available";
-  }
-
-  const stateStyles = {
-    past: "bg-neutral-800/50 text-neutral-400",
-    full: "bg-red-900/30",
-    warning: "bg-yellow-900/30",
-    available: "bg-green-900/30",
-    locked: "bg-neutral-900 border border-neutral-700",
-  };
-
-  /* ─────────────────────────────
-     Actions
-  ───────────────────────────── */
+  /* actions */
   async function createSlot() {
-    if (!date || !time) return alert("Unesite datum i vreme");
+    if (!date || !time) return;
 
-    const ts = new Date(`${date}T${time}:00`);
     await addDoc(collection(db, "slots"), {
-      timestamp: ts,
+      timestamp: new Date(`${date}T${time}:00`),
       locked: false,
     });
 
     setDate("");
     setTime("");
-    loadData();
+    loadData(filterDate ? new Date(filterDate) : undefined);
   }
 
   async function adminBook(slot, userId) {
-    if (!userId || slot.locked) return;
+    if (!userId || slot.locked || isPast(slot)) return;
 
-    const count = getSlotBookings(slot.id).length;
-    if (count >= MAX_CAPACITY && !overbook) {
+    if (
+      slotBookings(slot.id).length >= MAX_CAPACITY &&
+      !overbook
+    ) {
       return alert("Slot je pun.");
     }
 
+    const slotId = await materializeSlot(slot);
+
     await addDoc(collection(db, "bookings"), {
-      slotId: slot.id,
+      slotId,
       userId,
       createdAt: new Date(),
       checkedIn: false,
     });
 
-    loadData();
+    loadData(filterDate ? new Date(filterDate) : undefined);
   }
 
   async function toggleLock(slot) {
-    await updateDoc(doc(db, "slots", slot.id), {
-      locked: !slot.locked,
-    });
-    loadData();
+    if (slot.generated) {
+      await materializeSlot(slot, { locked: true });
+    } else {
+      await updateDoc(doc(db, "slots", slot.id), {
+        locked: !slot.locked,
+      });
+    }
+
+    loadData(filterDate ? new Date(filterDate) : undefined);
   }
 
-  async function handleCheckIn(booking, slotTimestamp) {
+  async function handleCheckIn(booking, ts) {
     if (booking.checkedIn) return;
 
     await updateDoc(doc(db, "bookings", booking.id), {
@@ -138,9 +213,8 @@ export default function AdminSlots() {
     if (!sub.startDate) return loadData();
 
     const start = sub.startDate.toDate();
-    const checkDate = slotTimestamp.toDate();
     const weekIndex = Math.floor(
-      (checkDate - start) / (7 * 24 * 60 * 60 * 1000)
+      (ts - start) / (7 * 24 * 60 * 60 * 1000)
     );
 
     const arr = sub.checkInsArray || [];
@@ -150,64 +224,55 @@ export default function AdminSlots() {
       checkInsArray: arr,
     });
 
-    loadData();
+    loadData(filterDate ? new Date(filterDate) : undefined);
   }
 
-  async function cancelBooking(booking) {
-    await deleteDoc(doc(db, "bookings", booking.id));
-    loadData();
+  async function cancelBooking(b) {
+    await deleteDoc(doc(db, "bookings", b.id));
+    loadData(filterDate ? new Date(filterDate) : undefined);
   }
 
-  /* ─────────────────────────────
-     Grouping & filtering
-  ───────────────────────────── */
-  const groupedSlots = slots.reduce((acc, slot) => {
-    const key = slot.timestamp.toDate().toISOString().split("T")[0];
-    acc[key] = acc[key] || [];
-    acc[key].push(slot);
+  /* grouping */
+  const groupedSlots = slots.reduce((acc, s) => {
+    const key = s.timestamp.toISOString().split("T")[0];
+    (acc[key] ||= []).push(s);
     return acc;
   }, {});
 
-  const todayKey = new Date().toISOString().split("T")[0];
+  const todayStr = new Date().toISOString().split("T")[0];
 
   const visibleGroups = filterDate
     ? { [filterDate]: groupedSlots[filterDate] || [] }
     : Object.fromEntries(
         Object.entries(groupedSlots).filter(
-          ([dateKey]) => dateKey >= todayKey
+          ([k]) => k >= todayStr
         )
       );
 
-  if (loading) {
-    return (
-      <p className="p-4 text-neutral-400">
-        Učitavanje termina…
-      </p>
-    );
-  }
+  const orderedKeys = Object.keys(visibleGroups).sort();
+  const defaultOpenKey =
+    orderedKeys.includes(todayStr)
+      ? todayStr
+      : orderedKeys[0];
+
+  if (loading) return <p className="p-4 text-neutral-400">Učitavanje…</p>;
 
   return (
-    <div className="px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold text-white">
+    <div className="px-2 py-6 space-y-6">
+      <h1 className="px-2 text-xl font-semibold text-white">
         Raspored
       </h1>
 
-      {/* CONTROLS */}
-      <div className="rounded-xl bg-neutral-900 px-4 py-3 flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={overbook}
-            onChange={e => setOverbook(e.target.checked)}
-          />
-          Dozvoli overbooking
-        </div>
-
+      {/* IZABERI DATUM */}
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-2">
+        <p className="text-sm font-medium text-neutral-200">
+          Izaberi datum
+        </p>
         <div className="flex gap-2">
           <input
             type="date"
             value={filterDate}
-            onChange={e => setFilterDate(e.target.value)}
+            onChange={(e) => setFilterDate(e.target.value)}
             className="rounded bg-neutral-800 px-2 py-1 text-sm"
           />
           {filterDate && (
@@ -221,22 +286,22 @@ export default function AdminSlots() {
         </div>
       </div>
 
-      {/* CREATE SLOT */}
-      <div className="rounded-xl bg-neutral-900 p-4 space-y-3">
+      {/* NOVI TERMIN */}
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-2">
         <p className="text-sm font-medium text-neutral-200">
-  Novi termin
-</p>
-        <div className="flex flex-wrap gap-2">
+          Novi termin
+        </p>
+        <div className="flex gap-2">
           <input
             type="date"
             value={date}
-            onChange={e => setDate(e.target.value)}
+            onChange={(e) => setDate(e.target.value)}
             className="rounded bg-neutral-800 px-2 py-1 text-sm"
           />
           <input
             type="time"
             value={time}
-            onChange={e => setTime(e.target.value)}
+            onChange={(e) => setTime(e.target.value)}
             className="rounded bg-neutral-800 px-2 py-1 text-sm"
           />
           <button
@@ -248,99 +313,114 @@ export default function AdminSlots() {
         </div>
       </div>
 
+      {/* OVERBOOKING */}
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4">
+        <label className="flex items-center gap-3 text-sm text-white">
+          <input
+            type="checkbox"
+            checked={overbook}
+            onChange={(e) => setOverbook(e.target.checked)}
+          />
+          Dozvoli overbooking
+        </label>
+      </div>
+
       {/* SLOTS */}
       <div className="space-y-4">
-        {Object.entries(visibleGroups).map(([dateKey, daySlots]) => {
-          const dateObj = daySlots[0]?.timestamp.toDate();
-          const label = dateObj?.toLocaleDateString(
-            "sr-Latn-RS",
-            { weekday: "long", day: "2-digit", month: "long" }
+        {orderedKeys.map((dateKey) => {
+          const daySlots = visibleGroups[dateKey];
+          const bookingCount = daySlots.reduce(
+            (sum, s) => sum + slotBookings(s.id).length,
+            0
           );
 
           return (
             <details
               key={dateKey}
-              open={dateKey === todayKey}
-              className="rounded-xl bg-neutral-900"
+              open={dateKey === defaultOpenKey}
+              className="rounded-xl bg-neutral-900 mx-2"
             >
               <summary className="cursor-pointer px-4 py-3 font-medium text-white">
-                {label} ({daySlots.length})
+                {new Date(dateKey).toLocaleDateString("sr-Latn-RS", {
+                  weekday: "long",
+                  day: "2-digit",
+                  month: "long",
+                })}{" "}
+                ({bookingCount})
               </summary>
 
-              <div className="p-4 space-y-3">
-                {daySlots.map(slot => {
-                  const slotBookings = getSlotBookings(slot.id);
-                  const state = getSlotState(slot);
+              <div className="p-3 space-y-3">
+                {daySlots.map((slot) => {
+                  const bks = slotBookings(slot.id);
 
                   return (
                     <div
                       key={slot.id}
-                      className={`rounded-lg p-3 ${stateStyles[state]}`}
+                      className="rounded-lg bg-neutral-800 p-3 space-y-2 border border-neutral-700"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-3">
-                          <span className="font-medium">
-                            {slot.timestamp.toDate().toLocaleTimeString(
-                              "sr-RS",
-                              { hour: "2-digit", minute: "2-digit" }
-                            )}
-                          </span>
-                          <span className="text-sm font-medium text-neutral-300">
-  {slotBookings.length} / {MAX_CAPACITY}
-</span>
-                          {slot.locked && (
-                            <span className="text-xs text-red-400">
-                              🔒 Zaključan
-                            </span>
-                          )}
+                      <div className="flex justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-white">
+                            {slot.timestamp.toLocaleTimeString("sr-RS", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                          <p className="text-xs text-neutral-400">
+                            {bks.length} / {MAX_CAPACITY}
+                          </p>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-col items-end gap-1">
+                          <button
+                            onClick={() => toggleLock(slot)}
+                            className="text-xs text-neutral-400"
+                          >
+                            {slot.locked ? "Otključaj" : "Zaključaj"}
+                          </button>
+
                           <select
-                            disabled={slot.locked}
-                            onChange={e =>
+                            disabled={slot.locked || isPast(slot)}
+                            onChange={(e) =>
                               adminBook(slot, e.target.value)
                             }
-                            className="rounded bg-neutral-800 px-2 py-1 text-sm disabled:opacity-50"
+                            className="rounded bg-neutral-700 px-2 py-1 text-xs"
                           >
-                            <option value="">
-                              Rezerviši
-                            </option>
-                            {users.map(u => (
+                            <option value="">Klijent</option>
+                            {users.map((u) => (
                               <option key={u.id} value={u.id}>
                                 {u.name} {u.surname}
                               </option>
                             ))}
                           </select>
-
-                          <button
-                            onClick={() => toggleLock(slot)}
-                            className="text-xs text-neutral-400 hover:text-neutral-200">
-                            {slot.locked ? "Otključaj" : "Zaključaј"}
-                          </button>
                         </div>
                       </div>
 
-                      <div className="mt-2 space-y-1">
-                        {slotBookings.map(b => {
-                          const u = users.find(
-                            u => u.id === b.userId
-                          );
+                      {bks.length === 0 && (
+                        <div className="text-xs text-neutral-500 italic">
+                          Nema rezervacija
+                        </div>
+                      )}
 
-                          return (
-                            <div
-                              key={b.id}
-                              className="flex items-center gap-3 text-sm"
+                      {bks.map((b) => {
+                        const u = users.find(
+                          (u) => u.id === b.userId
+                        );
+                        return (
+                          <div
+                            key={b.id}
+                            className="flex justify-between text-sm"
+                          >
+                            <Link
+                              to={`/profil/${b.userId}`}
+                              className="text-blue-400 truncate"
                             >
-                              <Link
-                                to={`/profil/${b.userId}`}
-                                className="font-medium text-blue-400"
-                              >
-                                {u
-                                  ? `${u.name} ${u.surname}`
-                                  : b.userId}
-                              </Link>
+                              {u
+                                ? `${u.name} ${u.surname}`
+                                : b.userId}
+                            </Link>
 
+                            <div className="flex gap-3">
                               {!b.checkedIn ? (
                                 <button
                                   onClick={() =>
@@ -351,26 +431,23 @@ export default function AdminSlots() {
                                   }
                                   className="text-green-400"
                                 >
-                                  Check-in
+                                  Čekiraj
                                 </button>
                               ) : (
                                 <span className="text-green-500">
-                                  Checked-in
+                                  Čekiran
                                 </span>
                               )}
-
                               <button
-                                onClick={() =>
-                                  cancelBooking(b)
-                                }
+                                onClick={() => cancelBooking(b)}
                                 className="text-red-400"
                               >
                                 Otkaži
                               </button>
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
