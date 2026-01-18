@@ -13,17 +13,16 @@ export default function Register() {
   const navigate = useNavigate();
 
   const [step, setStep] = useState(1);
-  const [subStep2, setSubStep2] = useState(1); // 2a / 2b
+  const [subStep2, setSubStep2] = useState(1);
   const [loading, setLoading] = useState(false);
 
   const [status, setStatus] = useState(null);
-  // { type: "error" | "success", message: string }
-
   const [errors, setErrors] = useState({});
 
   const [form, setForm] = useState({
     email: "",
     password: "",
+    confirmPassword: "",
     ime: "",
     prezime: "",
     telefon: "",
@@ -44,6 +43,15 @@ export default function Register() {
     if (step === 1) {
       if (!form.email) newErrors.email = "Email je obavezan";
       if (!form.password) newErrors.password = "Lozinka je obavezna";
+      if (!form.confirmPassword)
+        newErrors.confirmPassword = "Potvrda lozinke je obavezna";
+      if (
+        form.password &&
+        form.confirmPassword &&
+        form.password !== form.confirmPassword
+      ) {
+        newErrors.confirmPassword = "Lozinke se ne poklapaju";
+      }
     }
 
     if (step === 2 && subStep2 === 1) {
@@ -93,50 +101,48 @@ export default function Register() {
   }
 
   async function submitRegister() {
-  setLoading(true);
-  setStatus(null);
+    setLoading(true);
+    setStatus(null);
 
-  try {
-    const cred = await createUserWithEmailAndPassword(
-      auth,
-      form.email.trim().toLowerCase(),
-      form.password
-    );
+    try {
+      const cred = await createUserWithEmailAndPassword(
+        auth,
+        form.email.trim().toLowerCase(),
+        form.password
+      );
 
-    // Merge full registration data into existing user doc
-    await setDoc(
-      doc(db, "users", cred.user.uid),
-      {
-        name: form.ime || "",
-        surname: form.prezime || "",
-        phone: form.telefon || "",
-        dob: form.datumRodjenja ? new Date(form.datumRodjenja) : null,
-        goals: form.ciljevi || "",
-        healthNotes: form.zdravstveneNapomene || "",
-        email: form.email.trim().toLowerCase(),
-      },
-      { merge: true }
-    );
+      await setDoc(
+        doc(db, "users", cred.user.uid),
+        {
+          name: form.ime || "",
+          surname: form.prezime || "",
+          phone: form.telefon || "",
+          dob: form.datumRodjenja ? new Date(form.datumRodjenja) : null,
+          goals: form.ciljevi || "",
+          healthNotes: form.zdravstveneNapomene || "",
+          email: form.email.trim().toLowerCase(),
+        },
+        { merge: true }
+      );
 
-    setStatus({
-      type: "success",
-      message: "Registracija uspešna 🎉",
-    });
+      setStatus({
+        type: "success",
+        message: "Registracija uspešna 🎉",
+      });
 
-    setTimeout(() => {
-      navigate("/profil");
-    }, 800);
-  } catch (err) {
-    console.error("REGISTER ERROR:", err);
-    setStatus({
-      type: "error",
-      message: "Došlo je do greške. Pokušaj ponovo.",
-    });
-  } finally {
-    setLoading(false);
+      setTimeout(() => {
+        navigate("/profil");
+      }, 800);
+    } catch (err) {
+      console.error("REGISTER ERROR:", err);
+      setStatus({
+        type: "error",
+        message: "Došlo je do greške. Pokušaj ponovo.",
+      });
+    } finally {
+      setLoading(false);
+    }
   }
-}
-
 
   const progress = (step / 4) * 100;
 
@@ -161,10 +167,8 @@ export default function Register() {
           Korak {step} / 4
         </p>
 
-        {/* Status banner */}
         {status && <StatusBanner type={status.type} message={status.message} />}
 
-        {/* CONTENT */}
         <div className="mt-6 space-y-6">
 
           {/* STEP 1 */}
@@ -185,6 +189,16 @@ export default function Register() {
                 value={form.password}
                 onChange={(v) => updateField("password", v)}
                 error={errors.password}
+              />
+
+              <InputField
+                label="Potvrdi lozinku *"
+                type="password"
+                value={form.confirmPassword}
+                onChange={(v) =>
+                  updateField("confirmPassword", v)
+                }
+                error={errors.confirmPassword}
               />
             </>
           )}
@@ -222,7 +236,9 @@ export default function Register() {
                 label="Datum rođenja *"
                 type="date"
                 value={form.datumRodjenja}
-                onChange={(v) => updateField("datumRodjenja", v)}
+                onChange={(v) =>
+                  updateField("datumRodjenja", v)
+                }
                 error={errors.datumRodjenja}
               />
             </>
@@ -249,7 +265,6 @@ export default function Register() {
           )}
         </div>
 
-        {/* NAV */}
         <div className="mt-8 flex justify-between">
           <button
             onClick={back}
@@ -277,7 +292,6 @@ export default function Register() {
           )}
         </div>
 
-        {/* FOOTER */}
         <div className="mt-6 text-center text-sm text-neutral-400">
           Već imaš nalog?
           <div className="mt-3">
