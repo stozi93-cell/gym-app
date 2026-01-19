@@ -5,6 +5,12 @@ import BottomNav from "./BottomNav";
 import { Logo } from "./Logo";
 import { useLocation } from "react-router-dom";
 import LogoutIcon from "./icons/LogoutIcon";
+import { useEffect } from "react";
+
+import {
+  requestNotificationPermission,
+  getFcmToken,
+} from "../firebase-messaging";
 
 export default function AppShell({ children }) {
   const { profile } = useAuth();
@@ -56,17 +62,17 @@ export default function AppShell({ children }) {
           </div>
 
           <button
-  onClick={() => signOut(auth)}
-  aria-label="Odjava"
-  className="
-    p-2
-    text-text-secondaryDark
-    hover:text-white
-    transition
-  "
->
-  <LogoutIcon className="h-5 w-5" />
-</button>
+            onClick={() => signOut(auth)}
+            aria-label="Odjava"
+            className="
+              p-2
+              text-text-secondaryDark
+              hover:text-white
+              transition
+            "
+          >
+            <LogoutIcon className="h-5 w-5" />
+          </button>
         </header>
       )}
 

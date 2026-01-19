@@ -13,6 +13,12 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import {
+  requestNotificationPermission,
+  getFcmToken,
+} from "../firebase-messaging";
+import { saveFcmToken } from "../utils/saveFcmToken";
+
 
 const MAX_VISIBLE_POSTS = 6;
 
@@ -58,6 +64,25 @@ export default function Forum() {
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
   }
+
+  async function enableNotifications() {
+  if (!user) return;
+
+  const granted = await requestNotificationPermission();
+  if (!granted) {
+    alert("Obaveštenja nisu dozvoljena.");
+    return;
+  }
+
+  const token = await getFcmToken();
+  if (!token) {
+    alert("Ovaj uređaj ne podržava obaveštenja.");
+    return;
+  }
+
+  await saveFcmToken(user.uid, token);
+  alert("Obaveštenja su uspešno uključena ✅");
+}
 
   async function loadData() {
     setLoading(true);
@@ -185,9 +210,27 @@ export default function Forum() {
       <div className="w-full max-w-md">
         <div className="bg-neutral-900 rounded-2xl p-4">
 
-          <h2 className="text-lg font-semibold text-gray-100 mb-4 text-center">
-            Obaveštenja
-          </h2>
+          <div className="mb-4 text-center space-y-3">
+  <h2 className="text-lg font-semibold text-gray-100">
+    Obaveštenja
+  </h2>
+
+  <button
+    onClick={enableNotifications}
+    className="
+      inline-flex items-center
+      rounded-full
+      bg-brand-blue-900/40
+      px-5 py-2
+      text-sm
+      text-brand-blue-300
+      hover:bg-brand-blue-900/60
+      transition
+    "
+  >
+    🔔 Uključi notifikacije
+  </button>
+</div>
 
           {isAdmin && (
             <div className="mb-4 space-y-2">

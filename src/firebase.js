@@ -1,17 +1,20 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+// src/firebase.js
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCzIFe3t8HT8QXJSrwaZhB0aLlUsn3HpPk",
-  authDomain: "gym-booking-a75f8.firebaseapp.com",
-  projectId: "gym-booking-a75f8",
-  storageBucket: "gym-booking-a75f8.firebasestorage.app",
-  messagingSenderId: "489815738954",
-  appId: "1:489815738954:web:3a8fa96e3cfe65f5dbb4b3"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+// 🔹 THIS is what was missing
+export const app = initializeApp(firebaseConfig);
 
+// Existing exports (unchanged)
 export const auth = getAuth(app);
 export const db = getFirestore(app);

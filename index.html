@@ -3,29 +3,33 @@
   <head>
     <meta charset="UTF-8" />
 
-    <!-- App favicon / icon -->
+    <!-- App favicon -->
     <link rel="icon" type="image/png" href="/brand/icon.png" />
 
-    <!-- Mobile viewport: CRITICAL for app-like feel -->
+    <!-- Mobile viewport (critical for PWA + safe areas) -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
 
-    <!-- Theme color (Android status bar, PWA prep) -->
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Theme color (status bar, splash background) -->
     <meta name="theme-color" content="#020617" />
 
     <!-- App title -->
     <title>ReMotion</title>
 
-    <!-- Optional: improve font rendering -->
+    <!-- Color scheme hint -->
     <meta name="color-scheme" content="light dark" />
   </head>
 
   <body>
+    <!-- React mounts here -->
     <div id="root"></div>
 
-    <!-- Vite entry -->
+    <!-- Vite entry point (DO NOT MOVE / RENAME) -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
