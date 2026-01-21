@@ -1,0 +1,1 @@
+onDocumentCreated("clientSubscriptions/{id}")

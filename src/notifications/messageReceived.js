@@ -1,0 +1,1 @@
+onDocumentCreated("messages/{messageId}")

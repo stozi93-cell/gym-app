@@ -19,7 +19,6 @@ import {
 } from "../firebase-messaging";
 import { saveFcmToken } from "../utils/saveFcmToken";
 
-
 const MAX_VISIBLE_POSTS = 6;
 
 export default function Forum() {
@@ -34,6 +33,7 @@ export default function Forum() {
 
   // 🔑 LOCAL read state (source of truth for UI)
   const [readAnnouncements, setReadAnnouncements] = useState([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   // create
   const [title, setTitle] = useState("");
@@ -51,8 +51,21 @@ export default function Forum() {
 
   // init read state from profile
   useEffect(() => {
-    setReadAnnouncements(profile?.readAnnouncements || []);
-  }, [profile?.readAnnouncements]);
+  if (profile?.readAnnouncements) {
+    setReadAnnouncements((prev) => {
+      const merged = new Set([
+        ...prev,
+        ...profile.readAnnouncements,
+      ]);
+      return Array.from(merged);
+    });
+  }
+
+  setNotificationsEnabled(
+    Array.isArray(profile?.fcmTokens) &&
+    profile.fcmTokens.length > 0
+  );
+}, [profile?.readAnnouncements, profile?.fcmTokens]);
 
   useEffect(() => {
     loadData();
@@ -64,25 +77,6 @@ export default function Forum() {
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
   }
-
-  async function enableNotifications() {
-  if (!user) return;
-
-  const granted = await requestNotificationPermission();
-  if (!granted) {
-    alert("Obaveštenja nisu dozvoljena.");
-    return;
-  }
-
-  const token = await getFcmToken();
-  if (!token) {
-    alert("Ovaj uređaj ne podržava obaveštenja.");
-    return;
-  }
-
-  await saveFcmToken(user.uid, token);
-  alert("Obaveštenja su uspešno uključena ✅");
-}
 
   async function loadData() {
     setLoading(true);
@@ -202,6 +196,25 @@ export default function Forum() {
     loadData();
   }
 
+  async function enableNotifications() {
+  if (!user || notificationsEnabled) return;
+
+  const granted = await requestNotificationPermission();
+  if (!granted) {
+    alert("Obaveštenja nisu dozvoljena.");
+    return;
+  }
+
+  const token = await getFcmToken();
+  if (!token) {
+    alert("Ovaj uređaj ne podržava obaveštenja.");
+    return;
+  }
+
+  await saveFcmToken(user.uid, token);
+  setNotificationsEnabled(true);
+}
+
   if (loading) return null;
 
 
@@ -210,27 +223,9 @@ export default function Forum() {
       <div className="w-full max-w-md">
         <div className="bg-neutral-900 rounded-2xl p-4">
 
-          <div className="mb-4 text-center space-y-3">
-  <h2 className="text-lg font-semibold text-gray-100">
-    Obaveštenja
-  </h2>
-
-  <button
-    onClick={enableNotifications}
-    className="
-      inline-flex items-center
-      rounded-full
-      bg-brand-blue-900/40
-      px-5 py-2
-      text-sm
-      text-brand-blue-300
-      hover:bg-brand-blue-900/60
-      transition
-    "
-  >
-    🔔 Uključi notifikacije
-  </button>
-</div>
+          <h2 className="text-lg font-semibold text-gray-100 mb-4 text-center">
+            Obaveštenja
+          </h2>
 
           {isAdmin && (
             <div className="mb-4 space-y-2">
@@ -420,7 +415,35 @@ export default function Forum() {
               );
             })}
           </div>
-
+<div className="mt-6">
+  <button
+    onClick={enableNotifications}
+    disabled={notificationsEnabled}
+    className={`
+      w-full
+      rounded-xl
+      px-4
+      py-3
+      text-sm
+      font-medium
+      flex
+      items-center
+      justify-center
+      gap-2
+      transition
+      ${
+        notificationsEnabled
+          ? "bg-green-600/10 text-green-400 opacity-60 cursor-default"
+          : "bg-green-600/20 text-green-400 hover:bg-green-600/30"
+      }
+    `}
+  >
+    🔔{" "}
+    {notificationsEnabled
+      ? "Notifikacije uključene"
+      : "Uključi notifikacije"}
+  </button>
+</div>
         </div>
       </div>
     </div>

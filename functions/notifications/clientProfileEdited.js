@@ -1,0 +1,1 @@
+onDocumentUpdated("users/{uid}")

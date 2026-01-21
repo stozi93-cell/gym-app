@@ -1,10 +1,6 @@
-/* eslint-disable no-undef */
-
-// Firebase Messaging Service Worker
 importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js");
 
-// IMPORTANT: use the SAME config as firebase.js
 firebase.initializeApp({
   apiKey: "AIzaSyCzIFe3t8HT8QXJSrwaZhB0aLlUsn3HpPk",
   authDomain: "gym-booking-a75f8.firebaseapp.com",
@@ -16,17 +12,37 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Optional: background notification handler
+/* BACKGROUND MESSAGE */
 messaging.onBackgroundMessage((payload) => {
-  console.log(
-    "[firebase-messaging-sw.js] Received background message ",
-    payload
-  );
+  const title = payload.data?.title || "ReMotion";
+  const body = payload.data?.body || "";
 
-  const { title, body } = payload.notification || {};
-
-  self.registration.showNotification(title || "ReMotion", {
-    body: body || "Nova notifikacija",
-    icon: "/brand/icon.png",
+  self.registration.showNotification(title, {
+    body,
+    icon: "/brand/icon-192.png",
+    badge: "/brand/icon-192.png",
+    data: {
+      target: payload.data?.target || "/",
+    },
   });
+});
+
+/* CLICK HANDLER */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  const target = event.notification.data?.target || "/";
+  const url = new URL(target, self.location.origin).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if (client.url.startsWith(self.location.origin)) {
+            return client.focus();
+          }
+        }
+        return clients.openWindow(url);
+      })
+  );
 });
