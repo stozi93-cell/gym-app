@@ -1,1 +1,0 @@
-onDocumentUpdated("bookings/{bookingId}")
