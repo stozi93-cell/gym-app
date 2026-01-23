@@ -14,8 +14,10 @@ const messaging = firebase.messaging();
 
 /* BACKGROUND MESSAGE */
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.data?.title || "ReMotion";
-  const body = payload.data?.body || "";
+  console.log("[SW] Background message received:", payload);
+
+  const title = payload.data?.title || "NO_TITLE";
+  const body = payload.data?.body || "NO_BODY";
 
   self.registration.showNotification(title, {
     body,

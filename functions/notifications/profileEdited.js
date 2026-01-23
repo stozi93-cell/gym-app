@@ -1,1 +1,0 @@
-onDocumentCreated("clientSubscriptions/{id}")

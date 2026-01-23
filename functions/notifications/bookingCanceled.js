@@ -3,68 +3,65 @@ const admin = require("firebase-admin");
 
 const TZ = "Europe/Belgrade";
 
-function formatTime(ts) {
-  return new Intl.DateTimeFormat("sr-RS", {
+function formatDateTime(ts) {
+  return new Intl.DateTimeFormat("sr-Latn-RS", {
     timeZone: TZ,
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
     hour: "2-digit",
     minute: "2-digit",
   }).format(ts.toDate());
 }
 
-async function getUserTokens(uid) {
-  const snap = await admin.firestore().doc(`users/${uid}`).get();
-  if (!snap.exists()) return [];
-  return snap.data().fcmTokens || [];
-}
-
-async function getAdminTokens() {
-  const snap = await admin
-    .firestore()
-    .collection("users")
-    .where("role", "==", "admin")
-    .get();
-
-  return snap.docs.flatMap((d) => d.data().fcmTokens || []);
-}
-
-async function send(tokens, payload) {
-  if (!tokens.length) return;
-  await admin.messaging().sendEachForMulticast({
-    tokens,
-    data: payload,
-  });
-}
-
-exports.notifyBookingCanceled = onDocumentDeleted(
+/**
+ * CLIENT canceled booking → ADMIN notification
+ * DATA-ONLY (required for custom SW)
+ * REGION-ALIGNED (europe-west8)
+ */
+exports.bookingCanceledByClient = onDocumentDeleted(
   "bookings/{bookingId}",
+  
   async (event) => {
-    const booking = event.data?.before?.data();
-    if (!booking) return;
+    try {
+      const booking = event.data?.data();
+      if (!booking || !booking.userId) return;
 
-    const timeText = booking.slotTimestamp
-      ? ` (${formatTime(booking.slotTimestamp)})`
-      : "";
+      const db = admin.firestore();
 
-    // CLIENT
-    const clientTokens = await getUserTokens(booking.userId);
+      const userSnap = await db.doc(`users/${booking.userId}`).get();
+      const user = userSnap.exists ? userSnap.data() : {};
 
-    await send(clientTokens, {
-      type: "BOOKING_CANCELED",
-      target: "/",
-      title: "❌ Rezervacija otkazana",
-      body: `Vaša rezervacija${timeText} je otkazana.`,
-    });
+      const fullName =
+        [user.name, user.surname].filter(Boolean).join(" ") || "Klijent";
 
-    // ADMIN
-    const adminTokens = await getAdminTokens();
+      const timeText = booking.slotTimestamp
+        ? formatDateTime(booking.slotTimestamp)
+        : "nepoznato vreme";
 
-    await send(adminTokens, {
-      type: "BOOKING_CANCELED_ADMIN",
-      target: "/raspored",
-      title: "❌ Otkazana rezervacija",
-      body: `Klijent je otkazao rezervaciju${timeText}.`,
-    });
+      const adminSnap = await db
+        .collection("users")
+        .where("role", "==", "admin")
+        .get();
 
-    console.log("✅ Booking canceled notifications sent");
+      const tokens = adminSnap.docs.flatMap(
+        (d) => d.data().fcmTokens || []
+      );
+      if (!tokens.length) return;
+
+      await admin.messaging().sendEachForMulticast({
+        tokens,
+        data: {
+          type: "BOOKING_CANCELED_BY_CLIENT",
+          target: "/raspored",
+          title: "❌ Otkazana rezervacija",
+          body: `${fullName} je otkazao trening (${timeText}).`,
+        },
+      });
+
+      console.log("✅ Admin notified: booking canceled by client");
+    } catch (err) {
+      console.error("❌ bookingCanceledByClient failed", err);
+    }
   }
 );

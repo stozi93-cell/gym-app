@@ -1,24 +1,19 @@
 const admin = require("firebase-admin");
 admin.initializeApp();
 
-/* ─────────────────────────────
-   ANNOUNCEMENTS
-───────────────────────────── */
 exports.sendAnnouncementNotification =
-  require("./notifications/announcement")
-    .sendAnnouncementNotification;
+  require("./notifications/announcement").sendAnnouncementNotification;
 
-/* ─────────────────────────────
-   BOOKINGS
-───────────────────────────── */
 exports.notifyAdminBookingCreated =
-  require("./notifications/bookingCreated")
-    .notifyAdminBookingCreated;
+  require("./notifications/bookingCreated").notifyAdminBookingCreated;
 
-exports.notifyBookingCanceled =
-  require("./notifications/bookingCanceled")
-    .notifyBookingCanceled;
+exports.bookingCanceledByClient =
+  require("./notifications/bookingCanceled").bookingCanceledByClient;
 
-exports.bookingReminder =
-  require("./notifications/bookingReminder")
-    .bookingReminder;
+exports.notifyChatMessage =
+  require("./notifications/chatMessage").notifyChatMessage;
+
+exports.notifySubscriptionExpiry =
+  require("./notifications/subscriptionExpiry").notifySubscriptionExpiry;
+
+

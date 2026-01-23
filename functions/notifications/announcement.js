@@ -3,7 +3,7 @@ const admin = require("firebase-admin");
 const { send } = require("./_helpers");
 
 exports.sendAnnouncementNotification = onDocumentCreated(
-  "forumPosts/{postId}",
+    "forumPosts/{postId}",
   async (event) => {
     const post = event.data?.data();
     if (!post || post.archived) return;
