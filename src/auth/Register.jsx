@@ -186,13 +186,13 @@ export default function Register() {
               <InputField
   label="Lozinka *"
   type="password"
-  value={form.confirmPassword}
-  onChange={(v) => updateField("Password", v)}
-  error={errors.confirmPassword}
+  value={form.password}
+  onChange={(v) => updateField("password", v)}
+  error={errors.password}
   togglePassword
 />
 
-              <InputField
+          <InputField
   label="Potvrdi lozinku *"
   type="password"
   value={form.confirmPassword}
