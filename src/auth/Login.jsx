@@ -104,12 +104,13 @@ export default function Login() {
 
             {!forgotMode && (
               <InputField
-                label="Lozinka"
-                type="password"
-                value={password}
-                onChange={(v) => updateField("password", v)}
-                error={errors.password}
-              />
+  label="Lozinka"
+  type="password"
+  value={password}
+  onChange={(v) => updateField("password", v)}
+  error={errors.password}
+  togglePassword
+/>
             )}
 
             {!forgotMode ? (
