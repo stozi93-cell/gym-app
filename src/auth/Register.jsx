@@ -52,6 +52,9 @@ export default function Register() {
       ) {
         newErrors.confirmPassword = "Lozinke se ne poklapaju";
       }
+      if (form.password && form.password.length < 6) {
+  newErrors.password = "Lozinka mora imati bar 6 karaktera";
+}
     }
 
     if (step === 2 && subStep2 === 1) {
@@ -192,6 +195,7 @@ export default function Register() {
   togglePassword
 />
 
+
           <InputField
   label="Potvrdi lozinku *"
   type="password"
@@ -200,6 +204,7 @@ export default function Register() {
   error={errors.confirmPassword}
   togglePassword
 />
+
             </>
           )}
 
