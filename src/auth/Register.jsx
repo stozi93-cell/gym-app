@@ -187,7 +187,7 @@ export default function Register() {
   label="Lozinka *"
   type="password"
   value={form.confirmPassword}
-  onChange={(v) => updateField("confirmPassword", v)}
+  onChange={(v) => updateField("Password", v)}
   error={errors.confirmPassword}
   togglePassword
 />

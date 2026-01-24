@@ -14,6 +14,8 @@ exports.notifyChatMessage =
   require("./notifications/chatMessage").notifyChatMessage;
 
 exports.notifySubscriptionExpiry =
-  require("./notifications/subscriptionExpiry").notifySubscriptionExpiry;
+  require("./notifications/subscriptionExpiry")
+    .notifySubscriptionExpiry;
+
 
 

@@ -3,41 +3,44 @@ const admin = require("firebase-admin");
 
 const TZ = "Europe/Belgrade";
 
+function startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
 function daysBetween(a, b) {
-  const oneDay = 24 * 60 * 60 * 1000;
-  return Math.floor((b - a) / oneDay);
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  return Math.round((b - a) / ONE_DAY);
 }
 
 exports.notifySubscriptionExpiry = onSchedule(
   {
-    schedule: "0 9 * * *",
+    schedule: "0 9 * * *", // every day at 09:00
     timeZone: TZ,
   },
   async () => {
     try {
       const db = admin.firestore();
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = startOfDay(new Date());
 
-      const subsSnap = await db
+      const snap = await db
         .collection("clientSubscriptions")
         .where("active", "==", true)
         .get();
 
-      for (const doc of subsSnap.docs) {
-        const sub = doc.data();
-        const { userId, expiresAt, _notified = {} } = sub;
+      for (const docSnap of snap.docs) {
+        const sub = docSnap.data();
+        const { userId, endDate, _notified = {} } = sub;
 
-        if (!userId || !expiresAt) continue;
+        if (!userId || !endDate) continue;
 
-        const expiryDate = expiresAt.toDate();
-        expiryDate.setHours(0, 0, 0, 0);
+        const expiry = startOfDay(endDate.toDate());
+        const daysLeft = daysBetween(today, expiry);
 
-        const daysLeft = daysBetween(today, expiryDate);
-
-        // we only care about 7 days before and day of expiry
-        if (![7, 0].includes(daysLeft)) continue;
+        // Only notify on 7 days before or day of expiry
+        if (daysLeft !== 7 && daysLeft !== 0) continue;
         if (_notified[daysLeft]) continue;
 
         const userSnap = await db.doc(`users/${userId}`).get();
@@ -50,10 +53,12 @@ exports.notifySubscriptionExpiry = onSchedule(
         let body = "";
 
         if (daysLeft === 7) {
-          title = "⏳ Članarina ističe za 7 dana";
+          title = "Članarina ističe za 7 dana";
           body = "Vaša članarina ističe za 7 dana.";
-        } else if (daysLeft === 0) {
-          title = "❌ Članarina je istekla";
+        }
+
+        if (daysLeft === 0) {
+          title = "Članarina je istekla";
           body = "Vaša članarina je istekla.";
         }
 
@@ -67,17 +72,12 @@ exports.notifySubscriptionExpiry = onSchedule(
           },
         });
 
-        await doc.ref.update({
+        await docSnap.ref.update({
           [`_notified.${daysLeft}`]: true,
         });
-
-        console.log(
-          `⏳ Subscription notification sent (${daysLeft} days)`,
-          doc.id
-        );
       }
     } catch (err) {
-      console.error("❌ notifySubscriptionExpiry failed", err);
+      console.error("notifySubscriptionExpiry failed", err);
     }
   }
 );
