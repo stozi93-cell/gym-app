@@ -103,7 +103,7 @@ export default function AdminChats() {
   }
 
   return (
-    <div className="px-4 py-6">
+    <div className="px-4 py-1">
       <h2 className="mb-3 text-lg font-semibold text-white">
         Poruke
       </h2>

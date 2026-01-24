@@ -27,7 +27,7 @@ export default function AdminPackages() {
     name: "",
     durationDays: "",
     price: "",
-    defaultCheckIns: "default",
+    defaultCheckIns: "6",
   });
 
   const [searchParams] = useSearchParams();
@@ -40,7 +40,7 @@ export default function AdminPackages() {
     { value: "3", label: "3× nedeljno" },
     { value: "4", label: "4× nedeljno" },
     { value: "5", label: "5× nedeljno" },
-    { value: "unlimited", label: "Neograničeno" },
+    { value: "6", label: "6x nedeljno" },
   ];
 
   useEffect(() => {
@@ -123,20 +123,15 @@ export default function AdminPackages() {
     const end = new Date(start);
     end.setDate(end.getDate() + pkg.durationDays);
 
-    const weeklyCheckIns =
-      checkInOption === "default"
-        ? pkg.defaultCheckIns || "unlimited"
-        : checkInOption;
+    const weeklyCheckIns = Number(
+  checkInOption || pkg.defaultCheckIns || 6
+);
 
     const weeks = Math.ceil(
       (end - start) / (7 * 24 * 60 * 60 * 1000)
     );
 
-    const checkInsArray = Array.from(
-      { length: weeks },
-      () =>
-        weeklyCheckIns === "unlimited" ? "unlimited" : 0
-    );
+    const checkInsArray = Array.from({ length: weeks }, () => 0);
 
     const existing = await getDocs(
       query(
@@ -191,12 +186,13 @@ export default function AdminPackages() {
       return alert("Popunite sva polja");
 
     await addDoc(collection(db, "subscriptions"), {
-      ...newPackage,
-      durationDays: Number(newPackage.durationDays),
-      price: Number(newPackage.price),
-      active: true,
-      order: packages.length,
-    });
+  name: newPackage.name,
+  durationDays: Number(newPackage.durationDays),
+  price: Number(newPackage.price),
+  defaultCheckIns: Number(newPackage.defaultCheckIns) || 6,
+  active: true,
+  order: packages.length,
+});
 
     setNewPackage({
       name: "",

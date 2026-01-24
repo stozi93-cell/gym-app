@@ -301,7 +301,10 @@ const PAYMENT_STATUS_LABELS = {
       </CollapsibleSection>
 
       {/* PRETPLATE */}
-      <CollapsibleSection title="Članarina" defaultOpen>
+      <div className="rounded-2xl bg-neutral-900/90 p-5 shadow space-y-4">
+  <h3 className="text-sm font-medium text-neutral-300">
+    Članarina
+  </h3>
         {visibleSubs.map((s) => {
           const active = s.active && s.endDate >= today;
           const allowed =
@@ -366,13 +369,13 @@ const PAYMENT_STATUS_LABELS = {
       onClick={() => changeCheckIn(s.id, i, -1)}
       className="h-8 w-8 rounded-md bg-neutral-800 text-white text-lg font-medium hover:bg-neutral-700 active:scale-95"
     >
-      +
+      -
     </button>
     <button
       onClick={() => changeCheckIn(s.id, i, 1)}
       className="h-8 w-8 rounded-md bg-neutral-800 text-white text-lg font-medium hover:bg-neutral-700 active:scale-95"
     >
-      -
+      +
     </button>
   </div>
 )}
@@ -410,7 +413,7 @@ const PAYMENT_STATUS_LABELS = {
               : "Prikaži prethodne članarine"}
           </button>
         )}
-      </CollapsibleSection>
+      </div>
 
       {/* NAPOMENE */}
       <CollapsibleSection title="Napomene">
@@ -474,7 +477,7 @@ function CollapsibleSection({ title, header, children, defaultOpen = false }) {
           {header || <h3 className="text-sm font-medium text-neutral-300">{title}</h3>}
         </div>
         <span
-  className={`text-neutral-400 text-2xl transition-transform ${
+  className={`text-neutral-400 text-2xl pb-2 transition-transform ${
     open ? "rotate-180" : ""
   }`}
 >

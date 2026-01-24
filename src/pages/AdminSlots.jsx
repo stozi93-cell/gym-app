@@ -250,10 +250,6 @@ export default function AdminSlots() {
       );
 
   const orderedKeys = Object.keys(visibleGroups).sort();
-  const defaultOpenKey =
-    orderedKeys.includes(todayStr)
-      ? todayStr
-      : orderedKeys[0];
 
   if (loading) {
   return (
@@ -346,7 +342,6 @@ export default function AdminSlots() {
           return (
             <details
               key={dateKey}
-              open={dateKey === defaultOpenKey}
               className="rounded-xl bg-neutral-900 mx-2"
             >
               <summary className="cursor-pointer px-4 py-3 font-medium text-white">
