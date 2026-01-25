@@ -330,7 +330,7 @@ const PAYMENT_STATUS_LABELS = {
     ws.setDate(ws.getDate() + i * 7);
     const we = new Date(ws);
     we.setDate(ws.getDate() + 6);
-
+    if (we > s.endDate) { we.setTime(s.endDate.getTime());}
     return (
       <>
         {/* FIXED-WIDTH LABEL */}

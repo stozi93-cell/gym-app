@@ -31,6 +31,7 @@ export default function AppShell({ children }) {
     location.pathname.startsWith("/paketi") ||
     location.pathname.startsWith("/naplate") ||
     location.pathname.startsWith("/poruke") ||
+    location.pathname.startsWith("/treninzi") ||
     location.pathname.startsWith("/forum");
 
   return (

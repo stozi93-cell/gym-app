@@ -131,9 +131,6 @@ export default function AdminClients() {
 
   return (
     <div className="px-2 py-1 space-y-6">
-      <h1 className="px-2 text-xl font-semibold text-white">
-        Klijenti
-      </h1>
 
       {/* TOOLS */}
       <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">

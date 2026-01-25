@@ -44,7 +44,7 @@ function getInitials(name = "Klijent") {
 }
 
 export default function AdminChat() {
-  const { conversationId } = useParams();
+  const { conversationId: clientId } = useParams();
 
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -57,9 +57,9 @@ export default function AdminChat() {
   ───────────────────────────── */
   useEffect(() => {
     async function loadClient() {
-      if (!conversationId) return;
+      if (!clientId) return;
 
-      const snap = await getDoc(doc(db, "users", conversationId));
+      const snap = await getDoc(doc(db, "users", clientId));
       if (snap.exists()) {
         const u = snap.data();
         const fullName =
@@ -69,27 +69,34 @@ export default function AdminChat() {
     }
 
     loadClient();
-  }, [conversationId]);
+  }, [clientId]);
 
   /* ─────────────────────────────
      Listen to messages
   ───────────────────────────── */
   useEffect(() => {
+    if (!clientId) return;
+    
     const q = query(
       collection(db, "messages"),
-      where("conversationId", "==", conversationId),
+      where("conversationId", "==", clientId),
       orderBy("createdAt", "asc")
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      updateDoc(doc(db, "conversations", conversationId), {
-        coachUnread: 0,
-      });
-    });
+  setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+});
 
     return () => unsub();
-  }, [conversationId]);
+  }, [clientId]);
+
+  useEffect(() => {
+  if (!clientId) return;
+
+  updateDoc(doc(db, "conversations", clientId), {
+    coachUnread: 0,
+  }).catch(() => {});
+}, [clientId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -101,13 +108,13 @@ export default function AdminChat() {
     setText("");
 
     await addDoc(collection(db, "messages"), {
-      conversationId,
+      conversationId: clientId,
       senderId: "admin",
       text: msg,
       createdAt: serverTimestamp(),
     });
 
-    await updateDoc(doc(db, "conversations", conversationId), {
+    await updateDoc(doc(db, "conversations", clientId), {
       lastMessage: msg,
       lastSenderId: "admin",
       updatedAt: serverTimestamp(),
@@ -121,7 +128,7 @@ export default function AdminChat() {
       {/* HEADER */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-border-dark">
   <Link
-    to={`/profil/${conversationId}`}
+    to={`/profil/${clientId}`}
     className="flex items-center gap-3 group"
   >
     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white group-hover:ring-2 group-hover:ring-blue-500 transition">

@@ -263,13 +263,11 @@ export default function AdminSlots() {
 
 
   return (
-    <div className="px-2 py-1 space-y-6">
-      <h1 className="px-2 text-xl font-semibold text-white">
-        Raspored
-      </h1>
+    <div className="px-2 py-1 space-y-3">
+      
 
       {/* IZABERI DATUM */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-2">
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-1">
         <p className="text-sm font-medium text-neutral-200">
           Izaberi datum
         </p>
@@ -292,7 +290,7 @@ export default function AdminSlots() {
       </div>
 
       {/* NOVI TERMIN */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-2">
+      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-1">
         <p className="text-sm font-medium text-neutral-200">
           Novi termin
         </p>
@@ -319,7 +317,7 @@ export default function AdminSlots() {
       </div>
 
       {/* OVERBOOKING */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4">
+      <div className="mx-2 rounded-xl bg-neutral-900 p-3">
         <label className="flex items-center gap-3 text-sm text-white">
           <input
             type="checkbox"

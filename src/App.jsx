@@ -15,6 +15,8 @@ import Forum from "./pages/Forum";
 import ClientChat from "./pages/ClientChat";
 import AdminChat from "./pages/AdminChat";
 import AdminChats from "./pages/AdminChats";
+import AdminTrainingStudio from "./pages/AdminTrainingStudio";
+import AdminTrainingClient from "./pages/AdminTrainingClient";
 
 import Splash from "./components/Splash";
 import AppShell from "./components/AppShell";
@@ -71,7 +73,8 @@ export default function App() {
               <Route path="/profil/:uid" element={<ClientProfile />} />
               <Route path="/poruke" element={<AdminChats />} />
               <Route path="/admin-chat/:conversationId" element={<AdminChat />} />
-
+              <Route path="/treninzi" element={<AdminTrainingStudio />} />
+              <Route path="/treninzi/:uId" element={<AdminTrainingClient />} />
             </>
           )}
 

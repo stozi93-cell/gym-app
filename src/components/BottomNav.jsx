@@ -102,6 +102,30 @@ function CreditCardIcon({ className }) {
   );
 }
 
+function TrainingIcon({ className }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* Clipboard */}
+      <rect x="9" y="2" width="6" height="4" rx="1" />
+      <path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3" />
+
+      {/* Dumbbell */}
+      <path d="M8 13h8" />
+      <path d="M6 12v2" />
+      <path d="M18 12v2" />
+    </svg>
+  );
+}
+
 /* ─────────────────────────────
    Badge
 ───────────────────────────── */
@@ -181,12 +205,8 @@ export default function BottomNav({ role }) {
             <NavItem to="/paketi" label="Paketi" icon={<RepeatIcon className={iconClass} />} />
             <NavItem to="/naplate" label="Naplate" icon={<CreditCardIcon className={iconClass} />} />
             <NavItem to="/forum" label="Novosti" icon={<MegaphoneIcon className={iconClass} />} />
-            <NavItem
-              to="/poruke"
-              label="Poruke"
-              icon={<ChatIcon className={iconClass} />}
-              badge={unread}
-            />
+            <NavItem to="/poruke" label="Poruke" icon={<ChatIcon className={iconClass} />} badge={unread} />
+            <NavItem to="/treninzi" label="Treninzi" icon={<TrainingIcon className={iconClass} />} />
           </>
         )}
 

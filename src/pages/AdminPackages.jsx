@@ -243,14 +243,12 @@ export default function AdminPackages() {
     });
 
   return (
-    <div className="px-2 py-1 space-y-6">
-      <h1 className="px-2 text-xl font-semibold text-white">
-        Paketi
-      </h1>
+    <div className="px-2 py-1 space-y-2">
+      
 
       {/* ASSIGN */}
       <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
-        <p className="font-medium text-white">Dodela pretplate</p>
+        <p className="font-medium text-white">Dodela članarine</p>
 
         <select
           value={userId}
@@ -306,9 +304,9 @@ export default function AdminPackages() {
 
         <button
           onClick={assignSubscription}
-          className="rounded bg-blue-600 py-2 text-sm text-white"
+          className="rounded-xl bg-blue-600 py-2 px-2 text-sm text-white"
         >
-          Dodeli pretplatu
+          Dodeli članarinu
         </button>
       </div>
 
@@ -365,11 +363,13 @@ export default function AdminPackages() {
 
         <button
           onClick={createPackage}
-          className="rounded bg-green-600 py-2 text-sm text-white"
+          className="rounded-xl bg-green-600 py-2 px-2 text-sm text-white"
         >
           Kreiraj paket
         </button>
       </div>
+
+      <p className="px-4 text-xl font-semibold text-white">Spisak paketa</p>
 
       {/* PACKAGE LIST */}
       {/* PACKAGE LIST */}
