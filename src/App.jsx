@@ -74,7 +74,7 @@ export default function App() {
               <Route path="/poruke" element={<AdminChats />} />
               <Route path="/admin-chat/:conversationId" element={<AdminChat />} />
               <Route path="/treninzi" element={<AdminTrainingStudio />} />
-              <Route path="/treninzi/:uId" element={<AdminTrainingClient />} />
+              <Route path="/treninzi/:clientId" element={<AdminTrainingClient />} />
             </>
           )}
 

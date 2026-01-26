@@ -11,6 +11,13 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
+function assertEnv(name, value) {
+  if (!value) {
+    throw new Error(`❌ Missing Firebase env var: ${name}`);
+  }
+  return value;
+}
+
 
 // 🔹 THIS is what was missing
 export const app = initializeApp(firebaseConfig);
