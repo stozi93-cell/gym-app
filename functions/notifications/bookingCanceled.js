@@ -26,6 +26,7 @@ exports.bookingCanceledByClient = onDocumentDeleted(
     try {
       const booking = event.data?.data();
       if (!booking || !booking.userId) return;
+      if (booking._skipCancellationNotification) return;
 
       const db = admin.firestore();
 

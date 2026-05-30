@@ -14,6 +14,18 @@ async function deleteDocs(docs) {
   await writer.close();
 }
 
+async function markBookingsForSilentDelete(docs) {
+  if (!docs.length) return;
+
+  const db = admin.firestore();
+  const writer = db.bulkWriter();
+
+  docs.forEach((doc) =>
+    writer.update(doc.ref, { _skipCancellationNotification: true })
+  );
+  await writer.close();
+}
+
 exports.cleanupOldBookings = onSchedule(
   {
     schedule: "every day 03:00",
@@ -44,6 +56,7 @@ exports.cleanupOldBookings = onSchedule(
           .where("slotId", "==", slotDoc.id)
           .get();
 
+        await markBookingsForSilentDelete(bookingSnap.docs);
         await deleteDocs(bookingSnap.docs);
         removedBookings += bookingSnap.size;
       }
@@ -61,6 +74,7 @@ exports.cleanupOldBookings = onSchedule(
 
       if (orphanedOldBookingsSnap.empty) break;
 
+      await markBookingsForSilentDelete(orphanedOldBookingsSnap.docs);
       await deleteDocs(orphanedOldBookingsSnap.docs);
       removedBookings += orphanedOldBookingsSnap.size;
     }
