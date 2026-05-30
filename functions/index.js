@@ -17,5 +17,12 @@ exports.notifySubscriptionExpiry =
   require("./notifications/subscriptionExpiry")
     .notifySubscriptionExpiry;
 
+exports.bookSlot =
+  require("./bookings/bookSlot").bookSlot;
 
+exports.checkInBooking =
+  require("./bookings/checkInBooking").checkInBooking;
+
+exports.cleanupOldBookings =
+  require("./bookings/cleanupOldBookings").cleanupOldBookings;
 

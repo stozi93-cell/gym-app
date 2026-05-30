@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   collection,
   getDocs,
@@ -8,13 +8,30 @@ import {
   query,
   orderBy,
   updateDoc,
+  setDoc,
   where,
+  Timestamp,
+  onSnapshot,
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { db } from "../firebase";
+import {
+  bookSlot as createBooking,
+  getBookingErrorMessage,
+  getTemplateSlotId,
+} from "../bookings/bookSlot";
+import { checkInBooking } from "../bookings/checkInBooking";
 
-const MAX_CAPACITY = 5;
+const DEFAULT_CAPACITY = 5;
+const MANUAL_SLOT_CAPACITY = 4;
 const WINDOW_DAYS = 7;
+
+function getCapacity(value) {
+  const capacity = Number(value);
+  return Number.isFinite(capacity) && capacity > 0
+    ? capacity
+    : DEFAULT_CAPACITY;
+}
 
 /* ─────────────────────────────
    Slot generation (shared model)
@@ -40,7 +57,8 @@ function generateSlotsFromTemplates(templates, startDate, days) {
         timestamp: d,
         generated: true,
         templateId: tpl.id,
-        locked: false,
+        capacity: getCapacity(tpl.capacity),
+        locked: false, // default, overridden if real slot exists
       });
     });
   }
@@ -59,19 +77,40 @@ export default function AdminSlots() {
   const [time, setTime] = useState("");
   const [filterDate, setFilterDate] = useState("");
   const [overbook, setOverbook] = useState(false);
+  const [pendingBookingIds, setPendingBookingIds] = useState([]);
+  const pendingBookingIdsRef = useRef(new Set());
+  const [statusMessage, setStatusMessage] = useState("");
 
   useEffect(() => {
+  if (filterDate) {
+    loadData(new Date(filterDate));
+  } else {
     loadData();
+  }
+}, [filterDate]);
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "bookings"), (snapshot) => {
+      setBookings(
+        snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))
+      );
+    });
   }, []);
 
   async function loadData(dateOverride) {
     setLoading(true);
 
-    const start = dateOverride ?? new Date();
-    start.setHours(0, 0, 0, 0);
+    const startDate = dateOverride
+  ? new Date(dateOverride)
+  : new Date();
 
-    const end = new Date(start);
-    end.setDate(start.getDate() + WINDOW_DAYS);
+startDate.setHours(0, 0, 0, 0);
+
+const endDate = new Date(startDate);
+endDate.setDate(startDate.getDate() + WINDOW_DAYS);
+
+const start = Timestamp.fromDate(startDate);
+const end = Timestamp.fromDate(endDate);
 
     const tplSnap = await getDocs(collection(db, "slotTemplates"));
     const tplData = tplSnap.docs.map((d) => ({
@@ -92,31 +131,47 @@ export default function AdminSlots() {
     const realSlots = slotSnap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
+      capacity: getCapacity(d.data().capacity),
       timestamp: d.data().timestamp.toDate(),
       generated: false,
     }));
 
-    const generatedSlots = generateSlotsFromTemplates(
-      tplData,
-      start,
-      WINDOW_DAYS
-    ).filter(
-      (g) =>
-        !realSlots.some(
-          (s) => s.timestamp.getTime() === g.timestamp.getTime()
-        )
-    );
+    const templateSlots = generateSlotsFromTemplates(
+  tplData,
+  startDate,
+  WINDOW_DAYS
+);
 
-    setSlots(
-      [...realSlots, ...generatedSlots].sort(
-        (a, b) => a.timestamp - b.timestamp
-      )
-    );
+const mergedTemplateSlots = templateSlots.map((tplSlot) => {
+  const matchingRealSlots = realSlots.filter(
+    (r) => r.timestamp.getTime() === tplSlot.timestamp.getTime()
+  );
+  const real = matchingRealSlots[0];
 
-    const bookingSnap = await getDocs(collection(db, "bookings"));
-    setBookings(
-      bookingSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
-    );
+  return real
+    ? {
+        ...tplSlot,
+        id: real.id,
+        slotIds: matchingRealSlots.map((slot) => slot.id),
+        locked: matchingRealSlots.some((slot) => slot.locked),
+        generated: false,
+      }
+    : tplSlot;
+});
+
+const manualSlots = realSlots.filter(
+  (real) =>
+    !templateSlots.some(
+      (tplSlot) =>
+        tplSlot.timestamp.getTime() === real.timestamp.getTime()
+    )
+);
+
+setSlots(
+  [...mergedTemplateSlots, ...manualSlots].sort(
+    (a, b) => a.timestamp - b.timestamp
+  )
+);
 
     const userSnap = await getDocs(collection(db, "users"));
     setUsers(
@@ -128,14 +183,35 @@ export default function AdminSlots() {
 
   /* helpers */
   const isPast = (slot) => slot.timestamp < new Date();
-  const slotBookings = (slotId) =>
-    bookings.filter((b) => b.slotId === slotId);
+  const slotBookings = (slot) => {
+    const slotIds = slot.slotIds || [slot.id];
+    return bookings.filter((b) => slotIds.includes(b.slotId));
+  };
+  const beginBookingAction = (bookingId) => {
+    if (pendingBookingIdsRef.current.has(bookingId)) return false;
+
+    pendingBookingIdsRef.current.add(bookingId);
+    setPendingBookingIds(Array.from(pendingBookingIdsRef.current));
+    return true;
+  };
+  const finishBookingAction = (bookingId) => {
+    pendingBookingIdsRef.current.delete(bookingId);
+    setPendingBookingIds(Array.from(pendingBookingIdsRef.current));
+  };
 
   async function materializeSlot(slot, extra = {}) {
     if (!slot.generated) return slot.id;
 
-    const ref = await addDoc(collection(db, "slots"), {
+    const ref = doc(
+      db,
+      "slots",
+      getTemplateSlotId(slot.templateId, slot.timestamp)
+    );
+
+    await setDoc(ref, {
       timestamp: slot.timestamp,
+      capacity: slot.capacity,
+      createdFromTemplate: slot.templateId,
       locked: false,
       ...extra,
     });
@@ -149,6 +225,7 @@ export default function AdminSlots() {
 
     await addDoc(collection(db, "slots"), {
       timestamp: new Date(`${date}T${time}:00`),
+      capacity: MANUAL_SLOT_CAPACITY,
       locked: false,
     });
 
@@ -161,22 +238,25 @@ export default function AdminSlots() {
     if (!userId || slot.locked || isPast(slot)) return;
 
     if (
-      slotBookings(slot.id).length >= MAX_CAPACITY &&
+      slotBookings(slot).length >= slot.capacity &&
       !overbook
     ) {
       return alert("Slot je pun.");
     }
 
-    const slotId = await materializeSlot(slot);
-
-    await addDoc(collection(db, "bookings"), {
-      slotId,
-      userId,
-      createdAt: new Date(),
-      checkedIn: false,
-    });
-
-    loadData(filterDate ? new Date(filterDate) : undefined);
+    try {
+      await createBooking({
+        slot,
+        userId,
+        allowOverbook: overbook,
+      });
+      setStatusMessage("Rezervacija je sacuvana.");
+      loadData(filterDate ? new Date(filterDate) : undefined);
+    } catch (error) {
+      const message = getBookingErrorMessage(error);
+      setStatusMessage(message);
+      alert(message);
+    }
   }
 
   async function toggleLock(slot) {
@@ -191,45 +271,36 @@ export default function AdminSlots() {
     loadData(filterDate ? new Date(filterDate) : undefined);
   }
 
-  async function handleCheckIn(booking, ts) {
-    if (booking.checkedIn) return;
+  async function handleCheckIn(booking) {
+    if (booking.checkedIn || !beginBookingAction(booking.id)) return;
 
-    await updateDoc(doc(db, "bookings", booking.id), {
-      checkedIn: true,
-      checkedInAt: new Date(),
-    });
-
-    const subSnap = await getDocs(
-      query(
-        collection(db, "clientSubscriptions"),
-        where("userId", "==", booking.userId)
-      )
-    );
-
-    if (!subSnap.docs.length) return loadData();
-
-    const subDoc = subSnap.docs[0];
-    const sub = subDoc.data();
-    if (!sub.startDate) return loadData();
-
-    const start = sub.startDate.toDate();
-    const weekIndex = Math.floor(
-      (ts - start) / (7 * 24 * 60 * 60 * 1000)
-    );
-
-    const arr = sub.checkInsArray || [];
-    arr[weekIndex] = (arr[weekIndex] || 0) + 1;
-
-    await updateDoc(doc(db, "clientSubscriptions", subDoc.id), {
-      checkInsArray: arr,
-    });
-
-    loadData(filterDate ? new Date(filterDate) : undefined);
+    try {
+      await checkInBooking(booking.id);
+      setStatusMessage("Klijent je cekiran.");
+    } catch (error) {
+      const message =
+        error.message || "Cekiranje nije uspelo. Pokusajte ponovo.";
+      setStatusMessage(message);
+      alert(message);
+    } finally {
+      finishBookingAction(booking.id);
+    }
   }
 
   async function cancelBooking(b) {
-    await deleteDoc(doc(db, "bookings", b.id));
-    loadData(filterDate ? new Date(filterDate) : undefined);
+    if (!beginBookingAction(b.id)) return;
+
+    try {
+      await deleteDoc(doc(db, "bookings", b.id));
+      setStatusMessage("Rezervacija je otkazana.");
+    } catch (error) {
+      const message =
+        error.message || "Otkazivanje nije uspelo. Pokusajte ponovo.";
+      setStatusMessage(message);
+      alert(message);
+    } finally {
+      finishBookingAction(b.id);
+    }
   }
 
   /* grouping */
@@ -242,12 +313,8 @@ export default function AdminSlots() {
   const todayStr = new Date().toISOString().split("T")[0];
 
   const visibleGroups = filterDate
-    ? { [filterDate]: groupedSlots[filterDate] || [] }
-    : Object.fromEntries(
-        Object.entries(groupedSlots).filter(
-          ([k]) => k >= todayStr
-        )
-      );
+  ? { [filterDate]: groupedSlots[filterDate] || [] }
+  : groupedSlots;
 
   const orderedKeys = Object.keys(visibleGroups).sort();
 
@@ -264,6 +331,11 @@ export default function AdminSlots() {
 
   return (
     <div className="px-2 py-1 space-y-3">
+      {statusMessage && (
+        <div className="mx-2 rounded bg-neutral-800 px-3 py-2 text-sm text-neutral-200">
+          {statusMessage}
+        </div>
+      )}
       
 
       {/* IZABERI DATUM */}
@@ -333,7 +405,7 @@ export default function AdminSlots() {
         {orderedKeys.map((dateKey) => {
           const daySlots = visibleGroups[dateKey];
           const bookingCount = daySlots.reduce(
-            (sum, s) => sum + slotBookings(s.id).length,
+            (sum, s) => sum + slotBookings(s).length,
             0
           );
 
@@ -353,7 +425,7 @@ export default function AdminSlots() {
 
               <div className="p-3 space-y-3">
                 {daySlots.map((slot) => {
-                  const bks = slotBookings(slot.id);
+                  const bks = slotBookings(slot);
 
                   return (
                     <div
@@ -369,7 +441,7 @@ export default function AdminSlots() {
                             })}
                           </p>
                           <p className="text-xs text-neutral-400">
-                            {bks.length} / {MAX_CAPACITY}
+                            {bks.length} / {slot.capacity}
                           </p>
                         </div>
 
@@ -408,6 +480,8 @@ export default function AdminSlots() {
                         const u = users.find(
                           (u) => u.id === b.userId
                         );
+                        const isPending =
+                          pendingBookingIds.includes(b.id);
                         return (
                           <div
                             key={b.id}
@@ -425,13 +499,11 @@ export default function AdminSlots() {
                             <div className="flex gap-3">
                               {!b.checkedIn ? (
                                 <button
+                                  disabled={isPending}
                                   onClick={() =>
-                                    handleCheckIn(
-                                      b,
-                                      slot.timestamp
-                                    )
+                                    handleCheckIn(b)
                                   }
-                                  className="text-green-400"
+                                  className="text-green-400 disabled:opacity-40"
                                 >
                                   Čekiraj
                                 </button>
@@ -441,8 +513,9 @@ export default function AdminSlots() {
                                 </span>
                               )}
                               <button
+                                disabled={isPending}
                                 onClick={() => cancelBooking(b)}
-                                className="text-red-400"
+                                className="text-red-400 disabled:opacity-40"
                               >
                                 Otkaži
                               </button>
