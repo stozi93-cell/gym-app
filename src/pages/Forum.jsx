@@ -62,8 +62,8 @@ export default function Forum() {
   }
 
   setNotificationsEnabled(
-    Array.isArray(profile?.fcmTokens) &&
-    profile.fcmTokens.length > 0
+    "Notification" in window &&
+    Notification.permission === "granted"
   );
 }, [profile?.readAnnouncements, profile?.fcmTokens]);
 

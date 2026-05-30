@@ -1,10 +1,10 @@
-import { doc, updateDoc } from "firebase/firestore";
+import { arrayUnion, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 export async function saveFcmToken(uid, token) {
   if (!uid || !token) return;
 
   await updateDoc(doc(db, "users", uid), {
-    fcmTokens: [token], // ✅ replace, not append
+    fcmTokens: arrayUnion(token),
   });
 }

@@ -1,4 +1,9 @@
-import { getMessaging, getToken, isSupported } from "firebase/messaging";
+import {
+  getMessaging,
+  getToken,
+  isSupported,
+  onMessage,
+} from "firebase/messaging";
 import { app } from "./firebase";
 
 let messaging = null;
@@ -37,4 +42,26 @@ export async function getFcmToken() {
     console.error("❌ FCM token error", err);
     return null;
   }
+}
+
+export async function listenForForegroundMessages() {
+  const messagingInstance = await getMessagingSafe();
+  if (!messagingInstance) return () => {};
+
+  return onMessage(messagingInstance, async (payload) => {
+    const registration = await navigator.serviceWorker?.ready;
+    if (!registration) return;
+
+    await registration.showNotification(
+      payload.data?.title || "Novo obavestenje",
+      {
+        body: payload.data?.body || "",
+        icon: "/assets/brand/icon-192.png",
+        badge: "/assets/brand/icon-192.png",
+        data: {
+          target: payload.data?.target || "/",
+        },
+      }
+    );
+  });
 }

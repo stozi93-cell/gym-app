@@ -50,7 +50,7 @@ exports.notifyAdminBookingCreated = onDocumentCreated(
       );
       if (!tokens.length) return;
 
-      await admin.messaging().sendEachForMulticast({
+      const response = await admin.messaging().sendEachForMulticast({
         tokens,
         data: {
           type: "NEW_BOOKING",
@@ -61,6 +61,20 @@ exports.notifyAdminBookingCreated = onDocumentCreated(
       });
 
       await event.data.ref.update({ _notified: true });
+
+      console.log(
+        `Admin booking notification: ${response.successCount} delivered, ${response.failureCount} failed`
+      );
+
+      response.responses.forEach((result, index) => {
+        if (!result.success) {
+          console.warn(
+            "Admin booking notification failed",
+            tokens[index]?.slice(-8),
+            result.error?.code
+          );
+        }
+      });
 
       console.log("✅ Admin notified: new booking");
     } catch (err) {

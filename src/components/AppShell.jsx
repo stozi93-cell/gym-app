@@ -8,13 +8,31 @@ import LogoutIcon from "./icons/LogoutIcon";
 import { useEffect } from "react";
 
 import {
-  requestNotificationPermission,
   getFcmToken,
+  listenForForegroundMessages,
 } from "../firebase-messaging";
+import { saveFcmToken } from "../utils/saveFcmToken";
 
 export default function AppShell({ children }) {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const location = useLocation();
+
+  useEffect(() => {
+    let unsubscribe = () => {};
+
+    async function setupNotifications() {
+      unsubscribe = await listenForForegroundMessages();
+
+      if (Notification.permission !== "granted" || !user?.uid) return;
+
+      const token = await getFcmToken();
+      if (token) await saveFcmToken(user.uid, token);
+    }
+
+    setupNotifications();
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   // Chat pages: hide header entirely
   const isChatPage =
