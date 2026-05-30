@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   addDoc,
   collection,
@@ -25,6 +25,14 @@ function SendIcon({ className }) {
   );
 }
 
+function BackIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
 function getInitials(name = "") {
   const parts = name.trim().split(" ").filter(Boolean);
   if (!parts.length) return "?";
@@ -36,14 +44,40 @@ export default function ClientChat() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [coaches, setCoaches] = useState([]);
+  const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState("");
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
-  const [loading, setLoading] = useState(true);
   const bottomRef = useRef(null);
 
   const selectedCoachId = searchParams.get("coach") || "";
   const selectedCoach = coaches.find((coach) => coach.id === selectedCoachId);
+
+  const conversationByCoachId = useMemo(() => {
+    return Object.fromEntries(
+      conversations.map((conversation) => [
+        conversation.coachId,
+        conversation,
+      ])
+    );
+  }, [conversations]);
+
+  const sortedCoaches = useMemo(() => {
+    return [...coaches].sort((a, b) => {
+      const aConversation = conversationByCoachId[a.id];
+      const bConversation = conversationByCoachId[b.id];
+      const unreadDifference =
+        (bConversation?.clientUnread || 0) - (aConversation?.clientUnread || 0);
+      if (unreadDifference) return unreadDifference;
+
+      const recentDifference =
+        (bConversation?.updatedAt?.toMillis?.() || 0) -
+        (aConversation?.updatedAt?.toMillis?.() || 0);
+      if (recentDifference) return recentDifference;
+
+      return a.name.localeCompare(b.name, "sr");
+    });
+  }, [coaches, conversationByCoachId]);
 
   useEffect(() => {
     const coachesQuery = query(
@@ -52,31 +86,41 @@ export default function ClientChat() {
     );
 
     return onSnapshot(coachesQuery, (snap) => {
-      const nextCoaches = snap.docs.map((d) => {
-        const coach = d.data();
-        return {
-          id: d.id,
-          name:
-            `${coach.name || ""} ${coach.surname || ""}`.trim() || "Trener",
-        };
-      });
-
-      setCoaches(nextCoaches);
-
-      if (
-        nextCoaches.length &&
-        !nextCoaches.some((coach) => coach.id === selectedCoachId)
-      ) {
-        setSearchParams({ coach: nextCoaches[0].id }, { replace: true });
-      }
+      setCoaches(
+        snap.docs.map((d) => {
+          const coach = d.data();
+          return {
+            id: d.id,
+            name:
+              `${coach.name || ""} ${coach.surname || ""}`.trim() || "Trener",
+          };
+        })
+      );
     });
-  }, [selectedCoachId, setSearchParams]);
+  }, []);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const conversationsQuery = query(
+      collection(db, "conversations"),
+      where("clientId", "==", user.uid)
+    );
+
+    return onSnapshot(conversationsQuery, (snap) => {
+      setConversations(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+  }, [user?.uid]);
 
   useEffect(() => {
     let active = true;
 
     async function loadConversation() {
-      if (!user?.uid || !selectedCoachId) return;
+      if (!user?.uid || !selectedCoachId) {
+        setConversationId("");
+        setMessages([]);
+        return;
+      }
+
       const id = await ensureConversation({
         clientId: user.uid,
         coachId: selectedCoachId,
@@ -92,7 +136,6 @@ export default function ClientChat() {
 
   useEffect(() => {
     if (!conversationId) return;
-
     const messagesQuery = query(
       collection(db, "messages"),
       where("conversationId", "==", conversationId),
@@ -101,7 +144,6 @@ export default function ClientChat() {
 
     return onSnapshot(messagesQuery, (snap) => {
       setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
     });
   }, [conversationId]);
 
@@ -143,35 +185,66 @@ export default function ClientChat() {
     });
   }
 
-  if (!coaches.length) {
-    return <p className="text-sm text-neutral-300">Nema dostupnih trenera.</p>;
-  }
+  if (!selectedCoachId) {
+    return (
+      <div className="px-1 py-1">
+        <h2 className="mb-4 text-lg font-semibold text-white">Treneri</h2>
+        <div className="space-y-3">
+          {sortedCoaches.map((coach) => {
+            const conversation = conversationByCoachId[coach.id];
+            const unread = conversation?.clientUnread || 0;
 
-  if (loading && conversationId) return null;
+            return (
+              <button
+                key={coach.id}
+                onClick={() => setSearchParams({ coach: coach.id })}
+                className="flex w-full items-center gap-3 rounded-lg bg-neutral-900/75 p-4 text-left transition hover:bg-neutral-800"
+              >
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
+                  {getInitials(coach.name)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-white">
+                    {coach.name}
+                  </span>
+                  {conversation?.lastMessage && (
+                    <span className="mt-0.5 block truncate text-xs text-neutral-400">
+                      {conversation.lastMessage}
+                    </span>
+                  )}
+                </span>
+                {unread > 0 && (
+                  <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">
+                    {unread}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          {!coaches.length && (
+            <p className="text-sm text-neutral-300">Nema dostupnih trenera.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-border-dark px-4 py-2">
+      <div className="flex items-center gap-3 border-b border-border-dark px-2 py-2">
+        <button
+          onClick={() => setSearchParams({})}
+          aria-label="Nazad na listu trenera"
+          className="flex h-9 w-9 shrink-0 items-center justify-center text-neutral-300 transition hover:text-white"
+        >
+          <BackIcon className="h-5 w-5" />
+        </button>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
           {getInitials(selectedCoach?.name || "Trener")}
         </div>
         <p className="min-w-0 truncate text-sm font-medium text-white">
           {selectedCoach?.name || "Trener"}
         </p>
-        <select
-          aria-label="Izaberi trenera"
-          value={selectedCoachId}
-          onChange={(event) =>
-            setSearchParams({ coach: event.target.value }, { replace: true })
-          }
-          className="ml-auto max-w-[45%] rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-white outline-none"
-        >
-          {coaches.map((coach) => (
-            <option key={coach.id} value={coach.id}>
-              {coach.name}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">

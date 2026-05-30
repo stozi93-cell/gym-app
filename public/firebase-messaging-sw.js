@@ -1,35 +1,4 @@
-importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js");
-
-firebase.initializeApp({
-  apiKey: "AIzaSyCzIFe3t8HT8QXJSrwaZhB0aLlUsn3HpPk",
-  authDomain: "gym-booking-a75f8.firebaseapp.com",
-  projectId: "gym-booking-a75f8",
-  storageBucket: "gym-booking-a75f8.firebasestorage.app",
-  messagingSenderId: "489815738954",
-  appId: "1:489815738954:web:3a8fa96e3cfe65f5dbb4b3",
-});
-
-const messaging = firebase.messaging();
-
-/* BACKGROUND MESSAGE */
-messaging.onBackgroundMessage((payload) => {
-  console.log("[SW] Background message received:", payload);
-
-  const title = payload.data?.title || "NO_TITLE";
-  const body = payload.data?.body || "NO_BODY";
-
-  self.registration.showNotification(title, {
-    body,
-    badge: "/assets/brand/icon-192.png",
-    vibrate: [200, 100, 200],
-    data: {
-      target: payload.data?.target || "/",
-    },
-  });
-});
-
-/* CLICK HANDLER */
+/* Register this before Firebase so our navigation behavior stays authoritative. */
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
@@ -47,4 +16,33 @@ self.addEventListener("notificationclick", (event) => {
         return clients.openWindow(url);
       })
   );
+});
+
+importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js");
+
+firebase.initializeApp({
+  apiKey: "AIzaSyCzIFe3t8HT8QXJSrwaZhB0aLlUsn3HpPk",
+  authDomain: "gym-booking-a75f8.firebaseapp.com",
+  projectId: "gym-booking-a75f8",
+  storageBucket: "gym-booking-a75f8.firebasestorage.app",
+  messagingSenderId: "489815738954",
+  appId: "1:489815738954:web:3a8fa96e3cfe65f5dbb4b3",
+});
+
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage((payload) => {
+  const title = payload.data?.title || "Novo obavestenje";
+  const body = payload.data?.body || "";
+
+  self.registration.showNotification(title, {
+    body,
+    icon: "/assets/brand/icon-192.png",
+    badge: "/assets/brand/notification-badge.png",
+    vibrate: [200, 100, 200],
+    data: {
+      target: payload.data?.target || "/",
+    },
+  });
 });
