@@ -66,7 +66,7 @@ exports.notifySubscriptionExpiry = onSchedule(
           tokens,
           data: {
             type: "SUBSCRIPTION_EXPIRY",
-            target: "/profil",
+            target: "/profil/me",
             title,
             body,
           },

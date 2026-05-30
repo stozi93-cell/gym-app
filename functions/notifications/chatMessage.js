@@ -36,7 +36,8 @@ exports.notifyChatMessage = onDocumentCreated(
 
       if (!recipientSnap.exists) return;
 
-      const tokens = recipientSnap.data().fcmTokens || [];
+      const recipient = recipientSnap.data();
+      const tokens = recipient.fcmTokens || [];
       if (!tokens.length) return;
 
       /* ───── sender name ───── */
@@ -59,7 +60,7 @@ exports.notifyChatMessage = onDocumentCreated(
         tokens,
         data: {
           type: "CHAT_MESSAGE",
-          target: "/chat",
+          target: recipient.role === "admin" ? "/poruke" : "/chat",
           title: `💬 ${fullName}`,
           body: preview,
         },

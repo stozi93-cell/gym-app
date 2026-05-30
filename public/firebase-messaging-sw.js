@@ -21,8 +21,8 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(title, {
     body,
-    icon: "/brand/icon-192.png",
-    badge: "/brand/icon-192.png",
+    icon: "/assets/brand/icon-192.png",
+    badge: "/assets/brand/icon-192.png",
     data: {
       target: payload.data?.target || "/",
     },
@@ -41,7 +41,7 @@ self.addEventListener("notificationclick", (event) => {
       .then((clientList) => {
         for (const client of clientList) {
           if (client.url.startsWith(self.location.origin)) {
-            return client.focus();
+            return client.navigate(url).then(() => client.focus());
           }
         }
         return clients.openWindow(url);
