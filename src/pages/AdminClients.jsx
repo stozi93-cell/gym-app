@@ -11,16 +11,28 @@ import {
 import { db } from "../firebase";
 import { useNavigate, Link } from "react-router-dom";
 
+const EXPIRY_WARNING_DAYS = 7;
+
+function startOfDay(date) {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+}
+
+function getDaysRemaining(endDate) {
+  if (!(endDate instanceof Date)) return null;
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.ceil(
+    (startOfDay(endDate) - startOfDay(new Date())) / millisecondsPerDay
+  );
+}
+
 export default function AdminClients() {
   const [clients, setClients] = useState([]);
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("name-asc");
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
-
-  useEffect(() => {
-    load();
-  }, []);
 
   async function load() {
     const userSnap = await getDocs(collection(db, "users"));
@@ -54,14 +66,28 @@ export default function AdminClients() {
       hasActiveSub: !!activeSubs[d.id],
       subEnd: activeSubs[d.id]?.endDate || null,
       activeSubId: activeSubs[d.id]?.subId || null,
+      daysRemaining: getDaysRemaining(activeSubs[d.id]?.endDate),
     }));
 
     setClients(data);
   }
 
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   function applyFilter(list) {
     if (filter === "active") return list.filter((c) => c.hasActiveSub);
     if (filter === "inactive") return list.filter((c) => !c.hasActiveSub);
+    if (filter === "expiring") {
+      return list.filter(
+        (c) =>
+          c.hasActiveSub &&
+          c.daysRemaining >= 0 &&
+          c.daysRemaining <= EXPIRY_WARNING_DAYS
+      );
+    }
     return list;
   }
 
@@ -150,6 +176,7 @@ export default function AdminClients() {
           >
             <option value="all">Svi</option>
             <option value="active">Aktivni</option>
+            <option value="expiring">Pred istekom</option>
             <option value="inactive">Bez pretplate</option>
           </select>
 
@@ -197,8 +224,16 @@ export default function AdminClients() {
             </div>
 
             {c.hasActiveSub && (
-              <p className="text-xs text-neutral-400">
+              <p
+                className={`text-xs ${
+                  c.daysRemaining <= EXPIRY_WARNING_DAYS
+                    ? "font-medium text-amber-300"
+                    : "text-neutral-400"
+                }`}
+              >
                 Važi do {formatDate(c.subEnd)}
+                {c.daysRemaining <= EXPIRY_WARNING_DAYS &&
+                  ` (${c.daysRemaining} dana)`}
               </p>
             )}
 
