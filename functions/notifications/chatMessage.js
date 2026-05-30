@@ -6,71 +6,83 @@ exports.notifyChatMessage = onDocumentCreated(
   async (event) => {
     try {
       const message = event.data?.data();
-      if (!message) return;
-      if (message._notified) return;
+      if (!message || message._notified) return;
 
       const { senderId, text = "", conversationId } = message;
       if (!senderId || !conversationId) return;
 
       const db = admin.firestore();
+      const conversationSnap = await db.doc(`conversations/${conversationId}`).get();
+      if (!conversationSnap.exists) return;
 
-      /* ───── load conversation ───── */
-      const convoSnap = await db
-        .doc(`conversations/${conversationId}`)
-        .get();
-
-      if (!convoSnap.exists) return;
-
-      const { clientId, coachId } = convoSnap.data();
-
-      // never notify sender
-      const recipientId =
-        senderId === clientId ? coachId : clientId;
-
+      const { clientId, coachId } = conversationSnap.data();
+      const recipientId = senderId === clientId ? coachId : clientId;
       if (!recipientId) return;
 
-      /* ───── recipient tokens ───── */
-      const recipientSnap = await db
-        .doc(`users/${recipientId}`)
-        .get();
-
+      const recipientSnap = await db.doc(`users/${recipientId}`).get();
       if (!recipientSnap.exists) return;
 
       const recipient = recipientSnap.data();
       const tokens = recipient.fcmTokens || [];
       if (!tokens.length) return;
 
-      /* ───── sender name ───── */
       let fullName = "Nova poruka";
       const senderSnap = await db.doc(`users/${senderId}`).get();
       if (senderSnap.exists) {
-        const u = senderSnap.data();
+        const sender = senderSnap.data();
         fullName =
-          [u.name, u.surname].filter(Boolean).join(" ") || fullName;
+          [sender.name, sender.surname].filter(Boolean).join(" ") || fullName;
       }
 
-      /* ───── message preview ───── */
       const preview =
         typeof text === "string"
-          ? text.slice(0, 80) + (text.length > 80 ? "…" : "")
+          ? text.slice(0, 80) + (text.length > 80 ? "..." : "")
           : "Nova poruka";
 
-      /* ───── send DATA-ONLY notification ───── */
-      await admin.messaging().sendEachForMulticast({
+      const response = await admin.messaging().sendEachForMulticast({
         tokens,
         data: {
           type: "CHAT_MESSAGE",
-          target: recipient.role === "admin" ? "/poruke" : "/chat",
-          title: `💬 ${fullName}`,
+          target:
+            recipient.role === "admin"
+              ? `/admin-chat/${conversationId}`
+              : `/chat?coach=${coachId}`,
+          title: `Poruka: ${fullName}`,
           body: preview,
         },
       });
 
       await event.data.ref.update({ _notified: true });
 
-      console.log("💬 Chat notification sent");
+      console.log(
+        `Chat notification: ${response.successCount} delivered, ${response.failureCount} failed`
+      );
+
+      const invalidTokens = [];
+      response.responses.forEach((result, index) => {
+        if (!result.success) {
+          console.warn(
+            "Chat notification failed",
+            tokens[index]?.slice(-8),
+            result.error?.code
+          );
+
+          if (
+            result.error?.code === "messaging/registration-token-not-registered" ||
+            result.error?.code === "messaging/invalid-registration-token"
+          ) {
+            invalidTokens.push(tokens[index]);
+          }
+        }
+      });
+
+      if (invalidTokens.length) {
+        await recipientSnap.ref.update({
+          fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens),
+        });
+      }
     } catch (err) {
-      console.error("❌ notifyChatMessage failed", err);
+      console.error("notifyChatMessage failed", err);
     }
   }
 );

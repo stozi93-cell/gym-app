@@ -1,8 +1,7 @@
 import { ensureConversation } from "./ensureConversation";
 
 /**
- * Opens client chat safely.
- * Guarantees conversation exists BEFORE navigation.
+ * Opens a selected coach conversation after its Firestore document exists.
  */
 export async function openClientChat({
   clientId,
@@ -14,9 +13,6 @@ export async function openClientChat({
     return;
   }
 
-  // 🔒 This is the critical line
   await ensureConversation({ clientId, coachId });
-
-  // ✅ Only now we navigate
-  navigate("/chat");
+  navigate(`/chat?coach=${coachId}`);
 }

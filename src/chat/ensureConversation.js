@@ -7,26 +7,34 @@ import {
 import { db } from "../firebase";
 
 /**
- * Ensures a conversation exists for a client.
- * conversationId === clientId
+ * Keeps old one-coach conversations readable while new coach chats receive
+ * a stable per-client-and-coach document ID.
  */
 export async function ensureConversation({ clientId, coachId }) {
-  if (!clientId || !coachId) return;
+  if (!clientId || !coachId) return null;
 
-  const ref = doc(db, "conversations", clientId);
+  const legacyRef = doc(db, "conversations", clientId);
+  const legacySnap = await getDoc(legacyRef);
+
+  if (legacySnap.exists() && legacySnap.data().coachId === coachId) {
+    return clientId;
+  }
+
+  const conversationId = `${clientId}_${coachId}`;
+  const ref = doc(db, "conversations", conversationId);
   const snap = await getDoc(ref);
 
-  if (snap.exists()) return;
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      clientId,
+      coachId,
+      lastMessage: "",
+      lastSenderId: "",
+      updatedAt: serverTimestamp(),
+      clientUnread: 0,
+      coachUnread: 0,
+    });
+  }
 
-  await setDoc(ref, {
-    clientId,
-    coachId,
-
-    lastMessage: "",
-    lastSenderId: "",
-    updatedAt: serverTimestamp(),
-
-    clientUnread: 0,
-    coachUnread: 0,
-  });
+  return conversationId;
 }

@@ -1,32 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  collection,
   addDoc,
+  collection,
   doc,
+  increment,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
   where,
-  increment,
 } from "firebase/firestore";
+import { useSearchParams } from "react-router-dom";
 import { db } from "../firebase";
-import { useAuth } from "../context/AuthContext";
 import { ensureConversation } from "../chat/ensureConversation";
+import { useAuth } from "../context/AuthContext";
 
 function SendIcon({ className }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M6 12L3 21l18-9L3 3l3 9z" />
       <path d="M6 12h12" />
     </svg>
@@ -42,80 +34,108 @@ function getInitials(name = "") {
 
 export default function ClientChat() {
   const { user } = useAuth();
-
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [coaches, setCoaches] = useState([]);
+  const [conversationId, setConversationId] = useState("");
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
-
   const bottomRef = useRef(null);
 
-  // conversationId === clientId
-  const conversationId = user?.uid;
+  const selectedCoachId = searchParams.get("coach") || "";
+  const selectedCoach = coaches.find((coach) => coach.id === selectedCoachId);
 
-  /* ─────────────────────────────
-     Listen to messages
-  ───────────────────────────── */
+  useEffect(() => {
+    const coachesQuery = query(
+      collection(db, "users"),
+      where("role", "==", "admin")
+    );
+
+    return onSnapshot(coachesQuery, (snap) => {
+      const nextCoaches = snap.docs.map((d) => {
+        const coach = d.data();
+        return {
+          id: d.id,
+          name:
+            `${coach.name || ""} ${coach.surname || ""}`.trim() || "Trener",
+        };
+      });
+
+      setCoaches(nextCoaches);
+
+      if (
+        nextCoaches.length &&
+        !nextCoaches.some((coach) => coach.id === selectedCoachId)
+      ) {
+        setSearchParams({ coach: nextCoaches[0].id }, { replace: true });
+      }
+    });
+  }, [selectedCoachId, setSearchParams]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadConversation() {
+      if (!user?.uid || !selectedCoachId) return;
+      const id = await ensureConversation({
+        clientId: user.uid,
+        coachId: selectedCoachId,
+      });
+      if (active) setConversationId(id || "");
+    }
+
+    loadConversation();
+    return () => {
+      active = false;
+    };
+  }, [user?.uid, selectedCoachId]);
+
   useEffect(() => {
     if (!conversationId) return;
 
-    const q = query(
+    const messagesQuery = query(
       collection(db, "messages"),
       where("conversationId", "==", conversationId),
       orderBy("createdAt", "asc")
     );
 
-    const unsub = onSnapshot(q, (snap) => {
+    return onSnapshot(messagesQuery, (snap) => {
       setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setLoading(false);
     });
-
-    return () => unsub();
   }, [conversationId]);
 
-  /* ─────────────────────────────
-     Clear unread SAFELY on open
-  ───────────────────────────── */
   useEffect(() => {
     if (!conversationId) return;
-
     updateDoc(doc(db, "conversations", conversationId), {
       clientUnread: 0,
-    }).catch(() => {
-      // conversation might not exist yet — ignore safely
-    });
+    }).catch(() => {});
   }, [conversationId]);
 
-  /* ─────────────────────────────
-     Auto-scroll
-  ───────────────────────────── */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /* ─────────────────────────────
-     Send message
-  ───────────────────────────── */
   async function send() {
-    if (!text.trim() || !user?.uid) return;
-
-    const msg = text.trim();
+    if (!text.trim() || !user?.uid || !selectedCoachId) return;
+    const message = text.trim();
     setText("");
 
-    // 🔑 ensure conversation exists BEFORE updates
-    await ensureConversation({
+    const id = await ensureConversation({
       clientId: user.uid,
-      coachId: "A2g7h5o43mVc0bDGWM7al12bvPp1", // 👈 replace with your admin UID
+      coachId: selectedCoachId,
     });
+    if (!id) return;
 
     await addDoc(collection(db, "messages"), {
-      conversationId,
+      conversationId: id,
       senderId: user.uid,
-      text: msg,
+      text: message,
       createdAt: serverTimestamp(),
     });
 
-    await updateDoc(doc(db, "conversations", conversationId), {
-      lastMessage: msg,
+    await updateDoc(doc(db, "conversations", id), {
+      lastMessage: message,
       lastSenderId: user.uid,
       updatedAt: serverTimestamp(),
       coachUnread: increment(1),
@@ -123,37 +143,52 @@ export default function ClientChat() {
     });
   }
 
-  if (loading) return null;
+  if (!coaches.length) {
+    return <p className="text-sm text-neutral-300">Nema dostupnih trenera.</p>;
+  }
 
+  if (loading && conversationId) return null;
 
   return (
     <div className="flex h-full flex-col">
-      {/* HEADER */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border-dark">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
-          {getInitials("Trener")}
+      <div className="flex items-center gap-3 border-b border-border-dark px-4 py-2">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
+          {getInitials(selectedCoach?.name || "Trener")}
         </div>
-        <div>
-          <p className="text-sm font-medium text-white">Trener</p>
-        </div>
+        <p className="min-w-0 truncate text-sm font-medium text-white">
+          {selectedCoach?.name || "Trener"}
+        </p>
+        <select
+          aria-label="Izaberi trenera"
+          value={selectedCoachId}
+          onChange={(event) =>
+            setSearchParams({ coach: event.target.value }, { replace: true })
+          }
+          className="ml-auto max-w-[45%] rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-white outline-none"
+        >
+          {coaches.map((coach) => (
+            <option key={coach.id} value={coach.id}>
+              {coach.name}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* MESSAGES */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {messages.map((m) => {
-          const mine = m.senderId === user.uid;
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+        {messages.map((message) => {
+          const mine = message.senderId === user.uid;
           return (
             <div
-              key={m.id}
+              key={message.id}
               className={`max-w-[78%] px-4 py-2 text-sm leading-relaxed ${
                 mine
-                  ? "ml-auto bg-blue-600 text-white rounded-2xl rounded-br-sm"
-                  : "mr-auto bg-neutral-800 text-neutral-100 rounded-2xl rounded-bl-sm"
+                  ? "ml-auto rounded-2xl rounded-br-sm bg-blue-600 text-white"
+                  : "mr-auto rounded-2xl rounded-bl-sm bg-neutral-800 text-neutral-100"
               }`}
             >
-              <p>{m.text}</p>
+              <p>{message.text}</p>
               <p className="text-[10px] opacity-60">
-                {m.createdAt?.toDate?.().toLocaleTimeString("sr-RS", {
+                {message.createdAt?.toDate?.().toLocaleTimeString("sr-RS", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
@@ -164,30 +199,16 @@ export default function ClientChat() {
         <div ref={bottomRef} />
       </div>
 
-      {/* INPUT */}
-      <div className="border-t border-neutral-800 p-1 flex gap-2">
+      <div className="flex gap-2 border-t border-neutral-800 p-1">
         <input
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Napiši poruku…"
+          onChange={(event) => setText(event.target.value)}
+          placeholder="Napisi poruku..."
           className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-neutral-400"
         />
-        <button
-  onClick={send}
-  className={`
-    flex h-10 w-10 items-center justify-center
-    rounded-full bg-black transition
-    ${text.trim() ? "shadow-[0_0_0_1px_rgba(59,130,246,0.4)]" : ""}
-  `}
->
-  <SendIcon
-  className={`h-5 w-5 ${
-    text.trim() ? "text-blue-400" : "text-neutral-400"
-  }`}
-/>
-
-</button>
-
+        <button onClick={send} aria-label="Posalji poruku" className="flex h-10 w-10 items-center justify-center rounded-full bg-black transition">
+          <SendIcon className={`h-5 w-5 ${text.trim() ? "text-blue-400" : "text-neutral-400"}`} />
+        </button>
       </div>
     </div>
   );

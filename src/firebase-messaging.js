@@ -56,8 +56,8 @@ export async function listenForForegroundMessages() {
       payload.data?.title || "Novo obavestenje",
       {
         body: payload.data?.body || "",
-        icon: "/assets/brand/icon-192.png",
         badge: "/assets/brand/icon-192.png",
+        vibrate: [200, 100, 200],
         data: {
           target: payload.data?.target || "/",
         },
