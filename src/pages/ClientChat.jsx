@@ -1,20 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  addDoc,
   collection,
-  doc,
-  increment,
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
-  updateDoc,
   where,
 } from "firebase/firestore";
 import { useSearchParams } from "react-router-dom";
 import { db } from "../firebase";
 import { ensureConversation } from "../chat/ensureConversation";
 import { useAuth } from "../context/AuthContext";
+import {
+  markConversationRead,
+  sendChatMessage,
+} from "../chat/messageTracking";
+import {
+  formatDayLabel,
+  formatMessageTime,
+  getDayKey,
+  getMessageStatus,
+} from "../chat/messageDisplay";
 
 function SendIcon({ className }) {
   return (
@@ -48,7 +53,10 @@ export default function ClientChat() {
   const [conversationId, setConversationId] = useState("");
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
   const bottomRef = useRef(null);
+  const sendingRef = useRef(false);
 
   const selectedCoachId = searchParams.get("coach") || "";
   const selectedCoach = coaches.find((coach) => coach.id === selectedCoachId);
@@ -144,45 +152,50 @@ export default function ClientChat() {
 
     return onSnapshot(messagesQuery, (snap) => {
       setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      markConversationRead({
+        conversationId,
+        currentUserId: user?.uid,
+        unreadField: "clientUnread",
+        messageDocs: snap.docs,
+      }).catch((error) => console.error("Client chat read update failed", error));
     });
-  }, [conversationId]);
-
-  useEffect(() => {
-    if (!conversationId) return;
-    updateDoc(doc(db, "conversations", conversationId), {
-      clientUnread: 0,
-    }).catch(() => {});
-  }, [conversationId]);
+  }, [conversationId, user?.uid]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   async function send() {
-    if (!text.trim() || !user?.uid || !selectedCoachId) return;
+    if (!text.trim() || !user?.uid || !selectedCoachId || sendingRef.current) return;
     const message = text.trim();
+    sendingRef.current = true;
+    setSending(true);
+    setSendError("");
     setText("");
 
-    const id = await ensureConversation({
-      clientId: user.uid,
-      coachId: selectedCoachId,
-    });
-    if (!id) return;
+    try {
+      const id = await ensureConversation({
+        clientId: user.uid,
+        coachId: selectedCoachId,
+      });
+      if (!id) throw new Error("Conversation could not be created");
 
-    await addDoc(collection(db, "messages"), {
-      conversationId: id,
-      senderId: user.uid,
-      text: message,
-      createdAt: serverTimestamp(),
-    });
-
-    await updateDoc(doc(db, "conversations", id), {
-      lastMessage: message,
-      lastSenderId: user.uid,
-      updatedAt: serverTimestamp(),
-      coachUnread: increment(1),
-      clientUnread: 0,
-    });
+      await sendChatMessage({
+        conversationId: id,
+        senderId: user.uid,
+        recipientId: selectedCoachId,
+        text: message,
+        recipientUnreadField: "coachUnread",
+        senderUnreadField: "clientUnread",
+      });
+    } catch (error) {
+      console.error("Client chat send failed", error);
+      setText((currentText) => currentText || message);
+      setSendError("Poruka nije poslata. Pokusaj ponovo.");
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
+    }
   }
 
   if (!selectedCoachId) {
@@ -248,24 +261,31 @@ export default function ClientChat() {
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
-        {messages.map((message) => {
+        {messages.map((message, index) => {
           const mine = message.senderId === user.uid;
+          const showDay =
+            index === 0 ||
+            getDayKey(message.createdAt) !== getDayKey(messages[index - 1].createdAt);
           return (
-            <div
-              key={message.id}
-              className={`max-w-[78%] px-4 py-2 text-sm leading-relaxed ${
-                mine
-                  ? "ml-auto rounded-2xl rounded-br-sm bg-blue-600 text-white"
-                  : "mr-auto rounded-2xl rounded-bl-sm bg-neutral-800 text-neutral-100"
-              }`}
-            >
-              <p>{message.text}</p>
-              <p className="text-[10px] opacity-60">
-                {message.createdAt?.toDate?.().toLocaleTimeString("sr-RS", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </p>
+            <div key={message.id}>
+              {showDay && (
+                <div className="my-3 text-center text-[11px] text-neutral-400">
+                  {formatDayLabel(message.createdAt)}
+                </div>
+              )}
+              <div
+                className={`max-w-[78%] px-4 py-2 text-sm leading-relaxed ${
+                  mine
+                    ? "ml-auto rounded-2xl rounded-br-sm bg-blue-600 text-white"
+                    : "mr-auto rounded-2xl rounded-bl-sm bg-neutral-800 text-neutral-100"
+                }`}
+              >
+                <p>{message.text}</p>
+                <p className="mt-1 text-right text-[10px] opacity-60">
+                  {formatMessageTime(message.createdAt)}
+                  {mine && ` · ${getMessageStatus(message)}`}
+                </p>
+              </div>
             </div>
           );
         })}
@@ -276,13 +296,22 @@ export default function ClientChat() {
         <input
           value={text}
           onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              send();
+            }
+          }}
           placeholder="Napisi poruku..."
           className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-neutral-400"
         />
-        <button onClick={send} aria-label="Posalji poruku" className="flex h-10 w-10 items-center justify-center rounded-full bg-black transition">
+        <button disabled={sending} onClick={send} aria-label="Posalji poruku" className="flex h-10 w-10 items-center justify-center rounded-full bg-black transition disabled:opacity-50">
           <SendIcon className={`h-5 w-5 ${text.trim() ? "text-blue-400" : "text-neutral-400"}`} />
         </button>
       </div>
+      {sendError && (
+        <p className="px-2 pb-1 text-xs text-red-300">{sendError}</p>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   listenForForegroundMessages,
 } from "../firebase-messaging";
 import { saveFcmToken } from "../utils/saveFcmToken";
+import { listenForDeliveredMessages } from "../chat/messageTracking";
 
 export default function AppShell({ children }) {
   const { user, profile } = useAuth();
@@ -32,6 +33,10 @@ export default function AppShell({ children }) {
     setupNotifications();
 
     return () => unsubscribe();
+  }, [user?.uid]);
+
+  useEffect(() => {
+    return listenForDeliveredMessages(user?.uid);
   }, [user?.uid]);
 
   // Chat pages: hide header entirely
