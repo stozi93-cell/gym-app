@@ -233,8 +233,6 @@ export default function AdminBilling() {
 
   return (
     <div className="space-y-6 px-2 py-1">
-      <h1 className="px-2 text-xl font-semibold text-white">Fakture</h1>
-
       {status && (
         <div
           className={`mx-2 rounded-lg px-3 py-2 text-sm ${
@@ -291,7 +289,6 @@ export default function AdminBilling() {
       )}
 
       <div className="mx-2 space-y-3 rounded-xl bg-neutral-900 p-4">
-        <h2 className="text-lg font-medium text-white">Pregled uplata</h2>
         <div className="grid grid-cols-4 gap-1">
           <PresetButton onClick={() => applyOverviewPreset("today")}>Danas</PresetButton>
           <PresetButton onClick={() => applyOverviewPreset("week")}>Ova nedelja</PresetButton>

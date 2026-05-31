@@ -39,9 +39,14 @@ export default function AppShell({ children }) {
     return listenForDeliveredMessages(user?.uid);
   }, [user?.uid]);
 
-  // Chat pages: hide header entirely
+  const selectedCoachId =
+    location.pathname === "/chat"
+      ? new URLSearchParams(location.search).get("coach")
+      : "";
+
+  // Keep the top bar on the client coach list, but hide it inside chats.
   const isChatPage =
-    location.pathname === "/chat" ||
+    (location.pathname === "/chat" && !!selectedCoachId) ||
     location.pathname.startsWith("/admin-chat/");
 
   // Full logo on core sections

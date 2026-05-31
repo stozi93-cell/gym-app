@@ -7,8 +7,9 @@ import './index.css';
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("/firebase-messaging-sw.js")
+      .register("/firebase-messaging-sw.js", { updateViaCache: "none" })
       .then((registration) => {
+        registration.update();
         console.log("✅ Service Worker registered:", registration.scope);
       })
       .catch((err) => {

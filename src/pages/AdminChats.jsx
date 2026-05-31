@@ -148,12 +148,10 @@ export default function AdminChats() {
 
   return (
     <div className="px-4 py-1">
-      <h2 className="mb-3 text-lg font-semibold text-white">Poruke</h2>
-
       <input
         value={search}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder="Pretrazi klijente..."
+        placeholder="Pretraži klijente..."
         className="mb-4 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-blue-500"
       />
 

@@ -38,8 +38,8 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(title, {
     body,
-    icon: "/assets/brand/icon-192.png",
-    badge: "/assets/brand/notification-badge.png",
+    icon: "/assets/brand/icon-192.png?v=2",
+    badge: "/assets/brand/notification-badge.png?v=2",
     vibrate: [200, 100, 200],
     data: {
       target: payload.data?.target || "/",

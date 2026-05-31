@@ -226,10 +226,6 @@ export default function Forum() {
       <div className="w-full max-w-md">
         <div className="bg-neutral-900 rounded-2xl p-4">
 
-          <h2 className="text-lg font-semibold text-gray-100 mb-4 text-center">
-            Obaveštenja
-          </h2>
-
           {isAdmin && (
             <div className="mb-4 space-y-2">
               <input
@@ -418,35 +414,35 @@ export default function Forum() {
               );
             })}
           </div>
-<div className="mt-6">
-  <button
-    onClick={enableNotifications}
-    disabled={notificationsEnabled}
-    className={`
-      w-full
-      rounded-xl
-      px-4
-      py-3
-      text-sm
-      font-medium
-      flex
-      items-center
-      justify-center
-      gap-2
-      transition
-      ${
-        notificationsEnabled
-          ? "bg-green-600/10 text-green-400 opacity-60 cursor-default"
-          : "bg-green-600/20 text-green-400 hover:bg-green-600/30"
-      }
-    `}
-  >
-    🔔{" "}
-    {notificationsEnabled
-      ? "Notifikacije uključene"
-      : "Uključi notifikacije"}
-  </button>
-</div>
+        </div>
+        <div className="mt-3">
+          <button
+            onClick={enableNotifications}
+            disabled={notificationsEnabled}
+            className={`
+              w-full
+              rounded-xl
+              px-4
+              py-3
+              text-sm
+              font-medium
+              flex
+              items-center
+              justify-center
+              gap-2
+              transition
+              ${
+                notificationsEnabled
+                  ? "bg-green-600/10 text-green-400 opacity-60 cursor-default"
+                  : "bg-green-600/20 text-green-400 hover:bg-green-600/30"
+              }
+            `}
+          >
+            🔔{" "}
+            {notificationsEnabled
+              ? "Notifikacije uključene"
+              : "Uključi notifikacije"}
+          </button>
         </div>
       </div>
     </div>

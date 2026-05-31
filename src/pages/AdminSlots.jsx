@@ -421,14 +421,14 @@ setSlots(
         <p className="text-sm font-medium text-neutral-200">
           Novi termin
         </p>
-        <div className="flex items-end gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_84px_auto] items-end gap-3">
           <label className="min-w-0 text-xs text-neutral-400">
             Datum
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="mt-1 block min-w-0 rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+              className="mt-1 block w-full min-w-0 rounded bg-neutral-800 px-1.5 py-1 text-xs text-white"
             />
           </label>
           <label className="min-w-0 text-xs text-neutral-400">
@@ -437,7 +437,7 @@ setSlots(
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
-              className="mt-1 block min-w-0 rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+              className="mt-1 block w-full min-w-0 rounded bg-neutral-800 px-1.5 py-1 text-xs text-white"
             />
           </label>
           <button
@@ -498,7 +498,17 @@ setSlots(
                           </p>
                         </div>
 
-                        <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setBookingSlot(slot);
+                              setClientSearch("");
+                            }}
+                            className="rounded bg-neutral-700 px-2 py-1 text-xs text-white"
+                          >
+                            Klijent
+                          </button>
+
                           <button
                             onClick={() => toggleLock(slot)}
                             title={slot.locked ? "Otključaj termin" : "Zaključaj termin"}
@@ -510,16 +520,6 @@ setSlots(
                             }`}
                           >
                             <LockIcon locked={slot.locked} />
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              setBookingSlot(slot);
-                              setClientSearch("");
-                            }}
-                            className="rounded bg-neutral-700 px-2 py-1 text-xs text-white"
-                          >
-                            Klijent
                           </button>
                         </div>
                       </div>

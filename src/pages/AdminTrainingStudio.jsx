@@ -53,10 +53,6 @@ export default function AdminTrainingStudio() {
 
   return (
     <div className="px-4 py-1">
-      <h2 className="mb-3 text-lg font-semibold text-white">
-        Treninzi
-      </h2>
-
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
