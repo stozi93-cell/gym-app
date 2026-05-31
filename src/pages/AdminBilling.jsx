@@ -1,227 +1,262 @@
-import { useEffect, useState } from "react";
-import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
-import { db } from "../firebase";
+import { useEffect, useMemo, useState } from "react";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  updateDoc,
+} from "firebase/firestore";
 import { Link } from "react-router-dom";
+import { db } from "../firebase";
 
 const INITIAL_LIMIT = 1;
 
-export default function AdminBilling() {
-  const [invoices, setInvoices] = useState([]);
-  const [filteredInvoices, setFilteredInvoices] = useState([]);
+function toDate(value) {
+  if (!value) return null;
+  if (value.toDate) return value.toDate();
+  return new Date(value);
+}
 
+function formatDate(value) {
+  const date = toDate(value);
+  return date
+    ? date.toLocaleDateString("sr-Latn-RS", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : "-";
+}
+
+function attachMembershipPeriods(invoices, memberships) {
+  const membershipsById = Object.fromEntries(
+    memberships.map((membership) => [membership.id, membership])
+  );
+  const resolved = [];
+  const legacyInvoices = [];
+
+  invoices.forEach((invoice) => {
+    const membership = membershipsById[invoice.clientSubscriptionId];
+    if (membership) {
+      resolved.push({ ...invoice, membership, exactMembershipLink: true });
+    } else {
+      legacyInvoices.push(invoice);
+    }
+  });
+
+  const groups = new Map();
+  legacyInvoices.forEach((invoice) => {
+    const key = `${invoice.clientId}|${invoice.subscriptionId}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(invoice);
+  });
+
+  groups.forEach((groupInvoices, key) => {
+    const [clientId, subscriptionId] = key.split("|");
+    const matchingMemberships = memberships
+      .filter(
+        (membership) =>
+          membership.userId === clientId &&
+          membership.subscriptionId === subscriptionId
+      )
+      .sort((a, b) => toDate(a.startDate) - toDate(b.startDate));
+
+    groupInvoices
+      .sort((a, b) => (toDate(a.createdAt) || 0) - (toDate(b.createdAt) || 0))
+      .forEach((invoice, index) => {
+        resolved.push({
+          ...invoice,
+          membership: matchingMemberships[index] || null,
+          exactMembershipLink: false,
+        });
+      });
+  });
+
+  return resolved.sort(
+    (a, b) => (toDate(b.createdAt) || 0) - (toDate(a.createdAt) || 0)
+  );
+}
+
+export default function AdminBilling() {
+  const [rawInvoices, setRawInvoices] = useState([]);
+  const [memberships, setMemberships] = useState([]);
   const [searchClient, setSearchClient] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [showAll, setShowAll] = useState(false);
-
-  // overview
-  const [overviewInvoices, setOverviewInvoices] = useState([]);
   const [overviewStart, setOverviewStart] = useState("");
   const [overviewEnd, setOverviewEnd] = useState("");
+  const [status, setStatus] = useState(null);
 
   useEffect(() => {
-    loadInvoices();
+    return onSnapshot(collection(db, "billing"), (snap) => {
+      setRawInvoices(
+        snap.docs.map((invoice) => ({
+          id: invoice.id,
+          ...invoice.data(),
+        }))
+      );
+    });
   }, []);
 
   useEffect(() => {
-    applyFilters();
-  }, [invoices, searchClient, filterStatus]);
-
-  useEffect(() => {
-    applyOverviewFilter();
-  }, [invoices, overviewStart, overviewEnd]);
-
-  async function loadInvoices() {
-    const snap = await getDocs(collection(db, "billing"));
-    const data = snap.docs
-      .map((d) => {
-        const b = d.data();
-        return {
-          id: d.id,
-          clientId: b.clientId,
-          clientName: b.clientName || "—",
-          subscriptionName: b.subscriptionName || "—",
-          amount: b.amount || 0,
-          paidAmount: b.paidAmount || 0,
-          status: b.status,
-          createdAt: b.createdAt?.toDate?.() || null,
-          paidAt: b.paidAt?.toDate?.() || null,
-        };
-      })
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-    setInvoices(data);
-  }
-
-  const statusMeta = {
-    pending: { label: "Na čekanju", color: "bg-red-900/30 text-red-300" },
-    partially_paid: {
-      label: "Delimično plaćeno",
-      color: "bg-yellow-900/30 text-yellow-300",
-    },
-    paid: { label: "Plaćeno", color: "bg-green-900/30 text-green-300" },
-    cancelled: {
-      label: "Otkazano",
-      color: "bg-neutral-800 text-neutral-400",
-    },
-  };
-
-  const formatDate = (d) =>
-    d
-      ? d.toLocaleDateString("sr-Latn-RS", {
-          day: "2-digit",
-          month: "long",
-          year: "numeric",
-        })
-      : "—";
-
-  async function handlePartialPayment(inv) {
-    const max = inv.amount - inv.paidAmount;
-    const input = prompt(`Unesite iznos (maks ${max} RSD):`);
-    if (!input) return;
-
-    const paid = Number(input);
-    if (isNaN(paid) || paid <= 0 || paid > max) {
-      alert("Nevalidan iznos");
-      return;
-    }
-
-    const newPaid = inv.paidAmount + paid;
-
-    await updateDoc(doc(db, "billing", inv.id), {
-      paidAmount: newPaid,
-      status: newPaid === inv.amount ? "paid" : "partially_paid",
-      paidAt: new Date(),
-    });
-
-    loadInvoices();
-  }
-
-  async function handleCancel(inv) {
-    if (!window.confirm("Otkaži fakturu?")) return;
-
-    await updateDoc(doc(db, "billing", inv.id), {
-      status: "cancelled",
-    });
-
-    loadInvoices();
-  }
-
-  function applyFilters() {
-    let list = [...invoices];
-
-    if (searchClient) {
-      list = list.filter((i) =>
-        i.clientName.toLowerCase().includes(searchClient.toLowerCase())
+    return onSnapshot(collection(db, "clientSubscriptions"), (snap) => {
+      setMemberships(
+        snap.docs.map((membership) => ({
+          id: membership.id,
+          ...membership.data(),
+        }))
       );
-    }
+    });
+  }, []);
 
-    if (filterStatus !== "all") {
-      list = list.filter((i) => i.status === filterStatus);
-    }
-
-    setFilteredInvoices(list);
-  }
-
-  // ─────────────────────────────
-  // Overview helpers
-  // ─────────────────────────────
-  function applyOverviewPreset(preset) {
-    const now = new Date();
-    let start, end;
-
-    switch (preset) {
-      case "today":
-        start = new Date(now.setHours(0, 0, 0, 0));
-        end = new Date(now.setHours(23, 59, 59, 999));
-        break;
-
-      case "week": {
-        const day = now.getDay() || 7;
-        start = new Date(now);
-        start.setDate(now.getDate() - day + 1);
-        start.setHours(0, 0, 0, 0);
-        end = new Date(start);
-        end.setDate(start.getDate() + 6);
-        end.setHours(23, 59, 59, 999);
-        break;
-      }
-
-      case "month":
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        end = new Date(
-          now.getFullYear(),
-          now.getMonth() + 1,
-          0,
-          23,
-          59,
-          59
-        );
-        break;
-
-      case "lastMonth":
-        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        end = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          0,
-          23,
-          59,
-          59
-        );
-        break;
-
-      default:
-        return;
-    }
-
-    setOverviewStart(start.toISOString().slice(0, 10));
-    setOverviewEnd(end.toISOString().slice(0, 10));
-  }
-
-  function applyOverviewFilter() {
-    let list = invoices.filter(
-      (i) => i.status === "paid" || i.status === "partially_paid"
-    );
-
-    if (overviewStart) {
-      const s = new Date(overviewStart);
-      list = list.filter((i) => i.paidAt && i.paidAt >= s);
-    }
-
-    if (overviewEnd) {
-      const e = new Date(overviewEnd);
-      e.setHours(23, 59, 59, 999);
-      list = list.filter((i) => i.paidAt && i.paidAt <= e);
-    }
-
-    setOverviewInvoices(list);
-  }
-
-  const overviewTotal = overviewInvoices.reduce(
-    (sum, i) => sum + i.paidAmount,
-    0
+  const invoices = useMemo(
+    () => attachMembershipPeriods(rawInvoices, memberships),
+    [rawInvoices, memberships]
   );
 
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((invoice) => {
+      const matchesClient = (invoice.clientName || "")
+        .toLowerCase()
+        .includes(searchClient.toLowerCase());
+      const matchesStatus =
+        filterStatus === "all" || invoice.status === filterStatus;
+      return matchesClient && matchesStatus;
+    });
+  }, [invoices, searchClient, filterStatus]);
+
+  const overviewInvoices = useMemo(() => {
+    return invoices.filter((invoice) => {
+      if (invoice.status !== "paid" && invoice.status !== "partially_paid") {
+        return false;
+      }
+
+      const paidAt = toDate(invoice.paidAt);
+      if (!paidAt) return false;
+
+      if (overviewStart && paidAt < new Date(overviewStart)) return false;
+      if (overviewEnd) {
+        const end = new Date(overviewEnd);
+        end.setHours(23, 59, 59, 999);
+        if (paidAt > end) return false;
+      }
+
+      return true;
+    });
+  }, [invoices, overviewStart, overviewEnd]);
+
+  const overviewTotal = overviewInvoices.reduce(
+    (sum, invoice) => sum + (invoice.paidAmount || 0),
+    0
+  );
   const visibleInvoices = showAll
     ? filteredInvoices
     : filteredInvoices.slice(0, INITIAL_LIMIT);
 
+  function showStatus(type, message) {
+    setStatus({ type, message });
+    window.setTimeout(() => setStatus(null), 3500);
+  }
+
+  async function handlePartialPayment(invoice) {
+    const max = invoice.amount - (invoice.paidAmount || 0);
+    const input = prompt(`Unesite iznos (maks ${max} RSD):`);
+    if (!input) return;
+
+    const paid = Number(input);
+    if (Number.isNaN(paid) || paid <= 0 || paid > max) {
+      showStatus("error", "Uneti iznos nije ispravan.");
+      return;
+    }
+
+    const newPaid = (invoice.paidAmount || 0) + paid;
+    try {
+      await updateDoc(doc(db, "billing", invoice.id), {
+        paidAmount: newPaid,
+        status: newPaid === invoice.amount ? "paid" : "partially_paid",
+        paidAt: new Date(),
+      });
+      showStatus("success", "Uplata je sačuvana.");
+    } catch (error) {
+      console.error("Payment save failed", error);
+      showStatus("error", "Uplata nije sačuvana. Pokušaj ponovo.");
+    }
+  }
+
+  async function handleCancel(invoice) {
+    if (!window.confirm("Otkaži fakturu?")) return;
+
+    try {
+      await updateDoc(doc(db, "billing", invoice.id), {
+        status: "cancelled",
+      });
+      showStatus("success", "Faktura je otkazana.");
+    } catch (error) {
+      console.error("Invoice cancel failed", error);
+      showStatus("error", "Faktura nije otkazana. Pokušaj ponovo.");
+    }
+  }
+
+  function applyOverviewPreset(preset) {
+    const now = new Date();
+    let start;
+    let end;
+
+    if (preset === "today") {
+      start = new Date(now.setHours(0, 0, 0, 0));
+      end = new Date(now.setHours(23, 59, 59, 999));
+    }
+
+    if (preset === "week") {
+      const day = now.getDay() || 7;
+      start = new Date(now);
+      start.setDate(now.getDate() - day + 1);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+    }
+
+    if (preset === "month") {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    }
+
+    if (preset === "lastMonth") {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    }
+
+    if (!start || !end) return;
+    setOverviewStart(start.toISOString().slice(0, 10));
+    setOverviewEnd(end.toISOString().slice(0, 10));
+  }
+
   return (
-    <div className="px-2 py-1 space-y-6">
+    <div className="space-y-6 px-2 py-1">
       <h1 className="px-2 text-xl font-semibold text-white">Fakture</h1>
 
-      {/* Filters */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
+      {status && (
+        <div
+          className={`mx-2 rounded-lg px-3 py-2 text-sm ${
+            status.type === "success"
+              ? "bg-green-950/70 text-green-300"
+              : "bg-red-950/70 text-red-300"
+          }`}
+        >
+          {status.message}
+        </div>
+      )}
+
+      <div className="mx-2 space-y-3 rounded-xl bg-neutral-900 p-4">
         <input
           placeholder="Pretraga klijenta"
           value={searchClient}
-          onChange={(e) => setSearchClient(e.target.value)}
+          onChange={(event) => setSearchClient(event.target.value)}
           className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
         />
-
         <select
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
+          onChange={(event) => setFilterStatus(event.target.value)}
           className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
         >
           <option value="all">Sve</option>
@@ -232,55 +267,18 @@ export default function AdminBilling() {
         </select>
       </div>
 
-      {/* Invoice list */}
       <div className="space-y-3">
-        {visibleInvoices.map((inv) => {
-          const meta = statusMeta[inv.status];
-          return (
-            <div
-              key={inv.id}
-              className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-2"
-            >
-              <Link
-                to={`/profil/${inv.clientId}`}
-                className="font-medium text-blue-400"
-              >
-                {inv.clientName}
-              </Link>
-
-              <p className="text-sm text-neutral-300">
-                {inv.subscriptionName}
-              </p>
-
-              <p className="text-sm">
-                {inv.paidAmount} / {inv.amount} RSD
-              </p>
-
-              <span
-                className={`inline-block rounded px-2 py-0.5 text-xs ${meta.color}`}
-              >
-                {meta.label}
-              </span>
-
-              {inv.status !== "paid" && inv.status !== "cancelled" && (
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={() => handlePartialPayment(inv)}
-                    className="flex-1 rounded bg-blue-600 py-1.5 text-sm text-white"
-                  >
-                    Uplata
-                  </button>
-                  <button
-                    onClick={() => handleCancel(inv)}
-                    className="flex-1 rounded bg-red-600 py-1.5 text-sm text-white"
-                  >
-                    Otkaži
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {visibleInvoices.map((invoice) => (
+          <InvoiceCard
+            key={invoice.id}
+            invoice={invoice}
+            onPayment={() => handlePartialPayment(invoice)}
+            onCancel={() => handleCancel(invoice)}
+          />
+        ))}
+        {!visibleInvoices.length && (
+          <p className="px-4 text-sm text-neutral-400">Nema rezultata.</p>
+        )}
       </div>
 
       {filteredInvoices.length > INITIAL_LIMIT && (
@@ -292,61 +290,79 @@ export default function AdminBilling() {
         </button>
       )}
 
-      {/* Payments overview */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
-        <h2 className="text-lg font-medium text-white">
-          Pregled uplata
-        </h2>
-
+      <div className="mx-2 space-y-3 rounded-xl bg-neutral-900 p-4">
+        <h2 className="text-lg font-medium text-white">Pregled uplata</h2>
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => applyOverviewPreset("today")}
-            className="rounded bg-neutral-800 px-3 py-1 text-xs text-white"
-          >
-            Danas
-          </button>
-          <button
-            onClick={() => applyOverviewPreset("week")}
-            className="rounded bg-neutral-800 px-3 py-1 text-xs text-white"
-          >
-            Ova nedelja
-          </button>
-          <button
-            onClick={() => applyOverviewPreset("month")}
-            className="rounded bg-neutral-800 px-3 py-1 text-xs text-white"
-          >
-            Ovaj mesec
-          </button>
-          <button
-            onClick={() => applyOverviewPreset("lastMonth")}
-            className="rounded bg-neutral-800 px-3 py-1 text-xs text-white"
-          >
-            Prošli mesec
-          </button>
+          <PresetButton onClick={() => applyOverviewPreset("today")}>Danas</PresetButton>
+          <PresetButton onClick={() => applyOverviewPreset("week")}>Ova nedelja</PresetButton>
+          <PresetButton onClick={() => applyOverviewPreset("month")}>Ovaj mesec</PresetButton>
+          <PresetButton onClick={() => applyOverviewPreset("lastMonth")}>Prošli mesec</PresetButton>
         </div>
-
         <div className="grid grid-cols-2 gap-2">
-          <input
-            type="date"
-            value={overviewStart}
-            onChange={(e) => setOverviewStart(e.target.value)}
-            className="rounded bg-neutral-800 px-2 py-1 text-sm"
-          />
-          <input
-            type="date"
-            value={overviewEnd}
-            onChange={(e) => setOverviewEnd(e.target.value)}
-            className="rounded bg-neutral-800 px-2 py-1 text-sm"
-          />
+          <input type="date" value={overviewStart} onChange={(event) => setOverviewStart(event.target.value)} className="rounded bg-neutral-800 px-2 py-1 text-sm" />
+          <input type="date" value={overviewEnd} onChange={(event) => setOverviewEnd(event.target.value)} className="rounded bg-neutral-800 px-2 py-1 text-sm" />
         </div>
-
         <p className="text-sm text-neutral-300">
-          Ukupno naplaćeno:{" "}
-          <span className="font-medium text-green-400">
-            {overviewTotal} RSD
-          </span>
+          Ukupno naplaćeno: <span className="font-medium text-green-400">{overviewTotal} RSD</span>
         </p>
       </div>
     </div>
+  );
+}
+
+function InvoiceCard({ invoice, onPayment, onCancel }) {
+  const meta = {
+    pending: { label: "Na čekanju", color: "bg-red-900/30 text-red-300" },
+    partially_paid: { label: "Delimično plaćeno", color: "bg-yellow-900/30 text-yellow-300" },
+    paid: { label: "Plaćeno", color: "bg-green-900/30 text-green-300" },
+    cancelled: { label: "Otkazano", color: "bg-neutral-800 text-neutral-400" },
+  }[invoice.status] || { label: invoice.status, color: "bg-neutral-800 text-neutral-300" };
+
+  const paidLabel =
+    invoice.status === "partially_paid" ? "Poslednja uplata" : "Plaćeno";
+
+  return (
+    <div className="mx-2 space-y-2 rounded-xl bg-neutral-900 p-4">
+      <Link to={`/profil/${invoice.clientId}`} className="font-medium text-blue-400">
+        {invoice.clientName || "-"}
+      </Link>
+
+      <div>
+        <p className="text-sm text-neutral-300">{invoice.subscriptionName || "-"}</p>
+        {invoice.membership ? (
+          <p className="text-xs text-neutral-500">
+            {formatDate(invoice.membership.startDate)} - {formatDate(invoice.membership.endDate)}
+          </p>
+        ) : (
+          <p className="text-xs text-amber-300">Period članarine nije povezan.</p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm">{invoice.paidAmount || 0} / {invoice.amount || 0} RSD</p>
+        {invoice.paidAt && (
+          <p className="text-xs text-neutral-500">{paidLabel}: {formatDate(invoice.paidAt)}</p>
+        )}
+      </div>
+
+      <span className={`inline-block rounded px-2 py-0.5 text-xs ${meta.color}`}>
+        {meta.label}
+      </span>
+
+      {invoice.status !== "paid" && invoice.status !== "cancelled" && (
+        <div className="flex gap-2 pt-2">
+          <button onClick={onPayment} className="flex-1 rounded bg-blue-600 py-1.5 text-sm text-white">Uplata</button>
+          <button onClick={onCancel} className="flex-1 rounded bg-red-600 py-1.5 text-sm text-white">Otkaži</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PresetButton({ children, onClick }) {
+  return (
+    <button onClick={onClick} className="rounded bg-neutral-800 px-3 py-1 text-xs text-white">
+      {children}
+    </button>
   );
 }
