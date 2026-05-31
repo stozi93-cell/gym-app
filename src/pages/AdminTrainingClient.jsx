@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, runTransaction, Timestamp } from "firebase/firestore";
 import { db } from "../firebase";
 
 /* ───────── helpers ───────── */
@@ -22,51 +22,143 @@ function formatDay(date) {
   });
 }
 
-const emptySet = () => ({ reps: 10, weight: "" });
+const createId = (prefix) =>
+  `${prefix}_${crypto.randomUUID?.() || `${Date.now()}_${Math.random()}`}`;
+
+const emptySet = () => ({ id: createId("set"), reps: 10, weight: "" });
 
 const emptyExercise = () => ({
+  id: createId("exercise"),
   name: "",
   sets: [emptySet()],
 });
 
 const emptyBlock = (index) => ({
+  id: createId("block"),
   name: String.fromCharCode(65 + index),
   exercises: [],
 });
 
 const emptyTraining = () => ({
+  id: createId("training"),
   date: new Date().toISOString().slice(0, 10),
   blocks: [emptyBlock(0)],
   open: false,
 });
 
 const emptyWeek = (index) => ({
+  id: createId("week"),
   label: `Nedelja ${index}`,
   trainings: [emptyTraining()],
   open: false,
 });
 
+function normalizeSet(set = {}) {
+  return {
+    ...set,
+    id: set.id || createId("set"),
+    reps: set.reps ?? 10,
+    weight: set.weight ?? "",
+  };
+}
+
+function normalizeExercise(exercise = {}) {
+  return {
+    ...exercise,
+    id: exercise.id || createId("exercise"),
+    name: exercise.name || "",
+    sets: (exercise.sets ?? []).map(normalizeSet),
+  };
+}
+
+function normalizeBlock(block = {}, index = 0) {
+  return {
+    ...block,
+    id: block.id || createId("block"),
+    name: block.name || String.fromCharCode(65 + index),
+    exercises: (block.exercises ?? []).map(normalizeExercise),
+  };
+}
+
+function normalizeTraining(training = {}) {
+  return {
+    ...training,
+    id: training.id || createId("training"),
+    date:
+      typeof training.date === "string"
+        ? training.date
+        : training.date?.toDate?.()?.toISOString()?.slice(0, 10) ??
+          new Date().toISOString().slice(0, 10),
+    blocks: (training.blocks ?? []).map(normalizeBlock),
+    open: false,
+  };
+}
+
+function normalizeWeek(week = {}, index = 0) {
+  return {
+    ...week,
+    id: week.id || createId("week"),
+    label: week.label || `Nedelja ${index + 1}`,
+    trainings: (week.trainings ?? []).map(normalizeTraining),
+    open: false,
+  };
+}
+
+function cloneTraining(training) {
+  return normalizeTraining({
+    ...structuredClone(training),
+    id: null,
+    blocks: training.blocks.map((block) => ({
+      ...structuredClone(block),
+      id: null,
+      exercises: block.exercises.map((exercise) => ({
+        ...structuredClone(exercise),
+        id: null,
+        sets: exercise.sets.map((set) => ({
+          ...structuredClone(set),
+          id: null,
+        })),
+      })),
+    })),
+  });
+}
+
+function cloneWeek(week, label) {
+  return normalizeWeek({
+    ...structuredClone(week),
+    id: null,
+    label,
+    trainings: week.trainings.map(cloneTraining),
+  });
+}
+
+function serializeWeeks(weeks) {
+  return weeks.map((week) => {
+    const savedWeek = { ...week };
+    delete savedWeek.open;
+    savedWeek.trainings = week.trainings.map((training) => {
+      const savedTraining = { ...training };
+      delete savedTraining.open;
+      return savedTraining;
+    });
+    return savedWeek;
+  });
+}
+
 /* ───────── component ───────── */
 
 export default function AdminTrainingClient() {
   const { clientId } = useParams();
-  if (!clientId) {
-  return <div>Missing client ID</div>;
-}
-
-  // HARD GUARD – prevents Firestore crashes
-  if (typeof clientId !== "string" || clientId.length < 5) {
-    return (
-      <div className="p-4 text-neutral-400">
-        Nevažeći ili nepostojeći klijent
-      </div>
-    );
-  }
-
+  const isValidClientId =
+    typeof clientId === "string" && clientId.length >= 5;
   const [notes, setNotes] = useState("");
-  const [weeks, setWeeks] = useState([emptyWeek(1)]);
+  const [weeks, setWeeks] = useState([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [saveMessage, setSaveMessage] = useState("");
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState(null);
 
   const markDirty = useCallback(() => {
     setDirty(true);
@@ -78,38 +170,46 @@ export default function AdminTrainingClient() {
     let cancelled = false;
 
     async function load() {
+      setLoading(true);
+      setLoadError("");
+      setNotes("");
+      setWeeks([]);
+      setDirty(false);
+      setSaveMessage("");
+      setLoadedUpdatedAt(null);
+
+      if (!isValidClientId) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const ref = doc(db, "trainingPlans", clientId);
         const snap = await getDoc(ref);
 
-        if (!cancelled && snap.exists()) {
+        if (cancelled) return;
+
+        if (snap.exists()) {
           const data = snap.data();
+          setLoadedUpdatedAt(data.updatedAt?.toMillis?.() ?? null);
 
           if (typeof data.notes === "string") {
             setNotes(data.notes);
           }
 
           if (Array.isArray(data.weeks)) {
-            const safeWeeks = data.weeks.map((w) => ({
-              ...w,
-              trainings: (w.trainings ?? []).map((t) => ({
-                ...t,
-                date:
-                  typeof t.date === "string"
-                    ? t.date
-                    : t.date?.toDate?.()?.toISOString()?.slice(0, 10) ??
-                      new Date().toISOString().slice(0, 10),
-                blocks: t.blocks ?? [],
-                open: !!t.open,
-              })),
-              open: !!w.open,
-            }));
-
-            setWeeks(safeWeeks);
+            setWeeks(data.weeks.map(normalizeWeek));
           }
+        } else {
+          setWeeks([emptyWeek(1)]);
         }
       } catch (e) {
         console.error("LOAD TRAINING ERROR", e);
+        if (!cancelled) {
+          setLoadError("Plan treninga nije učitan. Pokušajte ponovo.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -117,25 +217,74 @@ export default function AdminTrainingClient() {
     return () => {
       cancelled = true;
     };
-  }, [clientId]);
+  }, [clientId, isValidClientId]);
+
+  useEffect(() => {
+    if (!dirty) return undefined;
+
+    const message = "Imate nesačuvane izmene. Da li želite da napustite stranicu?";
+    const warnBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const warnBeforeLinkNavigation = (event) => {
+      const link = event.target.closest?.("a[href]");
+      if (!link || window.confirm(message)) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    document.addEventListener("click", warnBeforeLinkNavigation, true);
+
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      document.removeEventListener("click", warnBeforeLinkNavigation, true);
+    };
+  }, [dirty]);
 
   /* ───────── save ───────── */
 
   async function save() {
+    if (loading || loadError || saving) return;
+
     setSaving(true);
+    setSaveMessage("");
 
-    await setDoc(
-      doc(db, "trainingPlans", clientId),
-      {
-        notes,
-        weeks,
-        updatedAt: new Date(),
-      },
-      { merge: true }
-    );
+    try {
+      const ref = doc(db, "trainingPlans", clientId);
+      const savedAt = Timestamp.now();
 
-    setDirty(false);
-    setSaving(false);
+      await runTransaction(db, async (transaction) => {
+        const latestSnap = await transaction.get(ref);
+        const latestUpdatedAt =
+          latestSnap.data()?.updatedAt?.toMillis?.() ?? null;
+
+        if (latestUpdatedAt !== loadedUpdatedAt) {
+          throw new Error("TRAINING_PLAN_CHANGED");
+        }
+
+        transaction.set(ref, {
+          notes,
+          weeks: serializeWeeks(weeks),
+          updatedAt: savedAt,
+        }, { merge: true });
+      });
+
+      setLoadedUpdatedAt(savedAt.toMillis());
+      setDirty(false);
+      setSaveMessage("Plan treninga je sačuvan.");
+    } catch (error) {
+      console.error("SAVE TRAINING ERROR", error);
+      setSaveMessage(
+        error.message === "TRAINING_PLAN_CHANGED"
+          ? "Plan je u međuvremenu izmenjen na drugom uređaju. Osvežite stranicu pre novih izmena."
+          : "Čuvanje nije uspelo. Izmene su i dalje na ekranu."
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   /* ───────── weeks ───────── */
@@ -156,10 +305,7 @@ export default function AdminTrainingClient() {
 
   function duplicateWeek(i) {
     setWeeks((prev) => {
-      const copy = structuredClone(prev[i]);
-      copy.label = `Nedelja ${prev.length + 1}`;
-      copy.open = false;
-      copy.trainings = copy.trainings.map((t) => ({ ...t, open: false }));
+      const copy = cloneWeek(prev[i], `Nedelja ${prev.length + 1}`);
 
       return [copy, ...prev.slice(0, i), prev[i], ...prev.slice(i + 1)];
     });
@@ -191,7 +337,7 @@ export default function AdminTrainingClient() {
           ? {
               ...x,
               trainings: [
-                { ...structuredClone(x.trainings[ti]), open: false },
+                cloneTraining(x.trainings[ti]),
                 ...x.trainings,
               ],
             }
@@ -452,6 +598,34 @@ export default function AdminTrainingClient() {
 
   /* ───────── UI ───────── */
 
+  if (!isValidClientId) {
+    return (
+      <div className="p-4 text-neutral-400">
+        Nevažeći ili nepostojeći klijent
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3 px-4 py-3">
+        <div className="h-4 w-2/3 rounded bg-neutral-800" />
+        <div className="h-20 rounded bg-neutral-900" />
+        <div className="h-16 rounded bg-neutral-900" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="px-4 py-3">
+        <div className="rounded-lg border border-red-900 bg-red-950/30 p-3 text-sm text-red-300">
+          {loadError}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="px-4 py-2 space-y-6">
       {/* SAVE BAR */}
@@ -469,6 +643,12 @@ export default function AdminTrainingClient() {
           {saving ? "Čuvanje..." : "Sačuvaj"}
         </button>
       </div>
+
+      {saveMessage && (
+        <div className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-neutral-200">
+          {saveMessage}
+        </div>
+      )}
 
       {/* NOTES */}
       <div className="rounded-xl bg-neutral-900 p-4">
@@ -493,7 +673,7 @@ export default function AdminTrainingClient() {
 
       {weeks.map((week, wi) => (
         <div
-          key={wi}
+          key={week.id}
           className="rounded-xl bg-neutral-900 p-4 space-y-4 border border-neutral-800"
         >
           <div className="flex justify-between items-center">
@@ -531,7 +711,7 @@ export default function AdminTrainingClient() {
 
               {week.trainings.map((t, ti) => (
                 <div
-                  key={ti}
+                  key={t.id}
                   className="rounded-xl bg-neutral-900 p-4 space-y-4 border border-neutral-700"
                 >
                   <div className="flex justify-between items-center">
@@ -574,7 +754,7 @@ export default function AdminTrainingClient() {
 
                       {t.blocks.map((b, bi) => (
                         <div
-                          key={bi}
+                          key={b.id}
                           className="rounded bg-neutral-800 p-3 space-y-3 border-l-4 border-blue-500"
                         >
                           <p className="text-sm font-medium text-white">
@@ -583,7 +763,7 @@ export default function AdminTrainingClient() {
 
                           {b.exercises.map((e, ei) => (
                             <div
-                              key={ei}
+                              key={e.id}
                               className="rounded bg-neutral-900 p-3 space-y-2"
                             >
                               <div className="flex justify-between items-center">
@@ -618,7 +798,7 @@ export default function AdminTrainingClient() {
 
                               {e.sets.map((s, si) => (
                                 <div
-                                  key={si}
+                                  key={s.id}
                                   className="flex gap-2 items-center"
                                 >
                                   <input

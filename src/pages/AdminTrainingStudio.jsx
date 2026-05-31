@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate, Link } from "react-router-dom";
 
@@ -13,32 +13,38 @@ function getInitials(name = "") {
 export default function AdminTrainingStudio() {
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function loadClients() {
-      const snap = await getDocs(
-        query(
-          collection(db, "users"),
-          where("role", "==", "client"),
-          where("active", "==", true)
-        )
-      );
-
-      setClients(
-        snap.docs.map((d) => {
+    return onSnapshot(
+      query(
+        collection(db, "users"),
+        where("role", "==", "client"),
+        where("active", "==", true)
+      ),
+      (snap) => {
+        setClients(
+          snap.docs.map((d) => {
           const u = d.data();
           return {
             id: d.id,
             fullName:
               `${u.name || ""} ${u.surname || ""}`.trim() || "Klijent",
           };
-        })
-      );
-    }
-
-    loadClients();
+          }).sort((a, b) => a.fullName.localeCompare(b.fullName, "sr-Latn-RS"))
+        );
+        setLoading(false);
+        setLoadError("");
+      },
+      (error) => {
+        console.error("LOAD TRAINING CLIENTS ERROR", error);
+        setLoading(false);
+        setLoadError("Lista klijenata nije učitana. Pokušajte ponovo.");
+      }
+    );
   }, []);
 
   const filtered = clients.filter((c) =>
@@ -67,6 +73,18 @@ export default function AdminTrainingStudio() {
       />
 
       <div className="space-y-3">
+        {loading && (
+          <p className="text-sm text-neutral-400">
+            Učitavanje...
+          </p>
+        )}
+
+        {loadError && (
+          <p className="text-sm text-red-400">
+            {loadError}
+          </p>
+        )}
+
         {filtered.map((c) => (
           <div
             key={c.id}
@@ -104,7 +122,7 @@ export default function AdminTrainingStudio() {
           </div>
         ))}
 
-        {filtered.length === 0 && (
+        {!loading && !loadError && filtered.length === 0 && (
           <p className="text-sm text-neutral-400">
             Nema rezultata.
           </p>
