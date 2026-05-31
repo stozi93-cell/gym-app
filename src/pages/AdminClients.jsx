@@ -4,9 +4,6 @@ import {
   getDocs,
   query,
   where,
-  doc,
-  getDoc,
-  updateDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate, Link } from "react-router-dom";
@@ -138,23 +135,6 @@ export default function AdminClients() {
         })
       : "—";
 
-  const prolongSubscription = async (subId) => {
-    const subRef = doc(db, "clientSubscriptions", subId);
-    const subSnap = await getDoc(subRef);
-    const subData = subSnap.data();
-
-    const currentEnd = subData.endDate?.toDate
-      ? subData.endDate.toDate()
-      : new Date(subData.endDate);
-
-    const newEnd = new Date(currentEnd);
-    newEnd.setDate(newEnd.getDate() + 7);
-
-    await updateDoc(subRef, { endDate: newEnd });
-    alert("Pretplata produžena 7 dana");
-    load();
-  };
-
   return (
     <div className="px-2 py-1 space-y-6">
 
@@ -241,11 +221,11 @@ export default function AdminClients() {
               {c.hasActiveSub && (
                 <button
                   onClick={() =>
-                    prolongSubscription(c.activeSubId)
+                    navigate(`/profil/${c.id}?editSubscription=1`)
                   }
                   className="text-sm text-green-400"
                 >
-                  Produži
+                  Izmeni
                 </button>
               )}
 

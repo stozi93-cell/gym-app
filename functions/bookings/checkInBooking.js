@@ -30,6 +30,7 @@ exports.checkInBooking = onCall({ region: REGION }, async (request) => {
     }
 
     const booking = bookingSnap.data();
+    const clientRef = db.doc(`users/${booking.userId}`);
     if (booking.checkedIn === true) {
       return { alreadyCheckedIn: true };
     }
@@ -38,19 +39,42 @@ exports.checkInBooking = onCall({ region: REGION }, async (request) => {
       db.collection("clientSubscriptions").where("userId", "==", booking.userId)
     );
 
-    const activeSubscription = subscriptionSnap.docs.find(
-      (doc) => doc.data().active !== false && doc.data().startDate
-    );
+    const slotTimestamp = booking.slotTimestamp;
+    const matchingSubscriptions = subscriptionSnap.docs
+      .filter((doc) => {
+        const subscription = doc.data();
+        return (
+          subscription.active !== false &&
+          subscription.startDate &&
+          subscription.endDate &&
+          slotTimestamp &&
+          slotTimestamp.toMillis() >= subscription.startDate.toMillis() &&
+          slotTimestamp.toMillis() <= subscription.endDate.toMillis()
+        );
+      })
+      .sort(
+        (a, b) =>
+          b.data().startDate.toMillis() - a.data().startDate.toMillis()
+      );
+
+    const activeSubscription = matchingSubscriptions[0];
+
+    if (matchingSubscriptions.length > 1) {
+      console.warn(
+        `Multiple active subscriptions overlap for user ${booking.userId}; using ${activeSubscription.id}`
+      );
+    }
 
     transaction.update(bookingRef, {
       checkedIn: true,
       checkedInAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    transaction.update(clientRef, {
+      lastVisitAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
 
     if (activeSubscription) {
       const subscription = activeSubscription.data();
-      const slotTimestamp = booking.slotTimestamp;
-
       if (slotTimestamp) {
         const weekIndex = Math.floor(
           (slotTimestamp.toMillis() - subscription.startDate.toMillis()) / WEEK_MS
@@ -70,4 +94,3 @@ exports.checkInBooking = onCall({ region: REGION }, async (request) => {
     return { alreadyCheckedIn: false };
   });
 });
-

@@ -9,6 +9,8 @@ import {
   query,
   where,
   getDoc,
+  serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useSearchParams } from "react-router-dom";
@@ -42,20 +44,6 @@ export default function AdminPackages() {
     { value: "5", label: "5× nedeljno" },
     { value: "6", label: "6x nedeljno" },
   ];
-
-  useEffect(() => {
-    loadPackages();
-    loadClients();
-  }, []);
-
-  useEffect(() => {
-    if (clientIdFromParam) setUserId(clientIdFromParam);
-  }, [clientIdFromParam]);
-
-  useEffect(() => {
-    if (userId) loadCurrentSubs(userId);
-    else setCurrentSubs([]);
-  }, [userId]);
 
   /* ─────────────────────────────
      LOADERS
@@ -110,6 +98,28 @@ export default function AdminPackages() {
     setCurrentSubs(subs.length ? [subs[0]] : []);
   }
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadPackages();
+      loadClients();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!clientIdFromParam) return;
+    const timer = window.setTimeout(() => setUserId(clientIdFromParam), 0);
+    return () => window.clearTimeout(timer);
+  }, [clientIdFromParam]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (userId) loadCurrentSubs(userId);
+      else setCurrentSubs([]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [userId]);
+
   /* ─────────────────────────────
      ACTIONS
   ───────────────────────────── */
@@ -124,8 +134,10 @@ export default function AdminPackages() {
     end.setDate(end.getDate() + pkg.durationDays);
 
     const weeklyCheckIns = Number(
-  checkInOption || pkg.defaultCheckIns || 6
-);
+      checkInOption === "default"
+        ? pkg.defaultCheckIns || 6
+        : checkInOption
+    );
 
     const weeks = Math.ceil(
       (end - start) / (7 * 24 * 60 * 60 * 1000)
@@ -141,13 +153,17 @@ export default function AdminPackages() {
       )
     );
 
+    const newSubscriptionRef = doc(collection(db, "clientSubscriptions"));
+    const billingRef = doc(collection(db, "billing"));
+    const batch = writeBatch(db);
+
     for (const d of existing.docs) {
-      await updateDoc(doc(db, "clientSubscriptions", d.id), {
+      batch.update(doc(db, "clientSubscriptions", d.id), {
         active: false,
       });
     }
 
-    await addDoc(collection(db, "clientSubscriptions"), {
+    batch.set(newSubscriptionRef, {
       userId,
       subscriptionId: packageId,
       startDate: start,
@@ -155,11 +171,13 @@ export default function AdminPackages() {
       active: true,
       weeklyCheckIns,
       checkInsArray,
+      createdAt: serverTimestamp(),
     });
 
     const auth = getAuth();
-    await addDoc(collection(db, "billing"), {
+    batch.set(billingRef, {
       clientId: userId,
+      clientSubscriptionId: newSubscriptionRef.id,
       clientName: `${users.find((u) => u.id === userId)?.name || ""} ${
         users.find((u) => u.id === userId)?.surname || ""
       }`,
@@ -172,6 +190,8 @@ export default function AdminPackages() {
       createdBy: auth.currentUser?.uid || null,
       note: "",
     });
+
+    await batch.commit();
 
     alert("Pretplata dodeljena");
     setUserId("");
