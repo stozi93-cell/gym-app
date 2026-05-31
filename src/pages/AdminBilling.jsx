@@ -318,8 +318,11 @@ function InvoiceCard({ invoice, onPayment, onCancel }) {
     cancelled: { label: "Otkazano", color: "bg-neutral-800 text-neutral-400" },
   }[invoice.status] || { label: invoice.status, color: "bg-neutral-800 text-neutral-300" };
 
-  const paidLabel =
-    invoice.status === "partially_paid" ? "Poslednja uplata" : "Plaćeno";
+  const statusDate =
+    invoice.paidAt &&
+    (invoice.status === "paid" || invoice.status === "partially_paid")
+      ? ` · ${formatDate(invoice.paidAt)}`
+      : "";
 
   return (
     <div className="mx-2 space-y-2 rounded-xl bg-neutral-900 p-4">
@@ -328,25 +331,25 @@ function InvoiceCard({ invoice, onPayment, onCancel }) {
       </Link>
 
       <div>
-        <p className="text-sm text-neutral-300">{invoice.subscriptionName || "-"}</p>
+        <p className="text-sm text-neutral-300">
+          {invoice.subscriptionName || "-"}
+          {invoice.membership && (
+            <span className="ml-1 text-neutral-400">
+              ({formatDate(invoice.membership.startDate)} - {formatDate(invoice.membership.endDate)})
+            </span>
+          )}
+        </p>
         {invoice.membership ? (
-          <p className="text-xs text-neutral-500">
-            {formatDate(invoice.membership.startDate)} - {formatDate(invoice.membership.endDate)}
-          </p>
+          null
         ) : (
           <p className="text-xs text-amber-300">Period članarine nije povezan.</p>
         )}
       </div>
 
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm">{invoice.paidAmount || 0} / {invoice.amount || 0} RSD</p>
-        {invoice.paidAt && (
-          <p className="text-xs text-neutral-500">{paidLabel}: {formatDate(invoice.paidAt)}</p>
-        )}
-      </div>
+      <p className="text-sm">{invoice.paidAmount || 0} / {invoice.amount || 0} RSD</p>
 
       <span className={`inline-block rounded px-2 py-0.5 text-xs ${meta.color}`}>
-        {meta.label}
+        {meta.label}{statusDate}
       </span>
 
       {invoice.status !== "paid" && invoice.status !== "cancelled" && (
