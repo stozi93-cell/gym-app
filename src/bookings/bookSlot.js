@@ -11,6 +11,7 @@ export async function bookSlot({
   slot,
   userId,
   allowOverbook = false,
+  adminOverride = false,
 }) {
   const result = await callBookSlot({
     slotId: slot.generated ? null : slot.id,
@@ -18,6 +19,7 @@ export async function bookSlot({
     timestampMillis: slot.timestamp.getTime(),
     userId,
     allowOverbook,
+    adminOverride,
   });
 
   return result.data;
@@ -26,4 +28,3 @@ export async function bookSlot({
 export function getBookingErrorMessage(error) {
   return error?.message || "Rezervacija nije uspela. Pokusajte ponovo.";
 }
-

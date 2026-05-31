@@ -68,6 +68,7 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
   const sourceTemplateId = request.data?.templateId || null;
   const requestedSlotId = request.data?.slotId || null;
   const allowOverbook = request.data?.allowOverbook === true;
+  const adminOverride = request.data?.adminOverride === true;
   const timestampMillis = parseTimestampMillis(request.data?.timestampMillis);
   const timestamp = admin.firestore.Timestamp.fromMillis(timestampMillis);
 
@@ -82,6 +83,10 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
 
     if (allowOverbook && !isAdmin) {
       throw new HttpsError("permission-denied", "Samo admin moze da dozvoli overbooking.");
+    }
+
+    if (adminOverride && !isAdmin) {
+      throw new HttpsError("permission-denied", "Samo admin moze da zaobidje ogranicenja termina.");
     }
 
     if (
@@ -181,12 +186,12 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
       slotData.locked === true ||
       matchingSlotsSnap.docs.some((doc) => doc.data().locked === true);
 
-    if (occurrenceLocked) {
+    if (occurrenceLocked && !adminOverride) {
       throw new HttpsError("failed-precondition", "Termin je zakljucan.");
     }
 
     const capacity = getCapacity(slotData.capacity);
-    if (bookingCount >= capacity && !allowOverbook) {
+    if (bookingCount >= capacity && !allowOverbook && !adminOverride) {
       throw new HttpsError("resource-exhausted", "Termin je popunjen.");
     }
 
