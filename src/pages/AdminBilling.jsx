@@ -292,15 +292,21 @@ export default function AdminBilling() {
 
       <div className="mx-2 space-y-3 rounded-xl bg-neutral-900 p-4">
         <h2 className="text-lg font-medium text-white">Pregled uplata</h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-4 gap-1">
           <PresetButton onClick={() => applyOverviewPreset("today")}>Danas</PresetButton>
           <PresetButton onClick={() => applyOverviewPreset("week")}>Ova nedelja</PresetButton>
           <PresetButton onClick={() => applyOverviewPreset("month")}>Ovaj mesec</PresetButton>
           <PresetButton onClick={() => applyOverviewPreset("lastMonth")}>Prošli mesec</PresetButton>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <input type="date" value={overviewStart} onChange={(event) => setOverviewStart(event.target.value)} className="rounded bg-neutral-800 px-2 py-1 text-sm" />
-          <input type="date" value={overviewEnd} onChange={(event) => setOverviewEnd(event.target.value)} className="rounded bg-neutral-800 px-2 py-1 text-sm" />
+          <label className="min-w-0 text-xs text-neutral-400">
+            Od
+            <input type="date" value={overviewStart} onChange={(event) => setOverviewStart(event.target.value)} className="mt-1 w-full min-w-0 rounded bg-neutral-800 px-2 py-1 text-sm text-white" />
+          </label>
+          <label className="min-w-0 text-xs text-neutral-400">
+            Do
+            <input type="date" value={overviewEnd} onChange={(event) => setOverviewEnd(event.target.value)} className="mt-1 w-full min-w-0 rounded bg-neutral-800 px-2 py-1 text-sm text-white" />
+          </label>
         </div>
         <p className="text-sm text-neutral-300">
           Ukupno naplaćeno: <span className="font-medium text-green-400">{overviewTotal} RSD</span>
@@ -331,16 +337,11 @@ function InvoiceCard({ invoice, onPayment, onCancel }) {
       </Link>
 
       <div>
-        <p className="text-sm text-neutral-300">
-          {invoice.subscriptionName || "-"}
-          {invoice.membership && (
-            <span className="ml-1 text-neutral-400">
-              ({formatDate(invoice.membership.startDate)} - {formatDate(invoice.membership.endDate)})
-            </span>
-          )}
-        </p>
+        <p className="text-sm text-neutral-300">{invoice.subscriptionName || "-"}</p>
         {invoice.membership ? (
-          null
+          <p className="text-xs text-neutral-400">
+            {formatDate(invoice.membership.startDate)} - {formatDate(invoice.membership.endDate)}
+          </p>
         ) : (
           <p className="text-xs text-amber-300">Period članarine nije povezan.</p>
         )}
@@ -364,7 +365,7 @@ function InvoiceCard({ invoice, onPayment, onCancel }) {
 
 function PresetButton({ children, onClick }) {
   return (
-    <button onClick={onClick} className="rounded bg-neutral-800 px-3 py-1 text-xs text-white">
+    <button onClick={onClick} className="min-w-0 rounded bg-neutral-800 px-1 py-1 text-[11px] text-white">
       {children}
     </button>
   );

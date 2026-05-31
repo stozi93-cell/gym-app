@@ -315,12 +315,15 @@ export default function AdminPackages() {
           ))}
         </select>
 
-        <input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
-        />
+        <label className="text-xs text-neutral-400">
+          Početak članarine
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="mt-1 w-full rounded bg-neutral-800 px-3 py-2 text-sm text-white"
+          />
+        </label>
 
         <button
           onClick={assignSubscription}

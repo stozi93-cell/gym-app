@@ -560,14 +560,17 @@ export default function AdminTrainingClient() {
 
                   {t.open && (
                     <>
-                      <input
-                        type="date"
-                        value={t.date}
-                        onChange={(e) =>
-                          updateTrainingDate(wi, ti, e.target.value)
-                        }
-                        className="rounded bg-neutral-800 px-2 py-1 text-sm text-white"
-                      />
+                      <label className="text-xs text-neutral-400">
+                        Datum treninga
+                        <input
+                          type="date"
+                          value={t.date}
+                          onChange={(e) =>
+                            updateTrainingDate(wi, ti, e.target.value)
+                          }
+                          className="mt-1 block rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+                        />
+                      </label>
 
                       {t.blocks.map((b, bi) => (
                         <div

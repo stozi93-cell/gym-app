@@ -557,18 +557,24 @@ function MembershipCard({
       {editing && (
         <div className="mt-3 space-y-2 rounded-lg bg-neutral-950/70 p-3">
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="date"
-              value={form.startDate || ""}
-              onChange={(event) => setForm({ ...form, startDate: event.target.value })}
-              className="min-w-0 rounded bg-neutral-800 px-2 py-1.5 text-xs text-white"
-            />
-            <input
-              type="date"
-              value={form.endDate || ""}
-              onChange={(event) => setForm({ ...form, endDate: event.target.value })}
-              className="min-w-0 rounded bg-neutral-800 px-2 py-1.5 text-xs text-white"
-            />
+            <label className="min-w-0 text-xs text-neutral-400">
+              Početak
+              <input
+                type="date"
+                value={form.startDate || ""}
+                onChange={(event) => setForm({ ...form, startDate: event.target.value })}
+                className="mt-1 w-full min-w-0 rounded bg-neutral-800 px-2 py-1.5 text-xs text-white"
+              />
+            </label>
+            <label className="min-w-0 text-xs text-neutral-400">
+              Kraj
+              <input
+                type="date"
+                value={form.endDate || ""}
+                onChange={(event) => setForm({ ...form, endDate: event.target.value })}
+                className="mt-1 w-full min-w-0 rounded bg-neutral-800 px-2 py-1.5 text-xs text-white"
+              />
+            </label>
           </div>
           <select
             value={form.weeklyCheckIns}

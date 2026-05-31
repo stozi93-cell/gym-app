@@ -70,7 +70,6 @@ export default function AdminSlots() {
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [users, setUsers] = useState([]);
-  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [date, setDate] = useState("");
@@ -117,7 +116,6 @@ const end = Timestamp.fromDate(endDate);
       id: d.id,
       ...d.data(),
     }));
-    setTemplates(tplData);
 
     const slotSnap = await getDocs(
       query(
@@ -310,8 +308,6 @@ setSlots(
     return acc;
   }, {});
 
-  const todayStr = new Date().toISOString().split("T")[0];
-
   const visibleGroups = filterDate
   ? { [filterDate]: groupedSlots[filterDate] || [] }
   : groupedSlots;
@@ -366,19 +362,25 @@ setSlots(
         <p className="text-sm font-medium text-neutral-200">
           Novi termin
         </p>
-        <div className="flex gap-2">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded bg-neutral-800 px-2 py-1 text-sm"
-          />
-          <input
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-            className="rounded bg-neutral-800 px-2 py-1 text-sm"
-          />
+        <div className="flex items-end gap-2">
+          <label className="min-w-0 text-xs text-neutral-400">
+            Datum
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="mt-1 block min-w-0 rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+            />
+          </label>
+          <label className="min-w-0 text-xs text-neutral-400">
+            Vreme
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              className="mt-1 block min-w-0 rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+            />
+          </label>
           <button
             onClick={createSlot}
             className="rounded bg-blue-600 px-3 py-1 text-sm text-white"
