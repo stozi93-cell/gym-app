@@ -40,6 +40,7 @@ exports.cleanupOldBookings = onSchedule(
 
     let removedSlots = 0;
     let removedBookings = 0;
+    let removedBookingDays = 0;
 
     while (true) {
       const oldSlotsSnap = await db
@@ -79,8 +80,21 @@ exports.cleanupOldBookings = onSchedule(
       removedBookings += orphanedOldBookingsSnap.size;
     }
 
+    while (true) {
+      const oldBookingDaysSnap = await db
+        .collection("bookingDays")
+        .where("slotTimestamp", "<", cutoff)
+        .limit(200)
+        .get();
+
+      if (oldBookingDaysSnap.empty) break;
+
+      await deleteDocs(oldBookingDaysSnap.docs);
+      removedBookingDays += oldBookingDaysSnap.size;
+    }
+
     console.log(
-      `Cleanup complete: removed ${removedSlots} slots and ${removedBookings} bookings.`
+      `Cleanup complete: removed ${removedSlots} slots, ${removedBookings} bookings, and ${removedBookingDays} booking day guards.`
     );
   }
 );

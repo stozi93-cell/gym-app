@@ -33,6 +33,22 @@ function parseTimestampMillis(value) {
   return timestampMillis;
 }
 
+function getBelgradeDayKey(timestampMillis) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Belgrade",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(new Date(timestampMillis))
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 function isTemplateOccurrence(template, timestampMillis) {
   const date = new Date(timestampMillis);
   if (date.getSeconds() !== 0 || date.getMilliseconds() !== 0) return false;
@@ -102,6 +118,32 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
     let slotRef;
     let slotData;
     let newSlotData = null;
+    let bookingDayRef = null;
+    const bookingDayKey = getBelgradeDayKey(timestampMillis);
+
+    if (!isAdmin) {
+      bookingDayRef = db.doc(`bookingDays/${requestedUserId}_${bookingDayKey}`);
+      await transaction.get(bookingDayRef);
+
+      const userBookingsSnap = await transaction.get(
+        db.collection("bookings").where("userId", "==", requestedUserId)
+      );
+      const alreadyBookedThatDay = userBookingsSnap.docs.some((bookingDoc) => {
+        const slotTimestamp = bookingDoc.data().slotTimestamp;
+        return (
+          slotTimestamp &&
+          getBelgradeDayKey(slotTimestamp.toMillis()) === bookingDayKey
+        );
+      });
+
+      if (alreadyBookedThatDay) {
+        throw new HttpsError(
+          "already-exists",
+          "Već imate rezervisan trening za ovaj dan."
+        );
+      }
+    }
+
     const matchingSlotsSnap = await transaction.get(
       db.collection("slots").where("timestamp", "==", timestamp)
     );
@@ -216,6 +258,15 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       checkedIn: false,
     });
+
+    if (bookingDayRef) {
+      transaction.set(bookingDayRef, {
+        userId: requestedUserId,
+        bookingId: bookingRef.id,
+        slotTimestamp: timestamp,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
 
     return {
       bookingId: bookingRef.id,

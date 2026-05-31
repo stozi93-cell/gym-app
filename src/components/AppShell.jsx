@@ -13,6 +13,7 @@ import {
 } from "../firebase-messaging";
 import { saveFcmToken } from "../utils/saveFcmToken";
 import { listenForDeliveredMessages } from "../chat/messageTracking";
+import AppUpdatePrompt from "./AppUpdatePrompt";
 
 export default function AppShell({ children }) {
   const { user, profile } = useAuth();
@@ -74,6 +75,8 @@ export default function AppShell({ children }) {
         text-text-primaryDark
       "
     >
+      <AppUpdatePrompt />
+
       {/* TOP BAR (hidden on chat) */}
       {!isChatPage && (
         <header
