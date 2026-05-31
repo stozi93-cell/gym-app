@@ -2,13 +2,7 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate, Link } from "react-router-dom";
-
-function getInitials(name = "") {
-  const parts = name.trim().split(" ").filter(Boolean);
-  if (!parts.length) return "?";
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
+import Avatar from "../components/Avatar";
 
 export default function AdminTrainingStudio() {
   const [clients, setClients] = useState([]);
@@ -33,6 +27,7 @@ export default function AdminTrainingStudio() {
             id: d.id,
             fullName:
               `${u.name || ""} ${u.surname || ""}`.trim() || "Klijent",
+            photoURL: u.photoURL || "",
           };
           }).sort((a, b) => a.fullName.localeCompare(b.fullName, "sr-Latn-RS"))
         );
@@ -96,14 +91,9 @@ export default function AdminTrainingStudio() {
               <Link
                 to={`/profil/${c.id}`}
                 onClick={(e) => e.stopPropagation()}
-                className="
-                  flex h-10 w-10 items-center justify-center
-                  rounded-full bg-neutral-700
-                  text-sm font-medium text-white
-                  hover:ring-2 hover:ring-blue-500
-                "
+                className="shrink-0 rounded-full hover:ring-2 hover:ring-blue-500"
               >
-                {getInitials(c.fullName)}
+                <Avatar name={c.fullName} photoURL={c.photoURL} />
               </Link>
 
               <div>

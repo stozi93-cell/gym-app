@@ -11,6 +11,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import Avatar from "../components/Avatar";
 import {
   markConversationRead,
   sendChatMessage,
@@ -39,10 +40,6 @@ function BackIcon({ className }) {
   );
 }
 
-function getInitials(name = "Klijent") {
-  return name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-}
-
 export default function AdminChat() {
   const { conversationId } = useParams();
   const { user } = useAuth();
@@ -52,6 +49,7 @@ export default function AdminChat() {
   const [sendError, setSendError] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientName, setClientName] = useState("Klijent");
+  const [clientPhotoURL, setClientPhotoURL] = useState("");
   const bottomRef = useRef(null);
   const sendingRef = useRef(false);
 
@@ -66,17 +64,15 @@ export default function AdminChat() {
   }, [conversationId]);
 
   useEffect(() => {
-    async function loadClient() {
-      if (!clientId) return;
-      const snap = await getDoc(doc(db, "users", clientId));
+    if (!clientId) return;
+    return onSnapshot(doc(db, "users", clientId), (snap) => {
       if (!snap.exists()) return;
       const profile = snap.data();
       setClientName(
         `${profile.name || ""} ${profile.surname || ""}`.trim() || "Klijent"
       );
-    }
-
-    loadClient();
+      setClientPhotoURL(profile.photoURL || "");
+    });
   }, [clientId]);
 
   useEffect(() => {
@@ -140,9 +136,7 @@ export default function AdminChat() {
           <BackIcon className="h-5 w-5" />
         </Link>
         <Link to={`/profil/${clientId}`} className="group flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white transition group-hover:ring-2 group-hover:ring-blue-500">
-            {getInitials(clientName)}
-          </div>
+          <Avatar name={clientName} photoURL={clientPhotoURL} className="h-9 w-9 transition group-hover:ring-2 group-hover:ring-blue-500" />
           <p className="text-sm font-medium text-white group-hover:underline">
             {clientName}
           </p>

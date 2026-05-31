@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   collection,
-  getDocs,
   onSnapshot,
   query,
   where,
@@ -10,13 +9,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { db } from "../firebase";
 import { ensureConversation } from "../chat/ensureConversation";
 import { useAuth } from "../context/AuthContext";
-
-function getInitials(name = "") {
-  const parts = name.trim().split(" ").filter(Boolean);
-  if (!parts.length) return "?";
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
+import Avatar from "../components/Avatar";
 
 export default function AdminChats() {
   const { user } = useAuth();
@@ -26,22 +19,22 @@ export default function AdminChats() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function loadClients() {
-      const snap = await getDocs(collection(db, "users"));
+    return onSnapshot(collection(db, "users"), (snap) => {
       const map = {};
 
       snap.docs.forEach((d) => {
         const profile = d.data();
         if (profile.role !== "client") return;
-        map[d.id] =
-          `${profile.name || ""} ${profile.surname || ""}`.trim() ||
-          "Klijent";
+        map[d.id] = {
+          name:
+            `${profile.name || ""} ${profile.surname || ""}`.trim() ||
+            "Klijent",
+          photoURL: profile.photoURL || "",
+        };
       });
 
       setUsersMap(map);
-    }
-
-    loadClients();
+    });
   }, []);
 
   useEffect(() => {
@@ -74,12 +67,12 @@ export default function AdminChats() {
 
   const searchActive = search.trim().length > 0;
   const searchedClients = Object.entries(usersMap)
-    .filter(([, name]) =>
-      name.toLowerCase().includes(search.trim().toLowerCase())
+    .filter(([, client]) =>
+      client.name.toLowerCase().includes(search.trim().toLowerCase())
     )
-    .map(([id, name]) => ({
+    .map(([id, client]) => ({
       id,
-      name,
+      ...client,
       conversation: conversationByClientId[id] || null,
     }));
 
@@ -100,7 +93,7 @@ export default function AdminChats() {
     if (conversationId) navigate(`/admin-chat/${conversationId}`);
   }
 
-  function ConversationCard({ conversation, clientId, name }) {
+  function ConversationCard({ conversation, clientId, name, photoURL }) {
     const unread = conversation?.coachUnread > 0;
 
     return (
@@ -114,9 +107,9 @@ export default function AdminChats() {
           <Link
             to={`/profil/${clientId}`}
             onClick={(event) => event.stopPropagation()}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white transition hover:ring-2 hover:ring-blue-500"
+            className="shrink-0 rounded-full transition hover:ring-2 hover:ring-blue-500"
           >
-            {getInitials(name)}
+            <Avatar name={name} photoURL={photoURL} />
           </Link>
 
           <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
@@ -165,7 +158,8 @@ export default function AdminChats() {
               key={conversation.id}
               conversation={conversation}
               clientId={conversation.clientId}
-              name={usersMap[conversation.clientId] || "Klijent"}
+              name={usersMap[conversation.clientId]?.name || "Klijent"}
+              photoURL={usersMap[conversation.clientId]?.photoURL || ""}
             />
           ))}
         </div>
@@ -179,6 +173,7 @@ export default function AdminChats() {
               conversation={client.conversation}
               clientId={client.id}
               name={client.name}
+              photoURL={client.photoURL}
             />
           ))}
           {searchedClients.length === 0 && (

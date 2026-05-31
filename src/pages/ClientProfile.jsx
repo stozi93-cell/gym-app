@@ -10,7 +10,9 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import Avatar from "../components/Avatar";
+import { db, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -60,6 +62,7 @@ function normalizeUser(profile = {}) {
     dob: toInputDate(profile.dob),
     goals: profile.goals || "",
     healthNotes: profile.healthNotes || "",
+    photoURL: profile.photoURL || "",
   };
 }
 
@@ -161,6 +164,8 @@ export default function ClientProfile() {
   const [editingSubId, setEditingSubId] = useState("");
   const [subscriptionForm, setSubscriptionForm] = useState({});
   const [status, setStatus] = useState(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const canUploadPhoto = role === "client" && authUser?.uid === uid;
 
   useEffect(() => {
     if (authLoading || !uid) return;
@@ -303,6 +308,40 @@ export default function ClientProfile() {
     }
   }
 
+  async function uploadProfilePhoto(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      showStatus("error", "Izaberi fotografiju.");
+      return;
+    }
+
+    if (file.size >= 3 * 1024 * 1024) {
+      showStatus("error", "Fotografija mora biti manja od 3 MB.");
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+      const avatarRef = ref(storage, `profilePhotos/${uid}/avatar`);
+      await uploadBytes(avatarRef, file, {
+        contentType: file.type,
+        cacheControl: "public,max-age=3600",
+      });
+      const downloadURL = await getDownloadURL(avatarRef);
+      const versionedURL = `${downloadURL}${downloadURL.includes("?") ? "&" : "?"}v=${Date.now()}`;
+      await updateDoc(doc(db, "users", uid), { photoURL: versionedURL });
+      showStatus("success", "Profilna fotografija je sačuvana.");
+    } catch (error) {
+      console.error("Profile photo upload failed", error);
+      showStatus("error", "Fotografija nije sačuvana. Pokušaj ponovo.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   async function changeCheckIn(subId, weekIndex, delta) {
     try {
       await runTransaction(db, async (transaction) => {
@@ -396,14 +435,33 @@ export default function ClientProfile() {
 
       <CollapsibleSection
         header={
-          <div>
-            <h2 className="text-xl font-semibold text-white">{getFullName(user)}</h2>
-            <p className={`mt-1 text-sm ${lastVisitColor()}`}>
-              Poslednji trening: {formatDate(lastVisit)}
-            </p>
+          <div className="flex items-center gap-3">
+            <Avatar
+              name={getFullName(user)}
+              photoURL={user.photoURL}
+              className="h-14 w-14"
+            />
+            <div>
+              <h2 className="text-xl font-semibold text-white">{getFullName(user)}</h2>
+              <p className={`mt-1 text-sm ${lastVisitColor()}`}>
+                Poslednji trening: {formatDate(lastVisit)}
+              </p>
+            </div>
           </div>
         }
       >
+        {canUploadPhoto && (
+          <label className="inline-flex cursor-pointer text-sm text-blue-400">
+            {uploadingPhoto ? "Čuvanje fotografije..." : "Promeni fotografiju"}
+            <input
+              type="file"
+              accept="image/*"
+              disabled={uploadingPhoto}
+              onChange={uploadProfilePhoto}
+              className="hidden"
+            />
+          </label>
+        )}
         <EditControls
           editMode={editMode}
           onEdit={() => setEditMode(true)}

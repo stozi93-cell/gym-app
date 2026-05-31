@@ -10,6 +10,7 @@ import { useSearchParams } from "react-router-dom";
 import { db } from "../firebase";
 import { ensureConversation } from "../chat/ensureConversation";
 import { useAuth } from "../context/AuthContext";
+import Avatar from "../components/Avatar";
 import {
   markConversationRead,
   sendChatMessage,
@@ -36,13 +37,6 @@ function BackIcon({ className }) {
       <path d="m15 18-6-6 6-6" />
     </svg>
   );
-}
-
-function getInitials(name = "") {
-  const parts = name.trim().split(" ").filter(Boolean);
-  if (!parts.length) return "?";
-  if (parts.length === 1) return parts[0][0].toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
 export default function ClientChat() {
@@ -101,6 +95,7 @@ export default function ClientChat() {
             id: d.id,
             name:
               `${coach.name || ""} ${coach.surname || ""}`.trim() || "Trener",
+            photoURL: coach.photoURL || "",
           };
         })
       );
@@ -213,9 +208,7 @@ export default function ClientChat() {
                 onClick={() => setSearchParams({ coach: coach.id })}
                 className="flex w-full items-center gap-3 rounded-lg bg-neutral-900/75 p-4 text-left transition hover:bg-neutral-800"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
-                  {getInitials(coach.name)}
-                </span>
+                <Avatar name={coach.name} photoURL={coach.photoURL} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-white">
                     {coach.name}
@@ -252,9 +245,7 @@ export default function ClientChat() {
         >
           <BackIcon className="h-5 w-5" />
         </button>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-700 text-sm font-medium text-white">
-          {getInitials(selectedCoach?.name || "Trener")}
-        </div>
+        <Avatar name={selectedCoach?.name || "Trener"} photoURL={selectedCoach?.photoURL} className="h-9 w-9" />
         <p className="min-w-0 truncate text-sm font-medium text-white">
           {selectedCoach?.name || "Trener"}
         </p>
