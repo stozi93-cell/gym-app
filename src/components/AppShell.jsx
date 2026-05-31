@@ -3,9 +3,10 @@ import { auth } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import BottomNav from "./BottomNav";
 import { Logo } from "./Logo";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import LogoutIcon from "./icons/LogoutIcon";
 import { useEffect } from "react";
+import Avatar from "./Avatar";
 
 import {
   getFcmToken,
@@ -94,18 +95,33 @@ export default function AppShell({ children }) {
             />
           </div>
 
-          <button
-            onClick={() => signOut(auth)}
-            aria-label="Odjava"
-            className="
-              p-2
-              text-text-secondaryDark
-              hover:text-white
-              transition
-            "
-          >
-            <LogoutIcon className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {profile?.role === "admin" && (
+              <Link
+                to="/profil/me"
+                aria-label="Profil"
+                className="rounded-full transition hover:ring-2 hover:ring-blue-400"
+              >
+                <Avatar
+                  name={`${profile.name || ""} ${profile.surname || ""}`.trim()}
+                  photoURL={profile.photoURL || ""}
+                  className="h-8 w-8 text-xs"
+                />
+              </Link>
+            )}
+            <button
+              onClick={() => signOut(auth)}
+              aria-label="Odjava"
+              className="
+                p-2
+                text-text-secondaryDark
+                hover:text-white
+                transition
+              "
+            >
+              <LogoutIcon className="h-5 w-5" />
+            </button>
+          </div>
         </header>
       )}
 

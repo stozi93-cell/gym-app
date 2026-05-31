@@ -167,7 +167,7 @@ export default function ClientProfile() {
   const [status, setStatus] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [cropImageURL, setCropImageURL] = useState("");
-  const canUploadPhoto = role === "client" && authUser?.uid === uid;
+  const canUploadPhoto = authUser?.uid === uid;
 
   useEffect(() => {
     if (authLoading || !uid) return;

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 
 const AuthContext = createContext();
 
@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+  let unsubProfile = () => {};
   const unsub = onAuthStateChanged(auth, async (u) => {
     console.log("[Auth] state change:", u?.uid);
 
@@ -45,14 +46,23 @@ export function AuthProvider({ children }) {
 
   const freshSnap = await getDoc(ref);
   setProfile(freshSnap.data());
+  unsubProfile();
+  unsubProfile = onSnapshot(ref, (profileSnap) => {
+    if (profileSnap.exists()) setProfile(profileSnap.data());
+  });
 } else {
+  unsubProfile();
+  unsubProfile = () => {};
   setProfile(null);
 }
 
     setLoading(false);
   });
 
-  return () => unsub();
+  return () => {
+    unsub();
+    unsubProfile();
+  };
 }, []);
 
 
