@@ -1,4 +1,5 @@
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useUnreadCount } from "../chat/useUnreadCount";
 
 /* ─────────────────────────────
@@ -126,6 +127,16 @@ function TrainingIcon({ className }) {
   );
 }
 
+function MoreIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <circle cx="12" cy="5" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="12" cy="19" r="1.8" />
+    </svg>
+  );
+}
+
 /* ─────────────────────────────
    Badge
 ───────────────────────────── */
@@ -178,7 +189,13 @@ function NavItem({ to, label, icon, badge }) {
 ───────────────────────────── */
 export default function BottomNav({ role }) {
   const unread = useUnreadCount();
+  const location = useLocation();
+  const [moreOpen, setMoreOpen] = useState(false);
   const iconClass = "h-6 w-6";
+  const secondaryRoutes = ["/paketi", "/naplate", "/forum"];
+  const secondaryActive = secondaryRoutes.some((route) =>
+    location.pathname.startsWith(route)
+  );
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border-dark bg-surface-dark">
@@ -202,15 +219,51 @@ export default function BottomNav({ role }) {
           <>
             <NavItem to="/raspored" label="Raspored" icon={<CalendarIcon className={iconClass} />} />
             <NavItem to="/klijenti" label="Klijenti" icon={<UsersIcon className={iconClass} />} />
-            <NavItem to="/paketi" label="Paketi" icon={<RepeatIcon className={iconClass} />} />
-            <NavItem to="/naplate" label="Naplate" icon={<CreditCardIcon className={iconClass} />} />
-            <NavItem to="/forum" label="Novosti" icon={<MegaphoneIcon className={iconClass} />} />
             <NavItem to="/poruke" label="Poruke" icon={<ChatIcon className={iconClass} />} badge={unread} />
             <NavItem to="/treninzi" label="Treninzi" icon={<TrainingIcon className={iconClass} />} />
+            <div className="relative">
+              {moreOpen && (
+                <div className="absolute bottom-14 right-0 w-36 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl">
+                  <MoreMenuItem to="/paketi" label="Paketi" icon={<RepeatIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
+                  <MoreMenuItem to="/naplate" label="Naplate" icon={<CreditCardIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
+                  <MoreMenuItem to="/forum" label="Novosti" icon={<MegaphoneIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
+                </div>
+              )}
+              <button
+                onClick={() => setMoreOpen((open) => !open)}
+                aria-label="Više"
+                aria-expanded={moreOpen}
+                className={`flex flex-col items-center justify-center gap-1 text-xs transition ${
+                  secondaryActive || moreOpen
+                    ? "text-brand-blue-500"
+                    : "text-text-secondaryDark hover:text-white"
+                }`}
+              >
+                <MoreIcon className={iconClass} />
+                <span>Više</span>
+              </button>
+            </div>
           </>
         )}
 
       </div>
     </nav>
+  );
+}
+
+function MoreMenuItem({ to, label, icon, onNavigate }) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onNavigate}
+      className={({ isActive }) =>
+        `flex items-center gap-3 px-3 py-3 text-sm transition hover:bg-neutral-800 ${
+          isActive ? "text-brand-blue-500" : "text-neutral-200"
+        }`
+      }
+    >
+      {icon}
+      <span>{label}</span>
+    </NavLink>
   );
 }
