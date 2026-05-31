@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
   collection,
   addDoc,
@@ -10,6 +10,7 @@ import {
   query,
   serverTimestamp,
   arrayUnion,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
@@ -33,7 +34,9 @@ export default function Forum() {
 
   // 🔑 LOCAL read state (source of truth for UI)
   const [readAnnouncements, setReadAnnouncements] = useState([]);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    () => "Notification" in window && Notification.permission === "granted"
+  );
 
   // create
   const [title, setTitle] = useState("");
@@ -49,27 +52,17 @@ export default function Forum() {
   const createTextareaRef = useRef(null);
   const editTextareaRef = useRef(null);
 
-  // init read state from profile
   useEffect(() => {
-  if (profile?.readAnnouncements) {
-    setReadAnnouncements((prev) => {
-      const merged = new Set([
-        ...prev,
-        ...profile.readAnnouncements,
-      ]);
-      return Array.from(merged);
+    if (!user?.uid) return;
+
+    return onSnapshot(doc(db, "users", user.uid), (snap) => {
+      if (!snap.exists()) return;
+      const savedReadAnnouncements = snap.data().readAnnouncements || [];
+      setReadAnnouncements((prev) => {
+        return Array.from(new Set([...prev, ...savedReadAnnouncements]));
+      });
     });
-  }
-
-  setNotificationsEnabled(
-    "Notification" in window &&
-    Notification.permission === "granted"
-  );
-}, [profile?.readAnnouncements, profile?.fcmTokens]);
-
-  useEffect(() => {
-    loadData();
-  }, [showArchived]);
+  }, [user?.uid]);
 
   // 🔧 auto-resize helper
   function autoResize(el) {
@@ -78,7 +71,7 @@ export default function Forum() {
     el.style.height = el.scrollHeight + "px";
   }
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
 
     const snap = await getDocs(
@@ -105,7 +98,12 @@ export default function Forum() {
     }
 
     setLoading(false);
-  }
+  }, [showArchived, isAdmin]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadData, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   async function markRead(postId) {
     if (!user || readAnnouncements.includes(postId)) return;
@@ -113,9 +111,14 @@ export default function Forum() {
     // optimistic UI update
     setReadAnnouncements((prev) => [...prev, postId]);
 
-    await updateDoc(doc(db, "users", user.uid), {
-      readAnnouncements: arrayUnion(postId),
-    });
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        readAnnouncements: arrayUnion(postId),
+      });
+    } catch (error) {
+      console.error("Announcement read update failed", error);
+      setReadAnnouncements((prev) => prev.filter((id) => id !== postId));
+    }
   }
 
   function toggleExpand(postId) {
