@@ -19,7 +19,7 @@ export function formatDayLabel(timestamp) {
 
   const dayKey = date.toDateString();
   if (dayKey === today.toDateString()) return "Danas";
-  if (dayKey === yesterday.toDateString()) return "Juce";
+  if (dayKey === yesterday.toDateString()) return "Juče";
 
   return date.toLocaleDateString("sr-RS", {
     day: "2-digit",
@@ -29,7 +29,7 @@ export function formatDayLabel(timestamp) {
 }
 
 export function getMessageStatus(message) {
-  if (message.readAt) return "Procitano";
+  if (message.readAt) return "Pročitano";
   if (message.deliveredAt) return "Primljeno";
   return "Poslato";
 }

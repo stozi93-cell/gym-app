@@ -122,7 +122,7 @@ export default function AdminChat() {
     } catch (error) {
       console.error("Admin chat send failed", error);
       setText((currentText) => currentText || message);
-      setSendError("Poruka nije poslata. Pokusaj ponovo.");
+      setSendError("Poruka nije poslata. Pokušaj ponovo.");
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -191,10 +191,10 @@ export default function AdminChat() {
               send();
             }
           }}
-          placeholder="Napisi poruku..."
+          placeholder="Napiši poruku..."
           className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-neutral-400"
         />
-        <button disabled={sending} onClick={send} aria-label="Posalji poruku" className="flex h-10 w-10 items-center justify-center rounded-full bg-black transition disabled:opacity-50">
+        <button disabled={sending} onClick={send} aria-label="Pošalji poruku" className="flex h-10 w-10 items-center justify-center rounded-full bg-black transition disabled:opacity-50">
           <SendIcon className={`h-5 w-5 ${text.trim() ? "text-blue-400" : "text-neutral-400"}`} />
         </button>
       </div>

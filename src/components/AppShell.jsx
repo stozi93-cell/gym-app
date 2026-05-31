@@ -60,7 +60,8 @@ export default function AppShell({ children }) {
     location.pathname.startsWith("/naplate") ||
     location.pathname.startsWith("/poruke") ||
     location.pathname.startsWith("/treninzi") ||
-    location.pathname.startsWith("/forum");
+    location.pathname.startsWith("/forum") ||
+    (location.pathname === "/chat" && !selectedCoachId);
 
   return (
     <div
