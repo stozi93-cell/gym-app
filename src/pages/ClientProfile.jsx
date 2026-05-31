@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import Avatar from "../components/Avatar";
+import PhotoCropModal from "../components/PhotoCropModal";
 import { db, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
@@ -165,6 +166,7 @@ export default function ClientProfile() {
   const [subscriptionForm, setSubscriptionForm] = useState({});
   const [status, setStatus] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [cropImageURL, setCropImageURL] = useState("");
   const canUploadPhoto = role === "client" && authUser?.uid === uid;
 
   useEffect(() => {
@@ -176,6 +178,12 @@ export default function ClientProfile() {
       if (!editMode) setFormData(normalized);
     });
   }, [uid, authLoading, editMode]);
+
+  useEffect(() => {
+    return () => {
+      if (cropImageURL) URL.revokeObjectURL(cropImageURL);
+    };
+  }, [cropImageURL]);
 
   useEffect(() => {
     if (authLoading || !uid) return;
@@ -308,7 +316,12 @@ export default function ClientProfile() {
     }
   }
 
-  async function uploadProfilePhoto(event) {
+  function closePhotoCrop() {
+    if (cropImageURL) URL.revokeObjectURL(cropImageURL);
+    setCropImageURL("");
+  }
+
+  function chooseProfilePhoto(event) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -318,25 +331,33 @@ export default function ClientProfile() {
       return;
     }
 
-    if (file.size >= 3 * 1024 * 1024) {
-      showStatus("error", "Fotografija mora biti manja od 3 MB.");
+    if (file.size >= 25 * 1024 * 1024) {
+      showStatus("error", "Fotografija mora biti manja od 25 MB.");
       return;
     }
 
+    if (cropImageURL) URL.revokeObjectURL(cropImageURL);
+    setCropImageURL(URL.createObjectURL(file));
+  }
+
+  async function uploadProfilePhoto(avatar) {
     try {
       setUploadingPhoto(true);
       const avatarRef = ref(storage, `profilePhotos/${uid}/avatar`);
-      await uploadBytes(avatarRef, file, {
-        contentType: file.type,
+      await uploadBytes(avatarRef, avatar, {
+        contentType: "image/jpeg",
         cacheControl: "public,max-age=3600",
       });
       const downloadURL = await getDownloadURL(avatarRef);
       const versionedURL = `${downloadURL}${downloadURL.includes("?") ? "&" : "?"}v=${Date.now()}`;
       await updateDoc(doc(db, "users", uid), { photoURL: versionedURL });
+      closePhotoCrop();
       showStatus("success", "Profilna fotografija je sačuvana.");
+      return true;
     } catch (error) {
       console.error("Profile photo upload failed", error);
       showStatus("error", "Fotografija nije sačuvana. Pokušaj ponovo.");
+      return false;
     } finally {
       setUploadingPhoto(false);
     }
@@ -432,6 +453,14 @@ export default function ClientProfile() {
           {status.message}
         </div>
       )}
+      {cropImageURL && (
+        <PhotoCropModal
+          imageURL={cropImageURL}
+          onCancel={closePhotoCrop}
+          onSave={uploadProfilePhoto}
+          onError={() => showStatus("error", "Fotografija nije obrađena. Izaberi drugu fotografiju.")}
+        />
+      )}
 
       <CollapsibleSection
         header={
@@ -457,7 +486,7 @@ export default function ClientProfile() {
               type="file"
               accept="image/*"
               disabled={uploadingPhoto}
-              onChange={uploadProfilePhoto}
+              onChange={chooseProfilePhoto}
               className="hidden"
             />
           </label>
