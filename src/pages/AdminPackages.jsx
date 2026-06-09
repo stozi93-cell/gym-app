@@ -129,7 +129,8 @@ export default function AdminPackages() {
     const pkg = packages.find((p) => p.id === packageId);
     if (!pkg) return;
 
-    const start = startDate ? new Date(startDate) : new Date();
+    const start = startDate ? new Date(`${startDate}T00:00:00`) : new Date();
+    start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + pkg.durationDays);
 

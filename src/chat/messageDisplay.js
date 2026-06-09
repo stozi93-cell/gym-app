@@ -33,3 +33,30 @@ export function getMessageStatus(message) {
   if (message.deliveredAt) return "Primljeno";
   return "Poslato";
 }
+
+export function linkifyText(text = "") {
+  const pattern = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, match.index) });
+    }
+
+    const rawUrl = match[0];
+    parts.push({
+      text: rawUrl,
+      href: rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`,
+    });
+
+    lastIndex = match.index + rawUrl.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex) });
+  }
+
+  return parts;
+}

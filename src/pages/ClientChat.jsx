@@ -11,25 +11,17 @@ import { db } from "../firebase";
 import { ensureConversation } from "../chat/ensureConversation";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
+import ChatComposer from "../components/chat/ChatComposer";
+import MessageBubble from "../components/chat/MessageBubble";
 import {
   markConversationRead,
   sendChatMessage,
+  setMessageReaction,
 } from "../chat/messageTracking";
 import {
   formatDayLabel,
-  formatMessageTime,
   getDayKey,
-  getMessageStatus,
 } from "../chat/messageDisplay";
-
-function SendIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M6 12L3 21l18-9L3 3l3 9z" />
-      <path d="M6 12h12" />
-    </svg>
-  );
-}
 
 function BackIcon({ className }) {
   return (
@@ -47,6 +39,7 @@ export default function ClientChat() {
   const [conversationId, setConversationId] = useState("");
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const bottomRef = useRef(null);
@@ -161,12 +154,17 @@ export default function ClientChat() {
   }, [messages]);
 
   async function send() {
-    if (!text.trim() || !user?.uid || !selectedCoachId || sendingRef.current) return;
-    const message = text.trim();
+    if ((!text.trim() && !selectedFile) || !user?.uid || !selectedCoachId || sendingRef.current) return false;
+
+    const message = text.replace(/\r\n/g, "\n");
+    const cleanMessage = message.trim() ? message.trimEnd() : "";
+    const fileToSend = selectedFile;
+
     sendingRef.current = true;
     setSending(true);
     setSendError("");
     setText("");
+    setSelectedFile(null);
 
     try {
       const id = await ensureConversation({
@@ -179,17 +177,35 @@ export default function ClientChat() {
         conversationId: id,
         senderId: user.uid,
         recipientId: selectedCoachId,
-        text: message,
+        text: cleanMessage,
+        attachmentFile: fileToSend,
         recipientUnreadField: "coachUnread",
         senderUnreadField: "clientUnread",
       });
+      return true;
     } catch (error) {
       console.error("Client chat send failed", error);
       setText((currentText) => currentText || message);
+      setSelectedFile((currentFile) => currentFile || fileToSend);
       setSendError("Poruka nije poslata. Pokušaj ponovo.");
+      return false;
     } finally {
       sendingRef.current = false;
       setSending(false);
+    }
+  }
+
+  async function reactToMessage(message, emoji) {
+    try {
+      await setMessageReaction({
+        messageId: message.id,
+        userId: user.uid,
+        emoji,
+        currentEmoji: message.reactions?.[user.uid],
+      });
+    } catch (error) {
+      console.error("Client chat reaction failed", error);
+      setSendError("Reakcija nije sačuvana. Pokušaj ponovo.");
     }
   }
 
@@ -264,45 +280,28 @@ export default function ClientChat() {
                   {formatDayLabel(message.createdAt)}
                 </div>
               )}
-              <div
-                className={`max-w-[78%] px-4 py-2 text-sm leading-relaxed ${
-                  mine
-                    ? "ml-auto rounded-2xl rounded-br-sm bg-blue-600 text-white"
-                    : "mr-auto rounded-2xl rounded-bl-sm bg-neutral-800 text-neutral-100"
-                }`}
-              >
-                <p>{message.text}</p>
-                <p className="mt-1 text-right text-[10px] opacity-60">
-                  {formatMessageTime(message.createdAt)}
-                  {mine && ` · ${getMessageStatus(message)}`}
-                </p>
-              </div>
+              <MessageBubble
+                message={message}
+                mine={mine}
+                currentUserId={user.uid}
+                onReact={reactToMessage}
+              />
             </div>
           );
         })}
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex gap-2 border-t border-neutral-800 p-1">
-        <input
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              send();
-            }
-          }}
-          placeholder="Napiši poruku..."
-          className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-neutral-400"
-        />
-        <button disabled={sending} onClick={send} aria-label="Pošalji poruku" className="flex h-10 w-10 items-center justify-center rounded-full bg-black transition disabled:opacity-50">
-          <SendIcon className={`h-5 w-5 ${text.trim() ? "text-blue-400" : "text-neutral-400"}`} />
-        </button>
-      </div>
-      {sendError && (
-        <p className="px-2 pb-1 text-xs text-red-300">{sendError}</p>
-      )}
+      <ChatComposer
+        text={text}
+        setText={setText}
+        selectedFile={selectedFile}
+        setSelectedFile={setSelectedFile}
+        sending={sending}
+        sendError={sendError}
+        onSend={send}
+        onFileError={setSendError}
+      />
     </div>
   );
 }

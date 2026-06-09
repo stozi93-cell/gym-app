@@ -1,40 +1,133 @@
 import {
   collection,
+  deleteField,
   doc,
   increment,
   onSnapshot,
   query,
   serverTimestamp,
+  updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { db, storage } from "../firebase";
 
 const deliveryWrites = new Set();
 const readWrites = new Set();
+export const REACTION_OPTIONS = ["👍", "❤️", "💪", "🔥", "😂"];
+export const CHAT_ATTACHMENT_LIMIT_BYTES = 15 * 1024 * 1024;
+
+const DOCUMENT_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "text/csv",
+]);
+
+const EXTENSION_CONTENT_TYPES = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  txt: "text/plain",
+  csv: "text/csv",
+};
+
+function getFileContentType(file) {
+  if (file.type) return file.type;
+  const extension = file.name?.split(".").pop()?.toLowerCase();
+  return EXTENSION_CONTENT_TYPES[extension] || "";
+}
+
+function sanitizeFileName(name = "file") {
+  return name.replace(/[^\w.\-() ]+/g, "_").slice(0, 120) || "file";
+}
+
+function getAttachmentType(file) {
+  if (getFileContentType(file).startsWith("image/")) return "image";
+  return "file";
+}
+
+export function isAllowedChatAttachment(file) {
+  if (!file || file.size > CHAT_ATTACHMENT_LIMIT_BYTES) return false;
+  const contentType = getFileContentType(file);
+  if (contentType.startsWith("video/")) return false;
+  return contentType.startsWith("image/") || DOCUMENT_TYPES.has(contentType);
+}
+
+async function uploadChatAttachment({ conversationId, messageId, file }) {
+  if (!isAllowedChatAttachment(file)) {
+    throw new Error("CHAT_ATTACHMENT_NOT_ALLOWED");
+  }
+
+  const path = `chatAttachments/${conversationId}/${messageId}/${Date.now()}_${sanitizeFileName(file.name)}`;
+  const attachmentRef = ref(storage, path);
+  const contentType = getFileContentType(file) || "application/octet-stream";
+
+  await uploadBytes(attachmentRef, file, {
+    contentType,
+    cacheControl: "public,max-age=3600",
+  });
+
+  return {
+    name: file.name,
+    size: file.size,
+    contentType,
+    type: getAttachmentType(file),
+    path,
+    url: await getDownloadURL(attachmentRef),
+  };
+}
 
 export async function sendChatMessage({
   conversationId,
   senderId,
   recipientId,
   text,
+  attachmentFile = null,
   recipientUnreadField,
   senderUnreadField,
 }) {
   const messageRef = doc(collection(db, "messages"));
   const conversationRef = doc(db, "conversations", conversationId);
   const batch = writeBatch(db);
+  const cleanText = typeof text === "string" ? text : "";
+  const attachment = attachmentFile
+    ? await uploadChatAttachment({
+        conversationId,
+        messageId: messageRef.id,
+        file: attachmentFile,
+      })
+    : null;
+  const lastMessage =
+    cleanText.trim() ||
+    (attachment?.type === "image"
+      ? "Slika"
+      : attachment
+        ? `Fajl: ${attachment.name}`
+        : "");
 
   batch.set(messageRef, {
     conversationId,
     senderId,
     recipientId,
-    text,
+    text: cleanText,
+    ...(attachment ? { attachment } : {}),
     createdAt: serverTimestamp(),
   });
 
   batch.update(conversationRef, {
-    lastMessage: text,
+    lastMessage,
     lastSenderId: senderId,
     updatedAt: serverTimestamp(),
     [recipientUnreadField]: increment(1),
@@ -42,6 +135,26 @@ export async function sendChatMessage({
   });
 
   await batch.commit();
+}
+
+export async function setMessageReaction({ messageId, userId, emoji, currentEmoji }) {
+  if (!messageId || !userId || !REACTION_OPTIONS.includes(emoji)) return;
+
+  await updateDoc(doc(db, "messages", messageId), {
+    [`reactions.${userId}`]: currentEmoji === emoji ? deleteField() : emoji,
+  });
+}
+
+export function getMessageReactionCounts(reactions = {}) {
+  const counts = {};
+  Object.values(reactions).forEach((emoji) => {
+    if (!emoji) return;
+    counts[emoji] = (counts[emoji] || 0) + 1;
+  });
+
+  return REACTION_OPTIONS
+    .filter((emoji) => counts[emoji])
+    .map((emoji) => ({ emoji, count: counts[emoji] }));
 }
 
 export function listenForDeliveredMessages(userId) {

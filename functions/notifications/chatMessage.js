@@ -8,7 +8,7 @@ exports.notifyChatMessage = onDocumentCreated(
       const message = event.data?.data();
       if (!message || message._notified) return;
 
-      const { senderId, text = "", conversationId } = message;
+      const { senderId, text = "", conversationId, attachment } = message;
       if (!senderId || !conversationId) return;
 
       const db = admin.firestore();
@@ -35,9 +35,13 @@ exports.notifyChatMessage = onDocumentCreated(
       }
 
       const preview =
-        typeof text === "string"
+        typeof text === "string" && text.trim()
           ? text.slice(0, 80) + (text.length > 80 ? "..." : "")
-          : "Nova poruka";
+          : attachment?.type === "image"
+            ? "Poslata je slika."
+            : attachment?.name
+              ? `Poslat je fajl: ${attachment.name}`
+              : "Nova poruka";
 
       const response = await admin.messaging().sendEachForMulticast({
         tokens,
