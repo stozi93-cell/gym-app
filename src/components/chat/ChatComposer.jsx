@@ -1,8 +1,5 @@
 import { useEffect, useRef } from "react";
-import {
-  CHAT_ATTACHMENT_LIMIT_BYTES,
-  isAllowedChatAttachment,
-} from "../../chat/messageTracking";
+import { isAllowedChatAttachment } from "../../chat/messageTracking";
 
 function AttachIcon({ className }) {
   return (
@@ -40,7 +37,6 @@ export default function ChatComposer({
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const canSend = text.trim().length > 0 || !!selectedFile;
-  const maxMegabytes = Math.floor(CHAT_ATTACHMENT_LIMIT_BYTES / (1024 * 1024));
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -61,7 +57,7 @@ export default function ChatComposer({
 
     if (!isAllowedChatAttachment(file)) {
       onFileError(
-        `Možeš poslati sliku ili dokument do ${maxMegabytes} MB. Video trenutno nije podržan.`
+        "Možeš poslati sliku ili dokument. Video trenutno nije podržan."
       );
       return;
     }

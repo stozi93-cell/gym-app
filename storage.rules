@@ -16,13 +16,10 @@ service firebase.storage {
     }
 
     function allowedChatAttachment() {
-      return request.resource.size < 15 * 1024 * 1024
-        && (
-          request.resource.contentType.matches('image/.*')
-          || request.resource.contentType.matches('text/.*')
-          || request.resource.contentType.matches('application/(pdf|msword|vnd.ms-excel)')
-          || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.*')
-        );
+      return request.resource.contentType.matches('image/.*')
+        || request.resource.contentType.matches('text/.*')
+        || request.resource.contentType.matches('application/(pdf|msword|vnd.ms-excel)')
+        || request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.*');
     }
 
     match /profilePhotos/{userId}/avatar {

@@ -16,7 +16,6 @@ import { db, storage } from "../firebase";
 const deliveryWrites = new Set();
 const readWrites = new Set();
 export const REACTION_OPTIONS = ["👍", "❤️", "💪", "🔥", "😂"];
-export const CHAT_ATTACHMENT_LIMIT_BYTES = 15 * 1024 * 1024;
 
 const DOCUMENT_TYPES = new Set([
   "application/pdf",
@@ -59,7 +58,7 @@ function getAttachmentType(file) {
 }
 
 export function isAllowedChatAttachment(file) {
-  if (!file || file.size > CHAT_ATTACHMENT_LIMIT_BYTES) return false;
+  if (!file) return false;
   const contentType = getFileContentType(file);
   if (contentType.startsWith("video/")) return false;
   return contentType.startsWith("image/") || DOCUMENT_TYPES.has(contentType);

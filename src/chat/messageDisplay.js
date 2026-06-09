@@ -35,7 +35,8 @@ export function getMessageStatus(message) {
 }
 
 export function linkifyText(text = "") {
-  const pattern = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+  const pattern =
+    /(^|[\s([{])((?:https?:\/\/|www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::\d{2,5})?(?:[/?#][^\s]*)?)/gi;
   const parts = [];
   let lastIndex = 0;
   let match;
@@ -45,13 +46,23 @@ export function linkifyText(text = "") {
       parts.push({ text: text.slice(lastIndex, match.index) });
     }
 
-    const rawUrl = match[0];
+    const [, prefix, matchedUrl] = match;
+    if (prefix) {
+      parts.push({ text: prefix });
+    }
+
+    const rawUrl = matchedUrl.replace(/[.,!?;:)\]}]+$/g, "");
+    const trailingText = matchedUrl.slice(rawUrl.length);
     parts.push({
       text: rawUrl,
-      href: rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`,
+      href: /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`,
     });
 
-    lastIndex = match.index + rawUrl.length;
+    if (trailingText) {
+      parts.push({ text: trailingText });
+    }
+
+    lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < text.length) {
