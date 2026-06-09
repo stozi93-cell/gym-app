@@ -16,6 +16,7 @@ import ChatComposer from "../components/chat/ChatComposer";
 import MessageBubble from "../components/chat/MessageBubble";
 import {
   markConversationRead,
+  getChatSendErrorMessage,
   sendChatMessage,
   setMessageReaction,
 } from "../chat/messageTracking";
@@ -45,6 +46,7 @@ export default function AdminChat() {
   const [clientPhotoURL, setClientPhotoURL] = useState("");
   const bottomRef = useRef(null);
   const sendingRef = useRef(false);
+  const messageCountRef = useRef(0);
 
   useEffect(() => {
     async function loadConversation() {
@@ -88,8 +90,11 @@ export default function AdminChat() {
   }, [conversationId, user?.uid]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (messages.length > messageCountRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    messageCountRef.current = messages.length;
+  }, [messages.length]);
 
   async function send() {
     if ((!text.trim() && !selectedFile) || !user?.uid || !conversationId || !clientId || sendingRef.current) return false;
@@ -119,7 +124,7 @@ export default function AdminChat() {
       console.error("Admin chat send failed", error);
       setText((currentText) => currentText || message);
       setSelectedFile((currentFile) => currentFile || fileToSend);
-      setSendError("Poruka nije poslata. Pokušaj ponovo.");
+      setSendError(getChatSendErrorMessage(error));
       return false;
     } finally {
       sendingRef.current = false;

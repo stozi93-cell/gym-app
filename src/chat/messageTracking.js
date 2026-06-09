@@ -33,6 +33,8 @@ const EXTENSION_CONTENT_TYPES = {
   png: "image/png",
   webp: "image/webp",
   gif: "image/gif",
+  heic: "image/heic",
+  heif: "image/heif",
   pdf: "application/pdf",
   doc: "application/msword",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -73,19 +75,29 @@ async function uploadChatAttachment({ conversationId, messageId, file }) {
   const attachmentRef = ref(storage, path);
   const contentType = getFileContentType(file) || "application/octet-stream";
 
-  await uploadBytes(attachmentRef, file, {
-    contentType,
-    cacheControl: "public,max-age=3600",
-  });
+  try {
+    await uploadBytes(attachmentRef, file, {
+      contentType,
+      cacheControl: "public,max-age=3600",
+    });
+  } catch (error) {
+    error.chatStage = "upload";
+    throw error;
+  }
 
-  return {
-    name: file.name,
-    size: file.size,
-    contentType,
-    type: getAttachmentType(file),
-    path,
-    url: await getDownloadURL(attachmentRef),
-  };
+  try {
+    return {
+      name: file.name,
+      size: file.size,
+      contentType,
+      type: getAttachmentType(file),
+      path,
+      url: await getDownloadURL(attachmentRef),
+    };
+  } catch (error) {
+    error.chatStage = "download-url";
+    throw error;
+  }
 }
 
 export async function sendChatMessage({
@@ -133,7 +145,28 @@ export async function sendChatMessage({
     [senderUnreadField]: 0,
   });
 
-  await batch.commit();
+  try {
+    await batch.commit();
+  } catch (error) {
+    error.chatStage = "firestore";
+    throw error;
+  }
+}
+
+export function getChatSendErrorMessage(error) {
+  if (error?.message === "CHAT_ATTACHMENT_NOT_ALLOWED") {
+    return "Možeš poslati sliku ili dokument. Video trenutno nije podržan.";
+  }
+
+  if (error?.chatStage === "upload" || error?.chatStage === "download-url") {
+    return `Fajl nije otpremljen. Pokušaj ponovo.${error?.code ? ` (${error.code})` : ""}`;
+  }
+
+  if (error?.chatStage === "firestore") {
+    return `Poruka je otpremljena, ali nije sačuvana. Pokušaj ponovo.${error?.code ? ` (${error.code})` : ""}`;
+  }
+
+  return `Poruka nije poslata. Pokušaj ponovo.${error?.code ? ` (${error.code})` : ""}`;
 }
 
 export async function setMessageReaction({ messageId, userId, emoji, currentEmoji }) {

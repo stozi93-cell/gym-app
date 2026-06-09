@@ -15,6 +15,7 @@ import ChatComposer from "../components/chat/ChatComposer";
 import MessageBubble from "../components/chat/MessageBubble";
 import {
   markConversationRead,
+  getChatSendErrorMessage,
   sendChatMessage,
   setMessageReaction,
 } from "../chat/messageTracking";
@@ -44,6 +45,7 @@ export default function ClientChat() {
   const [sendError, setSendError] = useState("");
   const bottomRef = useRef(null);
   const sendingRef = useRef(false);
+  const messageCountRef = useRef(0);
 
   const selectedCoachId = searchParams.get("coach") || "";
   const selectedCoach = coaches.find((coach) => coach.id === selectedCoachId);
@@ -150,8 +152,11 @@ export default function ClientChat() {
   }, [conversationId, user?.uid]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (messages.length > messageCountRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    messageCountRef.current = messages.length;
+  }, [messages.length]);
 
   async function send() {
     if ((!text.trim() && !selectedFile) || !user?.uid || !selectedCoachId || sendingRef.current) return false;
@@ -187,7 +192,7 @@ export default function ClientChat() {
       console.error("Client chat send failed", error);
       setText((currentText) => currentText || message);
       setSelectedFile((currentFile) => currentFile || fileToSend);
-      setSendError("Poruka nije poslata. Pokušaj ponovo.");
+      setSendError(getChatSendErrorMessage(error));
       return false;
     } finally {
       sendingRef.current = false;

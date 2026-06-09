@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  getMessageReactionCounts,
-  REACTION_OPTIONS,
-} from "../../chat/messageTracking";
+import { REACTION_OPTIONS } from "../../chat/messageTracking";
 import {
   formatMessageTime,
   getMessageStatus,
@@ -100,7 +97,6 @@ export default function MessageBubble({
   onReact,
 }) {
   const [reactionMenuOpen, setReactionMenuOpen] = useState(false);
-  const reactionCounts = getMessageReactionCounts(message.reactions);
   const myReaction = currentUserId ? message.reactions?.[currentUserId] : "";
 
   async function chooseReaction(emoji) {
@@ -163,19 +159,6 @@ export default function MessageBubble({
           </p>
         </div>
       </div>
-
-      {reactionCounts.length > 0 && (
-        <div className={`mt-1 flex gap-1 ${mine ? "justify-end" : "justify-start"}`}>
-          {reactionCounts.map(({ emoji, count }) => (
-            <span
-              key={emoji}
-              className="rounded-full bg-neutral-900 px-2 py-0.5 text-xs text-neutral-100"
-            >
-              {emoji}{count > 1 ? ` ${count}` : ""}
-            </span>
-          ))}
-        </div>
-      )}
 
     </div>
   );
