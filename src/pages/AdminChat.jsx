@@ -38,7 +38,7 @@ export default function AdminChat() {
   const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [clientId, setClientId] = useState("");
@@ -97,33 +97,53 @@ export default function AdminChat() {
   }, [messages.length]);
 
   async function send() {
-    if ((!text.trim() && !selectedFile) || !user?.uid || !conversationId || !clientId || sendingRef.current) return false;
+    if ((!text.trim() && selectedFiles.length === 0) || !user?.uid || !conversationId || !clientId || sendingRef.current) return false;
 
     const message = text.replace(/\r\n/g, "\n");
     const cleanMessage = message.trim() ? message.trimEnd() : "";
-    const fileToSend = selectedFile;
+    const filesToSend = selectedFiles;
+    let remainingFiles = filesToSend;
+    let textWasSent = false;
 
     sendingRef.current = true;
     setSending(true);
     setSendError("");
     setText("");
-    setSelectedFile(null);
+    setSelectedFiles([]);
 
     try {
-      await sendChatMessage({
-        conversationId,
-        senderId: user.uid,
-        recipientId: clientId,
-        text: cleanMessage,
-        attachmentFile: fileToSend,
-        recipientUnreadField: "clientUnread",
-        senderUnreadField: "coachUnread",
-      });
+      if (filesToSend.length > 0) {
+        for (const [index, file] of filesToSend.entries()) {
+          await sendChatMessage({
+            conversationId,
+            senderId: user.uid,
+            recipientId: clientId,
+            text: index === 0 ? cleanMessage : "",
+            attachmentFile: file,
+            recipientUnreadField: "clientUnread",
+            senderUnreadField: "coachUnread",
+          });
+          remainingFiles = filesToSend.slice(index + 1);
+          if (index === 0 && cleanMessage) textWasSent = true;
+        }
+      } else {
+        await sendChatMessage({
+          conversationId,
+          senderId: user.uid,
+          recipientId: clientId,
+          text: cleanMessage,
+          recipientUnreadField: "clientUnread",
+          senderUnreadField: "coachUnread",
+        });
+        textWasSent = true;
+      }
       return true;
     } catch (error) {
       console.error("Admin chat send failed", error);
-      setText((currentText) => currentText || message);
-      setSelectedFile((currentFile) => currentFile || fileToSend);
+      if (!textWasSent) {
+        setText((currentText) => currentText || message);
+      }
+      setSelectedFiles((currentFiles) => currentFiles.length ? currentFiles : remainingFiles);
       setSendError(getChatSendErrorMessage(error));
       return false;
     } finally {
@@ -192,8 +212,8 @@ export default function AdminChat() {
       <ChatComposer
         text={text}
         setText={setText}
-        selectedFile={selectedFile}
-        setSelectedFile={setSelectedFile}
+        selectedFiles={selectedFiles}
+        setSelectedFiles={setSelectedFiles}
         sending={sending}
         sendError={sendError}
         onSend={send}

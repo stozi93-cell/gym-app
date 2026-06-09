@@ -40,7 +40,7 @@ export default function ClientChat() {
   const [conversationId, setConversationId] = useState("");
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const bottomRef = useRef(null);
@@ -159,17 +159,19 @@ export default function ClientChat() {
   }, [messages.length]);
 
   async function send() {
-    if ((!text.trim() && !selectedFile) || !user?.uid || !selectedCoachId || sendingRef.current) return false;
+    if ((!text.trim() && selectedFiles.length === 0) || !user?.uid || !selectedCoachId || sendingRef.current) return false;
 
     const message = text.replace(/\r\n/g, "\n");
     const cleanMessage = message.trim() ? message.trimEnd() : "";
-    const fileToSend = selectedFile;
+    const filesToSend = selectedFiles;
+    let remainingFiles = filesToSend;
+    let textWasSent = false;
 
     sendingRef.current = true;
     setSending(true);
     setSendError("");
     setText("");
-    setSelectedFile(null);
+    setSelectedFiles([]);
 
     try {
       const id = await ensureConversation({
@@ -178,20 +180,38 @@ export default function ClientChat() {
       });
       if (!id) throw new Error("Conversation could not be created");
 
-      await sendChatMessage({
-        conversationId: id,
-        senderId: user.uid,
-        recipientId: selectedCoachId,
-        text: cleanMessage,
-        attachmentFile: fileToSend,
-        recipientUnreadField: "coachUnread",
-        senderUnreadField: "clientUnread",
-      });
+      if (filesToSend.length > 0) {
+        for (const [index, file] of filesToSend.entries()) {
+          await sendChatMessage({
+            conversationId: id,
+            senderId: user.uid,
+            recipientId: selectedCoachId,
+            text: index === 0 ? cleanMessage : "",
+            attachmentFile: file,
+            recipientUnreadField: "coachUnread",
+            senderUnreadField: "clientUnread",
+          });
+          remainingFiles = filesToSend.slice(index + 1);
+          if (index === 0 && cleanMessage) textWasSent = true;
+        }
+      } else {
+        await sendChatMessage({
+          conversationId: id,
+          senderId: user.uid,
+          recipientId: selectedCoachId,
+          text: cleanMessage,
+          recipientUnreadField: "coachUnread",
+          senderUnreadField: "clientUnread",
+        });
+        textWasSent = true;
+      }
       return true;
     } catch (error) {
       console.error("Client chat send failed", error);
-      setText((currentText) => currentText || message);
-      setSelectedFile((currentFile) => currentFile || fileToSend);
+      if (!textWasSent) {
+        setText((currentText) => currentText || message);
+      }
+      setSelectedFiles((currentFiles) => currentFiles.length ? currentFiles : remainingFiles);
       setSendError(getChatSendErrorMessage(error));
       return false;
     } finally {
@@ -300,8 +320,8 @@ export default function ClientChat() {
       <ChatComposer
         text={text}
         setText={setText}
-        selectedFile={selectedFile}
-        setSelectedFile={setSelectedFile}
+        selectedFiles={selectedFiles}
+        setSelectedFiles={setSelectedFiles}
         sending={sending}
         sendError={sendError}
         onSend={send}

@@ -126,12 +126,12 @@ export default function AppShell({ children }) {
       )}
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 overflow-y-auto px-4 py-4 pb-24">
+      <main className={`flex-1 overflow-y-auto px-4 py-4 ${isChatPage ? "pb-4" : "pb-24"}`}>
         {children}
       </main>
 
       {/* BOTTOM NAV */}
-      <BottomNav role={profile?.role} />
+      {!isChatPage && <BottomNav role={profile?.role} />}
     </div>
   );
 }

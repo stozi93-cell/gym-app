@@ -27,8 +27,8 @@ function formatSize(size) {
 export default function ChatComposer({
   text,
   setText,
-  selectedFile,
-  setSelectedFile,
+  selectedFiles,
+  setSelectedFiles,
   sending,
   sendError,
   onSend,
@@ -36,7 +36,7 @@ export default function ChatComposer({
 }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
-  const canSend = text.trim().length > 0 || !!selectedFile;
+  const canSend = text.trim().length > 0 || selectedFiles.length > 0;
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -51,35 +51,60 @@ export default function ChatComposer({
   }
 
   function chooseFile(event) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files || []);
     event.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
 
-    if (!isAllowedChatAttachment(file)) {
+    const allowedFiles = files.filter((file) => isAllowedChatAttachment(file));
+    if (allowedFiles.length !== files.length) {
       onFileError(
         "Možeš poslati sliku ili dokument. Video trenutno nije podržan."
       );
-      return;
     }
 
-    setSelectedFile(file);
+    if (allowedFiles.length) {
+      onFileError("");
+      setSelectedFiles((currentFiles) => [...currentFiles, ...allowedFiles]);
+    }
     window.requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  function removeFile(fileIndex) {
+    setSelectedFiles((currentFiles) =>
+      currentFiles.filter((_, index) => index !== fileIndex)
+    );
   }
 
   return (
     <div className="border-t border-neutral-800 px-1 py-1">
-      {selectedFile && (
-        <div className="mb-1 flex items-center justify-between gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-xs text-neutral-200">
-          <span className="min-w-0 truncate">
-            {selectedFile.name} {formatSize(selectedFile.size) && `· ${formatSize(selectedFile.size)}`}
-          </span>
-          <button
-            type="button"
-            onClick={() => setSelectedFile(null)}
-            className="shrink-0 text-red-300"
-          >
-            Ukloni
-          </button>
+      {selectedFiles.length > 0 && (
+        <div className="mb-1 max-h-28 space-y-1 overflow-y-auto rounded-lg bg-neutral-900 px-2 py-2 text-xs text-neutral-200">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <span className="text-neutral-400">
+              {selectedFiles.length === 1 ? "1 fajl" : `${selectedFiles.length} fajlova`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedFiles([])}
+              className="shrink-0 text-red-300"
+            >
+              Ukloni sve
+            </button>
+          </div>
+          {selectedFiles.map((file, index) => (
+            <div key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between gap-2 rounded-md bg-black/20 px-2 py-1.5">
+              <span className="min-w-0 truncate">
+                {file.name} {formatSize(file.size) && `· ${formatSize(file.size)}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeFile(index)}
+                className="shrink-0 text-red-300"
+              >
+                Ukloni
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -123,6 +148,7 @@ export default function ChatComposer({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv"
           onChange={chooseFile}
           className="hidden"
