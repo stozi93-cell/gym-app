@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { REACTION_OPTIONS } from "../../chat/messageTracking";
+import {
+  getMessageReactionCounts,
+  REACTION_OPTIONS,
+} from "../../chat/messageTracking";
 import {
   formatMessageTime,
   getMessageStatus,
@@ -97,6 +100,7 @@ export default function MessageBubble({
   onReact,
 }) {
   const [reactionMenuOpen, setReactionMenuOpen] = useState(false);
+  const reactionCounts = getMessageReactionCounts(message.reactions);
   const myReaction = currentUserId ? message.reactions?.[currentUserId] : "";
 
   async function chooseReaction(emoji) {
@@ -144,11 +148,11 @@ export default function MessageBubble({
                 aria-expanded={reactionMenuOpen}
                 className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1 transition ${
                   myReaction
-                    ? "bg-neutral-700/70 text-sm"
+                    ? "bg-neutral-700/60 text-neutral-100"
                     : "bg-transparent text-neutral-400 hover:bg-neutral-700/60 hover:text-neutral-100"
                 }`}
               >
-                {myReaction || <SmileIcon className="h-4 w-4" />}
+                <SmileIcon className="h-4 w-4" />
               </button>
             </div>
           )}
@@ -159,6 +163,19 @@ export default function MessageBubble({
           </p>
         </div>
       </div>
+
+      {reactionCounts.length > 0 && (
+        <div className={`mt-1 flex gap-1 ${mine ? "justify-end pr-2" : "justify-start pl-2"}`}>
+          {reactionCounts.map(({ emoji, count }) => (
+            <span
+              key={emoji}
+              className="rounded-full bg-neutral-900 px-2 py-0.5 text-xs text-neutral-100 shadow"
+            >
+              {emoji}{count > 1 ? ` ${count}` : ""}
+            </span>
+          ))}
+        </div>
+      )}
 
     </div>
   );

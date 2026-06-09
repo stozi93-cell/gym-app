@@ -2,19 +2,6 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    function conversation(conversationId) {
-      return firestore.get(/databases/(default)/documents/conversations/$(conversationId)).data;
-    }
-
-    function isConversationParticipant(conversationId) {
-      return request.auth != null
-        && firestore.exists(/databases/(default)/documents/conversations/$(conversationId))
-        && (
-          conversation(conversationId).clientId == request.auth.uid
-          || conversation(conversationId).coachId == request.auth.uid
-        );
-    }
-
     match /profilePhotos/{userId}/avatar {
       allow read: if request.auth != null;
       allow create, update: if request.auth != null
@@ -25,9 +12,7 @@ service firebase.storage {
     }
 
     match /chatAttachments/{conversationId}/{messageId}/{fileName} {
-      allow read: if isConversationParticipant(conversationId);
-      allow create, update: if isConversationParticipant(conversationId);
-      allow delete: if isConversationParticipant(conversationId);
+      allow read, create, update, delete: if request.auth != null;
     }
   }
 }
