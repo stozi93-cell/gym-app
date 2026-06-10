@@ -27,6 +27,28 @@ function formatDate(value) {
     : "-";
 }
 
+function toInputDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseInputDate(value, endOfDay = false) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(
+    year,
+    month - 1,
+    day,
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0
+  );
+}
+
 function attachMembershipPeriods(invoices, memberships) {
   const membershipsById = Object.fromEntries(
     memberships.map((membership) => [membership.id, membership])
@@ -133,12 +155,10 @@ export default function AdminBilling() {
       const paidAt = toDate(invoice.paidAt);
       if (!paidAt) return false;
 
-      if (overviewStart && paidAt < new Date(overviewStart)) return false;
-      if (overviewEnd) {
-        const end = new Date(overviewEnd);
-        end.setHours(23, 59, 59, 999);
-        if (paidAt > end) return false;
-      }
+      const start = parseInputDate(overviewStart);
+      const end = parseInputDate(overviewEnd, true);
+      if (start && paidAt < start) return false;
+      if (end && paidAt > end) return false;
 
       return true;
     });
@@ -202,8 +222,10 @@ export default function AdminBilling() {
     let end;
 
     if (preset === "today") {
-      start = new Date(now.setHours(0, 0, 0, 0));
-      end = new Date(now.setHours(23, 59, 59, 999));
+      start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(now);
+      end.setHours(23, 59, 59, 999);
     }
 
     if (preset === "week") {
@@ -227,8 +249,8 @@ export default function AdminBilling() {
     }
 
     if (!start || !end) return;
-    setOverviewStart(start.toISOString().slice(0, 10));
-    setOverviewEnd(end.toISOString().slice(0, 10));
+    setOverviewStart(toInputDate(start));
+    setOverviewEnd(toInputDate(end));
   }
 
   return (

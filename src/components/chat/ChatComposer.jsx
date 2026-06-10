@@ -124,12 +124,6 @@ export default function ChatComposer({
           value={text}
           rows={1}
           onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              sendAndFocus();
-            }
-          }}
           placeholder="Napiši poruku..."
           className="max-h-32 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm text-white outline-none placeholder:text-neutral-400"
         />

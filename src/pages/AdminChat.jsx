@@ -33,6 +33,15 @@ function BackIcon({ className }) {
   );
 }
 
+function ArrowDownIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 5v14" />
+      <path d="m19 12-7 7-7-7" />
+    </svg>
+  );
+}
+
 export default function AdminChat() {
   const { conversationId } = useParams();
   const { user } = useAuth();
@@ -45,8 +54,11 @@ export default function AdminChat() {
   const [clientName, setClientName] = useState("Klijent");
   const [clientPhotoURL, setClientPhotoURL] = useState("");
   const bottomRef = useRef(null);
+  const messagesRef = useRef(null);
   const sendingRef = useRef(false);
   const messageCountRef = useRef(0);
+  const isNearBottomRef = useRef(true);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
 
   useEffect(() => {
     async function loadConversation() {
@@ -90,11 +102,32 @@ export default function AdminChat() {
   }, [conversationId, user?.uid]);
 
   useEffect(() => {
-    if (messages.length > messageCountRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const firstLoad = messageCountRef.current === 0;
+
+    if (messages.length > messageCountRef.current && (firstLoad || isNearBottomRef.current)) {
+      scrollToBottom("smooth");
+    } else if (messages.length > messageCountRef.current) {
+      setShowJumpToBottom(true);
     }
     messageCountRef.current = messages.length;
   }, [messages.length]);
+
+  function handleMessagesScroll() {
+    const container = messagesRef.current;
+    if (!container) return;
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    const nearBottom = distanceFromBottom < 180;
+    isNearBottomRef.current = nearBottom;
+    setShowJumpToBottom(!nearBottom);
+  }
+
+  function scrollToBottom(behavior = "smooth") {
+    bottomRef.current?.scrollIntoView({ behavior });
+    isNearBottomRef.current = true;
+    setShowJumpToBottom(false);
+  }
 
   async function send() {
     if ((!text.trim() && selectedFiles.length === 0) || !user?.uid || !conversationId || !clientId || sendingRef.current) return false;
@@ -167,7 +200,7 @@ export default function AdminChat() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <div className="flex items-center gap-3 border-b border-border-dark px-4 py-2">
         <Link
           to="/poruke"
@@ -184,7 +217,7 @@ export default function AdminChat() {
         </Link>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 scrollbar-none">
+      <div ref={messagesRef} onScroll={handleMessagesScroll} className="flex-1 space-y-3 overflow-y-auto px-4 py-4 scrollbar-none">
         {messages.map((message, index) => {
           const mine = message.senderId === user?.uid || message.senderId === "admin";
           const showDay =
@@ -208,6 +241,17 @@ export default function AdminChat() {
         })}
         <div ref={bottomRef} />
       </div>
+
+      {showJumpToBottom && (
+        <button
+          type="button"
+          onClick={() => scrollToBottom("smooth")}
+          aria-label="Idi na kraj razgovora"
+          className="absolute bottom-16 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-neutral-700 bg-neutral-950/95 text-neutral-200 shadow-xl transition hover:text-white"
+        >
+          <ArrowDownIcon className="h-5 w-5" />
+        </button>
+      )}
 
       <ChatComposer
         text={text}
