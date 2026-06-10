@@ -59,6 +59,7 @@ export default function AdminChat() {
   const messageCountRef = useRef(0);
   const isNearBottomRef = useRef(true);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
 
   useEffect(() => {
     async function loadConversation() {
@@ -102,12 +103,15 @@ export default function AdminChat() {
   }, [conversationId, user?.uid]);
 
   useEffect(() => {
-    const firstLoad = messageCountRef.current === 0;
+    const previousCount = messageCountRef.current;
+    const firstLoad = previousCount === 0;
+    const addedCount = Math.max(messages.length - previousCount, 0);
 
-    if (messages.length > messageCountRef.current && (firstLoad || isNearBottomRef.current)) {
+    if (messages.length > previousCount && (firstLoad || isNearBottomRef.current)) {
       scrollToBottom("smooth");
-    } else if (messages.length > messageCountRef.current) {
+    } else if (messages.length > previousCount) {
       setShowJumpToBottom(true);
+      setNewMessagesCount((count) => count + addedCount);
     }
     messageCountRef.current = messages.length;
   }, [messages.length]);
@@ -121,12 +125,14 @@ export default function AdminChat() {
     const nearBottom = distanceFromBottom < 180;
     isNearBottomRef.current = nearBottom;
     setShowJumpToBottom(!nearBottom);
+    if (nearBottom) setNewMessagesCount(0);
   }
 
   function scrollToBottom(behavior = "smooth") {
     bottomRef.current?.scrollIntoView({ behavior });
     isNearBottomRef.current = true;
     setShowJumpToBottom(false);
+    setNewMessagesCount(0);
   }
 
   async function send() {
@@ -247,9 +253,14 @@ export default function AdminChat() {
           type="button"
           onClick={() => scrollToBottom("smooth")}
           aria-label="Idi na kraj razgovora"
-          className="absolute bottom-16 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-neutral-700 bg-neutral-950/95 text-neutral-200 shadow-xl transition hover:text-white"
+          className="absolute bottom-16 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-neutral-700/60 bg-neutral-950/45 text-neutral-200 shadow-lg backdrop-blur-sm transition hover:bg-neutral-950/70 hover:text-white"
         >
           <ArrowDownIcon className="h-5 w-5" />
+          {newMessagesCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-medium text-white">
+              {newMessagesCount > 9 ? "9+" : newMessagesCount}
+            </span>
+          )}
         </button>
       )}
 
