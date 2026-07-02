@@ -15,6 +15,13 @@ import {
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { db } from "../firebase";
+import Avatar from "../components/Avatar";
+import { Panel, StatusPill } from "../components/ui/Primitives";
+import DayPicker, {
+  buildDayPickerDays,
+  dateFromDayKey,
+  makeDayKey,
+} from "../components/ui/DayPicker";
 import {
   bookSlot as createBooking,
   getBookingErrorMessage,
@@ -107,6 +114,9 @@ export default function AdminSlots() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [filterDate, setFilterDate] = useState("");
+  const [selectedDayKey, setSelectedDayKey] = useState(() =>
+    makeDayKey(new Date())
+  );
   const [pendingBookingIds, setPendingBookingIds] = useState([]);
   const pendingBookingIdsRef = useRef(new Set());
   const [statusMessage, setStatusMessage] = useState("");
@@ -116,8 +126,10 @@ export default function AdminSlots() {
 
   useEffect(() => {
   if (filterDate) {
-    loadData(new Date(filterDate));
+    setSelectedDayKey(filterDate);
+    loadData(dateFromDayKey(filterDate));
   } else {
+    setSelectedDayKey(makeDayKey(new Date()));
     loadData();
   }
 }, [filterDate]);
@@ -206,8 +218,37 @@ setSlots(
 );
 
     const userSnap = await getDocs(collection(db, "users"));
+    const subSnap = await getDocs(
+      query(
+        collection(db, "clientSubscriptions"),
+        where("active", "==", true)
+      )
+    );
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const activeSubUserIds = new Set();
+
+    subSnap.docs.forEach((subscription) => {
+      const data = subscription.data();
+      const endDate = data.endDate?.toDate
+        ? data.endDate.toDate()
+        : new Date(data.endDate);
+
+      if (endDate >= today) {
+        activeSubUserIds.add(data.userId);
+      }
+    });
+
     setUsers(
-      userSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      userSnap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          hasActiveSub:
+            data.role === "client" ? activeSubUserIds.has(d.id) : true,
+        };
+      })
     );
 
     setLoading(false);
@@ -344,16 +385,41 @@ setSlots(
 
   /* grouping */
   const groupedSlots = slots.reduce((acc, s) => {
-    const key = s.timestamp.toISOString().split("T")[0];
+    const key = makeDayKey(s.timestamp);
     (acc[key] ||= []).push(s);
     return acc;
   }, {});
 
-  const visibleGroups = filterDate
-  ? { [filterDate]: groupedSlots[filterDate] || [] }
-  : groupedSlots;
+  const dayPickerStart = filterDate ? dateFromDayKey(filterDate) : new Date();
+  const dayPickerDays = buildDayPickerDays(dayPickerStart, 6);
+  const dayPickerKeys = dayPickerDays.map((day) => day.key).join("|");
+  useEffect(() => {
+    if (
+      dayPickerDays.length &&
+      !dayPickerDays.some((day) => day.key === selectedDayKey)
+    ) {
+      setSelectedDayKey(dayPickerDays[0].key);
+    }
+  }, [dayPickerKeys, selectedDayKey]);
 
-  const orderedKeys = Object.keys(visibleGroups).sort();
+  const todayKey = makeDayKey(new Date());
+  const dayMetaByKey = dayPickerDays.reduce((acc, day) => {
+    const daySlots = groupedSlots[day.key] || [];
+    const bookingCount = daySlots.reduce(
+      (sum, slot) => sum + slotBookings(slot).length,
+      0
+    );
+
+    acc[day.key] = {
+      today: day.key === todayKey,
+      label: bookingCount > 0 || daySlots.length > 0,
+      tone: bookingCount > 0 ? "blue" : "neutral",
+    };
+    return acc;
+  }, {});
+  const selectedDaySlots = [...(groupedSlots[selectedDayKey] || [])].sort(
+    (a, b) => a.timestamp - b.timestamp
+  );
   const matchingUsers = useMemo(() => {
     const search = clientSearch.trim().toLocaleLowerCase("sr-Latn-RS");
 
@@ -385,214 +451,216 @@ setSlots(
 
 
   return (
-    <div className="px-2 py-1 space-y-3">
+    <div className="space-y-4">
       {statusMessage && (
-        <div className="mx-2 rounded bg-neutral-800 px-3 py-2 text-sm text-neutral-200">
+        <div className="rounded-xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-4 py-3 text-sm text-brand-blue-300">
           {statusMessage}
         </div>
       )}
       
 
       {/* IZABERI DATUM */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-1">
-        <p className="text-sm font-medium text-neutral-200">
-          Izaberi datum
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="date"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            className="rounded bg-neutral-800 px-2 py-1 text-sm"
-          />
-          {filterDate && (
-            <button
-              onClick={() => setFilterDate("")}
-              className="text-sm text-blue-400"
-            >
-              Reset
-            </button>
-          )}
+      <Panel className="space-y-3 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
+            Pregled rasporeda
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="w-[126px] rounded-xl border border-white/10 bg-neutral-950/60 px-2 py-2 text-xs text-white outline-none focus:border-brand-blue-500"
+            />
+            {filterDate && (
+              <button
+                onClick={() => setFilterDate("")}
+                className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-2 text-xs font-medium text-neutral-200 transition hover:bg-white/10"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+
+        <DayPicker
+          days={dayPickerDays}
+          selectedKey={selectedDayKey}
+          onSelect={setSelectedDayKey}
+          metaByKey={dayMetaByKey}
+        />
+      </Panel>
 
       {/* NOVI TERMIN */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-1">
-        <p className="text-sm font-medium text-neutral-200">
+      <Panel className="p-4">
+        <p className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
           Novi termin
         </p>
-        <div className="grid grid-cols-[minmax(0,1fr)_84px_auto] items-end gap-3">
-          <label className="min-w-0 text-xs text-neutral-400">
+        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_96px_auto] items-end gap-2">
+          <label className="min-w-0 text-xs font-medium text-neutral-300">
             Datum
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="mt-1 block w-full min-w-0 rounded bg-neutral-800 px-1.5 py-1 text-xs text-white"
+              className="mt-1 block w-full min-w-0 rounded-xl border border-white/10 bg-neutral-950/60 px-2 py-2.5 text-xs text-white outline-none focus:border-brand-blue-500"
             />
           </label>
-          <label className="min-w-0 text-xs text-neutral-400">
+          <label className="min-w-0 text-xs font-medium text-neutral-300">
             Vreme
             <input
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
-              className="mt-1 block w-full min-w-0 rounded bg-neutral-800 px-1.5 py-1 text-xs text-white"
+              className="mt-1 block w-full min-w-0 rounded-xl border border-white/10 bg-neutral-950/60 px-2 py-2.5 text-xs text-white outline-none focus:border-brand-blue-500"
             />
           </label>
           <button
             onClick={createSlot}
-            className="rounded bg-blue-600 px-3 py-1 text-sm text-white"
+            className="rounded-xl bg-brand-blue-500 px-3 py-2.5 text-xs font-semibold text-white shadow-glow transition hover:bg-brand-blue-600"
           >
             Kreiraj
           </button>
         </div>
-      </div>
+      </Panel>
 
       {/* SLOTS */}
-      <div className="space-y-4">
-        {orderedKeys.map((dateKey) => {
-          const daySlots = visibleGroups[dateKey];
-          const bookingCount = daySlots.reduce(
-            (sum, s) => sum + slotBookings(s).length,
-            0
-          );
+      <div className="space-y-3">
+        {selectedDaySlots.length === 0 && (
+          <Panel className="p-4 text-center text-sm text-neutral-400">
+            Nema termina za izabrani dan.
+          </Panel>
+        )}
+
+        {selectedDaySlots.map((slot) => {
+          const bks = slotBookings(slot);
 
           return (
-            <details
-              key={dateKey}
-              className="rounded-xl bg-neutral-900 mx-2"
+            <div
+              key={slot.id}
+              className={`rounded-2xl border p-3 ${
+                slot.locked
+                  ? "border-red-400/25 bg-red-500/10"
+                  : "border-white/10 bg-neutral-950/50"
+              }`}
             >
-              <summary className="cursor-pointer px-4 py-3 font-medium text-white">
-                {new Date(dateKey).toLocaleDateString("sr-Latn-RS", {
-                  weekday: "long",
-                  day: "2-digit",
-                  month: "long",
-                })}{" "}
-                ({bookingCount})
-              </summary>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-white">
+                    {slot.timestamp.toLocaleTimeString("sr-RS", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <StatusPill tone={bks.length >= slot.capacity ? "red" : "neutral"}>
+                      {bks.length} / {slot.capacity}
+                    </StatusPill>
+                    {slot.locked && (
+                      <StatusPill tone="red">Zaključano</StatusPill>
+                    )}
+                  </div>
+                </div>
 
-              <div className="p-3 space-y-3">
-                {daySlots.map((slot) => {
-                  const bks = slotBookings(slot);
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setBookingSlot(slot);
+                      setClientSearch("");
+                    }}
+                    className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300 transition hover:bg-brand-blue-500/15"
+                  >
+                    Klijent
+                  </button>
 
-                  return (
-                    <div
-                      key={slot.id}
-                      className={`rounded-lg p-3 space-y-2 border ${
-                        slot.locked
-                          ? "border-red-900/70 bg-neutral-900/80"
-                          : "border-neutral-700 bg-neutral-800"
-                      }`}
-                    >
-                      <div className="flex justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-white">
-                            {slot.timestamp.toLocaleTimeString("sr-RS", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                          <p className="text-xs text-neutral-400">
-                            {bks.length} / {slot.capacity}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              setBookingSlot(slot);
-                              setClientSearch("");
-                            }}
-                            className="rounded bg-neutral-700 px-2 py-1 text-xs text-white"
-                          >
-                            Klijent
-                          </button>
-
-                          <button
-                            onClick={() => toggleLock(slot)}
-                            title={slot.locked ? "Otključaj termin" : "Zaključaj termin"}
-                            aria-label={slot.locked ? "Otključaj termin" : "Zaključaj termin"}
-                            className={`rounded border p-1.5 ${
-                              slot.locked
-                                ? "border-red-900 bg-red-950/50 text-red-400"
-                                : "border-green-900 bg-green-950/40 text-green-400"
-                            }`}
-                          >
-                            <LockIcon locked={slot.locked} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {bks.length === 0 && (
-                        <div className="text-xs text-neutral-500 italic">
-                          Nema rezervacija
-                        </div>
-                      )}
-
-                      {bks.map((b) => {
-                        const u = users.find(
-                          (u) => u.id === b.userId
-                        );
-                        const isPending =
-                          pendingBookingIds.includes(b.id);
-                        return (
-                          <div
-                            key={b.id}
-                            className="flex justify-between text-sm"
-                          >
-                            <Link
-                              to={`/profil/${b.userId}`}
-                              className="text-blue-400 truncate"
-                            >
-                              {u
-                                ? `${u.name} ${u.surname}`
-                                : b.userId}
-                            </Link>
-
-                            <div className="flex gap-3">
-                              {!b.checkedIn ? (
-                                <button
-                                  disabled={isPending}
-                                  onClick={() =>
-                                    handleCheckIn(b)
-                                  }
-                                  className="text-green-400 disabled:opacity-40"
-                                >
-                                  Čekiraj
-                                </button>
-                              ) : (
-                                <span className="text-green-500">
-                                  ✔︎
-                                </span>
-                              )}
-                              <button
-                                disabled={isPending}
-                                onClick={() => cancelBooking(b)}
-                                className="text-red-400 disabled:opacity-40"
-                              >
-                                Otkaži
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                  <button
+                    onClick={() => toggleLock(slot)}
+                    title={slot.locked ? "Otključaj termin" : "Zaključaj termin"}
+                    aria-label={slot.locked ? "Otključaj termin" : "Zaključaj termin"}
+                    className={`rounded-xl border p-2 ${
+                      slot.locked
+                        ? "border-red-400/30 bg-red-500/10 text-red-300"
+                        : "border-brand-green-500/25 bg-brand-green-500/10 text-brand-green-300"
+                    }`}
+                  >
+                    <LockIcon locked={slot.locked} />
+                  </button>
+                </div>
               </div>
-            </details>
+
+              {bks.length === 0 && (
+                <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs italic text-neutral-500">
+                  Nema rezervacija
+                </div>
+              )}
+
+              {bks.map((b) => {
+                const u = users.find((user) => user.id === b.userId);
+                const isPending = pendingBookingIds.includes(b.id);
+                const hasActiveSub = u?.hasActiveSub !== false;
+
+                return (
+                  <div
+                    key={b.id}
+                    className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Avatar
+                        name={u ? `${u.name || ""} ${u.surname || ""}`.trim() : b.userId}
+                        photoURL={u?.photoURL || ""}
+                        className="h-8 w-8 text-xs"
+                      />
+                      {!hasActiveSub && (
+                        <span
+                          title="Nema aktivnu članarinu"
+                          className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-400"
+                        />
+                      )}
+                      <Link
+                        to={`/profil/${b.userId}`}
+                        className={`truncate font-medium ${
+                          hasActiveSub ? "text-white" : "text-red-300"
+                        }`}
+                      >
+                        {u ? `${u.name} ${u.surname}` : b.userId}
+                      </Link>
+                    </div>
+
+                    <div className="flex shrink-0 gap-2">
+                      {!b.checkedIn ? (
+                        <button
+                          disabled={isPending}
+                          onClick={() => handleCheckIn(b)}
+                          className="rounded-lg border border-brand-green-500/25 bg-brand-green-500/10 px-2.5 py-1.5 text-xs font-medium text-brand-green-300 disabled:opacity-40"
+                        >
+                          Čekiraj
+                        </button>
+                      ) : (
+                        <span className="text-green-500">✔︎</span>
+                      )}
+                      <button
+                        disabled={isPending}
+                        onClick={() => cancelBooking(b)}
+                        className="rounded-lg border border-red-400/25 bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-300 disabled:opacity-40"
+                      >
+                        Otkaži
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           );
         })}
       </div>
 
       {bookingSlot && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
           onClick={() => setBookingSlot(null)}
         >
           <div
-            className="w-full max-w-sm rounded-lg border border-neutral-700 bg-neutral-900 p-4 shadow-xl"
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 p-4 shadow-premium"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
@@ -603,7 +671,7 @@ setSlots(
                 onClick={() => setBookingSlot(null)}
                 aria-label="Zatvori"
                 title="Zatvori"
-                className="px-2 text-xl leading-none text-neutral-400 hover:text-white"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xl leading-none text-neutral-400 transition hover:bg-white/10 hover:text-white"
               >
                 ×
               </button>
@@ -615,20 +683,39 @@ setSlots(
               value={clientSearch}
               onChange={(event) => setClientSearch(event.target.value)}
               placeholder="Pretraži klijente"
-              className="mb-3 w-full rounded bg-neutral-800 px-3 py-2 text-sm text-white placeholder:text-neutral-500"
+              className="mb-3 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
             />
 
             <div className="max-h-72 space-y-1 overflow-y-auto">
-              {matchingUsers.map((user) => (
-                <button
-                  key={user.id}
-                  disabled={clientBookingPending}
-                  onClick={() => selectClient(user.id)}
-                  className="block w-full rounded px-3 py-2 text-left text-sm text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
-                >
-                  {user.name} {user.surname}
-                </button>
-              ))}
+              {matchingUsers.map((user) => {
+                const hasActiveSub = user.hasActiveSub !== false;
+
+                return (
+                  <button
+                    key={user.id}
+                    disabled={clientBookingPending}
+                    onClick={() => selectClient(user.id)}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-neutral-200 transition hover:bg-white/5 disabled:opacity-50"
+                  >
+                    <Avatar
+                      name={`${user.name || ""} ${user.surname || ""}`.trim()}
+                      photoURL={user.photoURL || ""}
+                      className="h-9 w-9 text-xs"
+                    />
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      {!hasActiveSub && (
+                        <span
+                          title="Nema aktivnu članarinu"
+                          className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-400"
+                        />
+                      )}
+                      <span className={`min-w-0 truncate ${hasActiveSub ? "" : "text-red-300"}`}>
+                        {user.name} {user.surname}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
 
               {matchingUsers.length === 0 && (
                 <p className="px-3 py-2 text-sm text-neutral-500">

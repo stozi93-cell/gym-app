@@ -17,6 +17,17 @@ function CalendarIcon({ className }) {
   );
 }
 
+function HomeIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 11.5 12 4l9 7.5" />
+      <path d="M5 10.5V20h14v-9.5" />
+      <path d="M9.5 20v-5h5v5" />
+    </svg>
+  );
+}
+
 function UserIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -148,7 +159,7 @@ function Badge({ count }) {
       absolute -top-1 -right-2
       min-w-[18px] h-[18px]
       rounded-full
-      bg-blue-600
+      bg-brand-blue-500
       px-1
       text-[11px]
       font-medium
@@ -167,11 +178,12 @@ function NavItem({ to, label, icon, badge }) {
   return (
     <NavLink
       to={to}
+      end={to === "/"}
       className={({ isActive }) =>
-        `relative flex flex-col items-center justify-center gap-1 text-xs transition ${
+        `relative flex min-w-[62px] flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs transition ${
           isActive
-            ? "text-brand-blue-500"
-            : "text-text-secondaryDark hover:text-white"
+            ? "bg-brand-blue-500/10 text-brand-blue-300"
+            : "text-text-secondaryDark hover:bg-white/5 hover:text-white"
         }`
       }
     >
@@ -192,20 +204,21 @@ export default function BottomNav({ role }) {
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const iconClass = "h-6 w-6";
-  const secondaryRoutes = ["/paketi", "/naplate", "/forum"];
+  const secondaryRoutes = ["/treninzi", "/paketi", "/naplate", "/forum"];
   const secondaryActive = secondaryRoutes.some((route) =>
     location.pathname.startsWith(route)
   );
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border-dark bg-surface-dark">
-      <div className="flex h-20 items-center justify-around">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-neutral-950/90 shadow-[0_-14px_34px_rgba(0,0,0,0.36)] backdrop-blur-xl">
+      <div className="flex h-20 items-center justify-around px-2">
 
         {role === "client" && (
           <>
-            <NavItem to="/" label="Rezervacije" icon={<CalendarIcon className={iconClass} />} />
+            <NavItem to="/" label="Početna" icon={<HomeIcon className={iconClass} />} />
+            <NavItem to="/rezervacije" label="Termini" icon={<CalendarIcon className={iconClass} />} />
             <NavItem to="/profil/me" label="Profil" icon={<UserIcon className={iconClass} />} />
-            <NavItem to="/forum" label="Novosti" icon={<MegaphoneIcon className={iconClass} />} />
+            <NavItem to="/forum" label="Forum" icon={<MegaphoneIcon className={iconClass} />} />
             <NavItem
               to="/chat"
               label="Poruke"
@@ -217,26 +230,27 @@ export default function BottomNav({ role }) {
 
         {role === "admin" && (
           <>
+            <NavItem to="/" label="Početna" icon={<HomeIcon className={iconClass} />} />
             <NavItem to="/raspored" label="Raspored" icon={<CalendarIcon className={iconClass} />} />
             <NavItem to="/klijenti" label="Klijenti" icon={<UsersIcon className={iconClass} />} />
             <NavItem to="/poruke" label="Poruke" icon={<ChatIcon className={iconClass} />} badge={unread} />
-            <NavItem to="/treninzi" label="Treninzi" icon={<TrainingIcon className={iconClass} />} />
             <div className="relative">
               {moreOpen && (
-                <div className="absolute bottom-14 right-0 w-36 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl">
+                <div className="absolute bottom-16 right-0 w-40 overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/95 p-1 shadow-premium backdrop-blur-xl">
+                  <MoreMenuItem to="/treninzi" label="Treninzi" icon={<TrainingIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
                   <MoreMenuItem to="/paketi" label="Paketi" icon={<RepeatIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
                   <MoreMenuItem to="/naplate" label="Naplate" icon={<CreditCardIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
-                  <MoreMenuItem to="/forum" label="Novosti" icon={<MegaphoneIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
+                  <MoreMenuItem to="/forum" label="Forum" icon={<MegaphoneIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
                 </div>
               )}
               <button
                 onClick={() => setMoreOpen((open) => !open)}
                 aria-label="Više"
                 aria-expanded={moreOpen}
-                className={`flex flex-col items-center justify-center gap-1 text-xs transition ${
+                className={`flex min-w-[62px] flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs transition ${
                   secondaryActive || moreOpen
-                    ? "text-brand-blue-500"
-                    : "text-text-secondaryDark hover:text-white"
+                    ? "bg-brand-blue-500/10 text-brand-blue-300"
+                    : "text-text-secondaryDark hover:bg-white/5 hover:text-white"
                 }`}
               >
                 <MoreIcon className={iconClass} />
@@ -257,8 +271,8 @@ function MoreMenuItem({ to, label, icon, onNavigate }) {
       to={to}
       onClick={onNavigate}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-3 text-sm transition hover:bg-neutral-800 ${
-          isActive ? "text-brand-blue-500" : "text-neutral-200"
+        `flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition hover:bg-white/5 ${
+          isActive ? "bg-brand-blue-500/10 text-brand-blue-300" : "text-neutral-200"
         }`
       }
     >

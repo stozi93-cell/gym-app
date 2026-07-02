@@ -20,17 +20,35 @@ function formatDateTime(ts) {
 async function getUserTokens(uid) {
   const snap = await admin.firestore().doc(`users/${uid}`).get();
   if (!snap.exists()) return [];
-  return snap.data().fcmTokens || [];
+  return getTokensFromUserData(snap.data());
 }
 
-async function getAdminTokens() {
+async function getAdminTokens(type) {
   const snap = await admin
     .firestore()
     .collection("users")
     .where("role", "==", "admin")
     .get();
 
-  return snap.docs.flatMap(d => d.data().fcmTokens || []);
+  return snap.docs.flatMap((d) => getTokensFromUserData(d.data(), type));
+}
+
+function notificationAllowed(user, type) {
+  if (!type) return true;
+
+  const preferences = user.notificationPreferences || {};
+  const aliases = {
+    CHAT_MESSAGE: ["MESSAGE_RECEIVED"],
+    SUBSCRIPTION_EXPIRY: ["SUBSCRIPTION_ENDING", "SUBSCRIPTION_ENDED"],
+  };
+
+  const keys = [type, ...(aliases[type] || [])];
+  return !keys.some((key) => preferences[key] === false);
+}
+
+function getTokensFromUserData(user = {}, type) {
+  if (!notificationAllowed(user, type)) return [];
+  return user.fcmTokens || [];
 }
 
 /* ───────── SEND ───────── */
@@ -48,5 +66,7 @@ module.exports = {
   formatDateTime,
   getUserTokens,
   getAdminTokens,
+  getTokensFromUserData,
+  notificationAllowed,
   send,
 };

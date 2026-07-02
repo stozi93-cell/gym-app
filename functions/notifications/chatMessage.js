@@ -1,5 +1,6 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
+const { getTokensFromUserData } = require("./_helpers");
 
 exports.notifyChatMessage = onDocumentCreated(
   "messages/{messageId}",
@@ -23,7 +24,7 @@ exports.notifyChatMessage = onDocumentCreated(
       if (!recipientSnap.exists) return;
 
       const recipient = recipientSnap.data();
-      const tokens = recipient.fcmTokens || [];
+      const tokens = getTokensFromUserData(recipient, "CHAT_MESSAGE");
       if (!tokens.length) return;
 
       let fullName = "Nova poruka";

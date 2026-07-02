@@ -108,6 +108,7 @@ export async function sendChatMessage({
   attachmentFile = null,
   recipientUnreadField,
   senderUnreadField,
+  replyTo = null,
 }) {
   const messageRef = doc(collection(db, "messages"));
   const conversationRef = doc(db, "conversations", conversationId);
@@ -134,6 +135,7 @@ export async function sendChatMessage({
     recipientId,
     text: cleanText,
     ...(attachment ? { attachment } : {}),
+    ...(replyTo ? { replyTo } : {}),
     createdAt: serverTimestamp(),
   });
 
@@ -151,6 +153,24 @@ export async function sendChatMessage({
     error.chatStage = "firestore";
     throw error;
   }
+}
+
+export async function editChatMessage({ messageId, userId, text }) {
+  const cleanText = typeof text === "string" ? text.trimEnd() : "";
+  if (!messageId || !userId || !cleanText.trim()) return;
+
+  await updateDoc(doc(db, "messages", messageId), {
+    text: cleanText,
+    editedAt: serverTimestamp(),
+  });
+}
+
+export async function toggleMessagePin({ messageId, pinned }) {
+  if (!messageId) return;
+
+  await updateDoc(doc(db, "messages", messageId), {
+    pinned: !pinned,
+  });
 }
 
 export function getChatSendErrorMessage(error) {

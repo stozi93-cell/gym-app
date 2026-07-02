@@ -16,6 +16,11 @@ import {
   getBookingErrorMessage,
 } from "../bookings/bookSlot";
 import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
+import { Panel, StatusPill } from "../components/ui/Primitives";
+import DayPicker, {
+  buildDayPickerDays,
+  makeDayKey,
+} from "../components/ui/DayPicker";
 
 const WINDOW_DAYS = 7;
 const DEFAULT_CAPACITY = 5;
@@ -35,6 +40,9 @@ export default function Bookings() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDayKey, setSelectedDayKey] = useState(() =>
+    makeDayKey(new Date())
+  );
   const refreshTimerRef = useRef(null);
   const [statusMessage, setStatusMessage] = useState("");
 
@@ -77,6 +85,16 @@ export default function Bookings() {
       unsubTemplates();
     };
   }, [selectedDate]);
+
+  useEffect(() => {
+    const visibleDays = buildDayPickerDays(selectedDate || new Date(), 6);
+    if (
+      visibleDays.length &&
+      !visibleDays.some((day) => day.key === selectedDayKey)
+    ) {
+      setSelectedDayKey(visibleDays[0].key);
+    }
+  }, [selectedDate, selectedDayKey]);
 
   /* ---------------- helpers ---------------- */
 
@@ -125,7 +143,7 @@ export default function Bookings() {
   async function loadData(dateOverride) {
     setLoading(true);
 
-    const startDate = dateOverride ?? new Date();
+    const startDate = dateOverride ? new Date(dateOverride) : new Date();
 startDate.setHours(0, 0, 0, 0);
 
 const endDate = new Date(startDate);
@@ -299,7 +317,7 @@ const end = Timestamp.fromDate(endDate);
   return (
     <div className="space-y-4">
       {statusMessage && (
-        <div className="rounded bg-neutral-800 px-3 py-2 text-sm text-neutral-200">
+        <div className="rounded-xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-4 py-3 text-sm text-brand-blue-300">
           {statusMessage}
         </div>
       )}
@@ -354,36 +372,68 @@ const end = Timestamp.fromDate(endDate);
   const additionalBookings = futureBookings.slice(1);
 
   const groupedSlots = slots.reduce((acc, slot) => {
-    const key = capitalize(
-      formatDate(slot.timestamp, {
-        weekday: "long",
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      })
-    );
+    const key = makeDayKey(slot.timestamp);
     (acc[key] ||= []).push(slot);
     return acc;
   }, {});
 
-  const sortedDates = Object.entries(groupedSlots).sort(
-    (a, b) => a[1][0].timestamp - b[1][0].timestamp
+  const dayPickerDays = buildDayPickerDays(selectedDate || new Date(), 6);
+  const todayKey = makeDayKey(new Date());
+  const dayMetaByKey = dayPickerDays.reduce((acc, day) => {
+    const daySlots = groupedSlots[day.key] || [];
+    const hasUserBooking = daySlots.some((slot) =>
+      bookings.some((booking) => hasSlotId(slot, booking.slotId))
+    );
+    const hasCheckedIn = daySlots.some((slot) =>
+      bookings.some(
+        (booking) => hasSlotId(slot, booking.slotId) && booking.checkedIn
+      )
+    );
+
+    acc[day.key] = {
+      today: day.key === todayKey,
+      label: hasCheckedIn || hasUserBooking || daySlots.length > 0,
+      tone: hasCheckedIn ? "green" : hasUserBooking ? "blue" : "neutral",
+    };
+    return acc;
+  }, {});
+
+  const selectedDaySlots = [...(groupedSlots[selectedDayKey] || [])].sort(
+    (a, b) => a.timestamp - b.timestamp
+  );
+  const userBookingForDay = bookings.find((booking) =>
+    selectedDaySlots.some((slot) => hasSlotId(slot, booking.slotId))
+  );
+  const visibleSelectedDaySlots = selectedDaySlots.filter((slot) => {
+    const booking = bookings.find((item) => hasSlotId(slot, item.slotId));
+    return !!booking || canBook(slot.timestamp);
+  });
+  const morningSlots = visibleSelectedDaySlots.filter(
+    (slot) => slot.timestamp.getHours() < 16
+  );
+  const afternoonSlots = visibleSelectedDaySlots.filter(
+    (slot) => slot.timestamp.getHours() >= 16
   );
 
   /* ---------------- JSX ---------------- */
 
   return (
     <div className="space-y-4">
+      {statusMessage && (
+        <div className="rounded-xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-4 py-3 text-sm text-brand-blue-300">
+          {statusMessage}
+        </div>
+      )}
       {/* Sledeći trening */}
-      <div className="bg-neutral-800 ring-1 ring-neutral-700 rounded-xl px-4 py-3 space-y-3">
+      <Panel className="p-4">
         <div>
-          <div className="text-xs text-neutral-400">
+          <div className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
             Sledeći trening
           </div>
 
           {nextTraining ? (
             <>
-              <div className="text-2xl font-semibold leading-tight">
+              <div className="mt-1 text-3xl font-semibold leading-tight text-white">
                 {formatTime(nextTraining.timestamp)}
               </div>
               <div className="text-xs text-neutral-400">
@@ -397,12 +447,12 @@ const end = Timestamp.fromDate(endDate);
               </div>
             </>
           ) : (
-            <div className="text-sm text-red-400 mt-1">
+            <div className="mt-2 rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">
               Nemate zakazanih treninga.
             </div>
           )}
         </div>
-        <div className="border-t border-neutral-600" />
+        <div className="border-t border-white/10" />
 
 
         {additionalBookings.length > 0 && (
@@ -410,7 +460,7 @@ const end = Timestamp.fromDate(endDate);
             <div className="text-xs font-medium mb-0.5 text-neutral-300">
               Ostale rezervacije:
             </div>
-            <ul className="text-xs text-blue-400 space-y-0.5">
+            <ul className="space-y-1 text-xs text-brand-blue-300">
               {additionalBookings.map((s) => (
                 <li key={s.id}>
                   {formatTime(s.timestamp)} —{" "}
@@ -427,7 +477,7 @@ const end = Timestamp.fromDate(endDate);
           </div>
         )}
 
-        <div className="border-t border-neutral-700/50 my-2" />
+        <div className="my-2 border-t border-white/10" />
 
         <div>
           <div className="text-xs font-medium mb-0.5 text-neutral-300">
@@ -435,7 +485,7 @@ const end = Timestamp.fromDate(endDate);
           </div>
 
           {pastVisits.length > 0 && (
-            <ul className="text-xs text-green-500 space-y-0.5">
+            <ul className="space-y-1 text-xs text-brand-green-300">
               {pastVisits.map((d, i) => (
                 <li key={i}>
                   {formatTime(d)} —{" "}
@@ -451,138 +501,181 @@ const end = Timestamp.fromDate(endDate);
             </ul>
           )}
         </div>
-      </div>
+      </Panel>
 
       {/* Slots */}
+      <Panel className="p-3">
+        <DayPicker
+          days={dayPickerDays}
+          selectedKey={selectedDayKey}
+          onSelect={setSelectedDayKey}
+          metaByKey={dayMetaByKey}
+        />
+      </Panel>
+
+      <div className="space-y-4">
+        {visibleSelectedDaySlots.length === 0 && (
+          <Panel className="p-4 text-center text-sm text-neutral-400">
+            Nema termina za izabrani dan.
+          </Panel>
+        )}
+
+        {visibleSelectedDaySlots.length > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            <SlotColumn
+              title="Prepodne"
+              slots={morningSlots}
+              bookings={bookings}
+              bookingCounts={bookingCounts}
+              userBookingForDay={userBookingForDay}
+              hasSlotId={hasSlotId}
+              formatTime={formatTime}
+              book={book}
+              cancel={cancel}
+              canBook={canBook}
+            />
+
+            <SlotColumn
+              title="Popodne"
+              slots={afternoonSlots}
+              bookings={bookings}
+              bookingCounts={bookingCounts}
+              userBookingForDay={userBookingForDay}
+              hasSlotId={hasSlotId}
+              formatTime={formatTime}
+              book={book}
+              cancel={cancel}
+              canBook={canBook}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SlotColumn({
+  title,
+  slots,
+  bookings,
+  bookingCounts,
+  userBookingForDay,
+  hasSlotId,
+  formatTime,
+  book,
+  cancel,
+  canBook,
+}) {
+  return (
+    <section className="min-w-0 space-y-2">
+      <p className="px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
+        {title}
+      </p>
       <div className="space-y-2">
-        {sortedDates.map(([date, daySlots]) => {
-          const hasUserBooking = daySlots.some((s) =>
-            bookings.some((b) => hasSlotId(s, b.slotId))
-          );
-          const hasCheckedIn = daySlots.some((s) =>
-            bookings.some(
-              (b) => hasSlotId(s, b.slotId) && b.checkedIn
-            )
-          );
-const userBookingForDay = bookings.find((b) =>
-  daySlots.some((s) => hasSlotId(s, b.slotId))
-);
+        {slots.map((slot) => (
+          <SlotCard
+            key={slot.id}
+            slot={slot}
+            bookings={bookings}
+            bookingCounts={bookingCounts}
+            userBookingForDay={userBookingForDay}
+            hasSlotId={hasSlotId}
+            formatTime={formatTime}
+            book={book}
+            cancel={cancel}
+            canBook={canBook}
+          />
+        ))}
+        {!slots.length && (
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-neutral-500">
+            Nema
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
-          return (
-            <details
-              key={date}
-              className={`bg-neutral-900 border-l-4 pl-2 rounded-xl px-3 py-2.5 ${
-                hasCheckedIn
-                  ? "border-green-500"
-                  : hasUserBooking
-                  ? "border-blue-500"
-                  : "border-neutral-600"
-              }`}
-            >
-              <summary className="font-medium cursor-pointer text-sm pl-1">
-               {date}
-              </summary>
+function SlotCard({
+  slot,
+  bookings,
+  bookingCounts,
+  userBookingForDay,
+  hasSlotId,
+  formatTime,
+  book,
+  cancel,
+  canBook,
+}) {
+  const booking = bookings.find((item) => hasSlotId(slot, item.slotId));
+  const booked = !!booking;
+  const checkedIn = booking?.checkedIn === true;
+  const hasBookingThatDay = !!userBookingForDay;
+  const isUsersSlotForDay = hasSlotId(slot, userBookingForDay?.slotId);
+  const count = bookingCounts[slot.id] || 0;
+  const full = count >= slot.capacity;
+  const allowed = !booked && !slot.locked && canBook(slot.timestamp);
+  const disabledByOtherBooking = hasBookingThatDay && !isUsersSlotForDay && !booked;
 
-              <div className="mt-2 space-y-2">
-                {daySlots.map((slot) => {
-                  const booking = bookings.find(
-  (b) => hasSlotId(slot, b.slotId)
-);
+  return (
+    <div
+      className={`min-h-[76px] rounded-xl border px-2.5 py-2 transition-opacity ${
+        slot.locked
+          ? "border-red-400/20 bg-red-500/10 text-neutral-500 opacity-70"
+          : "border-white/10 bg-neutral-950/60"
+      } ${disabledByOtherBooking ? "pointer-events-none opacity-40" : ""}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-sm font-semibold leading-tight text-white">
+          {formatTime(slot.timestamp)}
+        </span>
+        <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-neutral-300">
+          {count}/{slot.capacity}
+        </span>
+      </div>
 
-const booked = !!booking;
-const checkedIn = booking?.checkedIn === true;
+      <div className="mt-2">
+        {!booked && !full && allowed && !hasBookingThatDay && (
+          <button
+            className="w-full rounded-lg border border-brand-green-500/25 bg-brand-green-500/10 px-2 py-1.5 text-xs font-semibold text-brand-green-300 transition hover:bg-brand-green-500/15"
+            onClick={() => book(slot)}
+          >
+            Rezerviši
+          </button>
+        )}
 
-const hasBookingThatDay = !!userBookingForDay;
-const isUsersSlotForDay =
-  hasSlotId(slot, userBookingForDay?.slotId);
+        {booked && !checkedIn && (
+          <button
+            className="w-full rounded-lg border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/15"
+            onClick={() => cancel(booking.slotId)}
+          >
+            Otkaži
+          </button>
+        )}
 
+        {checkedIn && (
+          <span className="inline-flex w-full items-center justify-center rounded-lg border border-brand-green-500/25 bg-brand-green-500/10 px-2 py-1.5 text-xs font-medium text-brand-green-300">
+            Odrađen
+          </span>
+        )}
 
-                  const count = bookingCounts[slot.id] || 0;
-                  const full = count >= slot.capacity;
-                  const allowed =
-  !booked &&
-  !slot.locked &&
-  canBook(slot.timestamp);
+        {!booked && full && (
+          <span className="inline-flex w-full items-center justify-center rounded-lg border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-xs font-medium text-red-300">
+            Popunjeno
+          </span>
+        )}
 
-                  return (
-                    <div
-  key={slot.id}
-  className={`flex justify-between items-center rounded-lg px-3 py-1 transition-opacity ${
-    slot.locked
-  ? "bg-neutral-900 text-neutral-500 opacity-60"
-  : !allowed && !booked && !full
-  ? "bg-neutral-900 text-neutral-500"
-  : "bg-neutral-800"
-  } ${
-  hasBookingThatDay &&
-  !isUsersSlotForDay &&
-  !booked
-    ? "opacity-40 pointer-events-none"
-    : ""
-}`}
->
+        {slot.locked && (
+          <span className="inline-flex w-full items-center justify-center rounded-lg border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-xs font-medium text-red-300">
+            Zaključano
+          </span>
+        )}
 
-                      <span className="text-sm">
-                        {formatTime(slot.timestamp)} —{" "}
-                        <span className="text-neutral-400">
-                          {count}/{slot.capacity}
-                        </span>
-                      </span>
-
-                      {!booked &&
-  !full &&
-  allowed &&
-  !hasBookingThatDay && (
-
-                        <button
-                          className="text-sm text-green-400"
-                          onClick={() => book(slot)}
-                        >
-                          Rezerviši
-                        </button>
-                      )}
-
-                      {/* Booked but NOT checked in */}
-{booked && !checkedIn && (
-  <button
-    className="text-sm text-red-400"
-    onClick={() => cancel(booking.slotId)}
-  >
-    Otkaži
-  </button>
-)}
-
-{/* Checked in */}
-{checkedIn && (
-  <span className="text-xs text-green-500 font-medium">
-    Trening odrađen
-  </span>
-)}
-
-                      {!booked && full && (
-                        <span className="text-xs text-red-400">
-                          Popunjeno
-                        </span>
-                      )}
-
-                      {slot.locked && (
-  <span className="text-xs text-red-400">
-    Zaključano
-  </span>
-)}
-
-{!slot.locked && !booked && !allowed && !full && (
-  <span className="text-xs text-neutral-500">
-    Zatvoreno
-  </span>
-)}
-                    </div>
-                  );
-                })}
-              </div>
-            </details>
-          );
-        })}
+        {disabledByOtherBooking && (
+          <span className="inline-flex w-full items-center justify-center rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-medium text-neutral-400">
+            Jedan dnevno
+          </span>
+        )}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 
 const REGION = "europe-west1";
-const RETENTION_DAYS = 14;
+const RETENTION_DAYS = 30;
 
 async function deleteDocs(docs) {
   if (!docs.length) return;

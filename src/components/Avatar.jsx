@@ -12,7 +12,7 @@ export default function Avatar({
 }) {
   return (
     <span
-      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-700 text-sm font-medium text-white ${className}`}
+      className={`flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-neutral-800 text-sm font-medium text-white shadow-inner ${className}`}
     >
       {photoURL ? (
         <img

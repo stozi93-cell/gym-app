@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { doc, getDoc, runTransaction, Timestamp } from "firebase/firestore";
 import { db } from "../firebase";
+import { Panel } from "../components/ui/Primitives";
 
 /* ───────── helpers ───────── */
 
@@ -618,8 +619,8 @@ export default function AdminTrainingClient() {
 
   if (loadError) {
     return (
-      <div className="px-4 py-3">
-        <div className="rounded-lg border border-red-900 bg-red-950/30 p-3 text-sm text-red-300">
+      <div className="py-3">
+        <div className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-300">
           {loadError}
         </div>
       </div>
@@ -627,17 +628,17 @@ export default function AdminTrainingClient() {
   }
 
   return (
-    <div className="px-4 py-2 space-y-6">
+    <div className="space-y-4">
       {/* SAVE BAR */}
-      <div className="sticky top-0 z-10 bg-neutral-950/90 border-b border-neutral-800 p-3 flex justify-between">
+      <div className="sticky top-0 z-10 flex items-center justify-between rounded-2xl border border-white/10 bg-neutral-950/90 p-3 shadow-premium backdrop-blur-xl">
         <span className="text-sm text-neutral-400">
           {dirty ? "Nesačuvane izmene" : "Sve je sačuvano"}
         </span>
         <button
           onClick={save}
           disabled={!dirty || saving}
-          className={`px-4 py-2 rounded-lg text-sm ${
-            dirty ? "bg-blue-600 text-white" : "bg-neutral-700 text-neutral-400"
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            dirty ? "bg-brand-blue-500 text-white shadow-glow" : "border border-white/10 bg-white/5 text-neutral-400"
           }`}
         >
           {saving ? "Čuvanje..." : "Sačuvaj"}
@@ -645,13 +646,13 @@ export default function AdminTrainingClient() {
       </div>
 
       {saveMessage && (
-        <div className="rounded-lg bg-neutral-900 px-3 py-2 text-sm text-neutral-200">
+        <div className="rounded-xl border border-white/10 bg-neutral-900 px-3 py-2 text-sm text-neutral-200">
           {saveMessage}
         </div>
       )}
 
       {/* NOTES */}
-      <div className="rounded-xl bg-neutral-900 p-4">
+      <Panel className="p-4">
         <p className="mb-2 text-sm text-neutral-300">Beleške</p>
         <textarea
           value={notes}
@@ -660,21 +661,21 @@ export default function AdminTrainingClient() {
             markDirty();
           }}
           rows={3}
-          className="w-full rounded-lg bg-neutral-800 p-3 text-sm text-white"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 p-3 text-sm text-white outline-none focus:border-brand-blue-500"
         />
-      </div>
+      </Panel>
 
       <button
         onClick={addWeek}
-        className="w-full rounded-xl bg-neutral-800 py-3 text-sm text-green-400"
+        className="w-full rounded-xl border border-brand-green-500/25 bg-brand-green-500/10 py-3 text-sm font-semibold text-brand-green-300 transition hover:bg-brand-green-500/15"
       >
         + Nova nedelja
       </button>
 
       {weeks.map((week, wi) => (
-        <div
+        <Panel
           key={week.id}
-          className="rounded-xl bg-neutral-900 p-4 space-y-4 border border-neutral-800"
+          className="space-y-4 p-4"
         >
           <div className="flex justify-between items-center">
             <button
@@ -687,13 +688,13 @@ export default function AdminTrainingClient() {
             <div className="flex gap-3 text-xs">
               <button
                 onClick={() => duplicateWeek(wi)}
-                className="text-blue-400"
+                className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300"
               >
                 Dupliraj
               </button>
               <button
                 onClick={() => deleteWeek(wi)}
-                className="text-red-400"
+                className="rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300"
               >
                 Obriši
               </button>
@@ -704,7 +705,7 @@ export default function AdminTrainingClient() {
             <>
               <button
                 onClick={() => addTraining(wi)}
-                className="text-sm text-green-400"
+                className="rounded-xl border border-brand-green-500/25 bg-brand-green-500/10 px-3 py-2 text-sm font-medium text-brand-green-300"
               >
                 + Novi trening
               </button>
@@ -712,7 +713,7 @@ export default function AdminTrainingClient() {
               {week.trainings.map((t, ti) => (
                 <div
                   key={t.id}
-                  className="rounded-xl bg-neutral-900 p-4 space-y-4 border border-neutral-700"
+                  className="space-y-4 rounded-2xl border border-white/10 bg-neutral-950/50 p-4"
                 >
                   <div className="flex justify-between items-center">
                     <button
@@ -725,13 +726,13 @@ export default function AdminTrainingClient() {
                     <div className="flex gap-3 text-xs">
                       <button
                         onClick={() => copyTraining(wi, ti)}
-                        className="text-blue-400"
+                        className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300"
                       >
                         Kopiraj
                       </button>
                       <button
                         onClick={() => deleteTraining(wi, ti)}
-                        className="text-red-400"
+                        className="rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300"
                       >
                         Obriši
                       </button>
@@ -748,14 +749,14 @@ export default function AdminTrainingClient() {
                           onChange={(e) =>
                             updateTrainingDate(wi, ti, e.target.value)
                           }
-                          className="mt-1 block rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+                          className="mt-1 block rounded-xl border border-white/10 bg-neutral-900 px-3 py-2 text-sm text-white outline-none focus:border-brand-blue-500"
                         />
                       </label>
 
                       {t.blocks.map((b, bi) => (
                         <div
                           key={b.id}
-                          className="rounded bg-neutral-800 p-3 space-y-3 border-l-4 border-blue-500"
+                          className="space-y-3 rounded-2xl border border-brand-blue-500/25 bg-brand-blue-500/5 p-3"
                         >
                           <p className="text-sm font-medium text-white">
                             Blok {b.name}
@@ -764,7 +765,7 @@ export default function AdminTrainingClient() {
                           {b.exercises.map((e, ei) => (
                             <div
                               key={e.id}
-                              className="rounded bg-neutral-900 p-3 space-y-2"
+                              className="space-y-2 rounded-xl border border-white/10 bg-neutral-950/60 p-3"
                             >
                               <div className="flex justify-between items-center">
                                 <input
@@ -779,7 +780,7 @@ export default function AdminTrainingClient() {
                                     )
                                   }
                                   placeholder="Vežba"
-                                  className="flex-1 rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+                                  className="flex-1 rounded-xl border border-white/10 bg-neutral-900 px-3 py-2 text-sm text-white outline-none focus:border-brand-blue-500"
                                 />
                                 <button
                                   onClick={() =>
@@ -790,7 +791,7 @@ export default function AdminTrainingClient() {
                                       ei
                                     )
                                   }
-                                  className="ml-2 text-xs text-red-400"
+                                  className="ml-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-400/25 bg-red-500/10 text-xs font-medium text-red-300"
                                 >
                                   ✕
                                 </button>
@@ -816,7 +817,7 @@ export default function AdminTrainingClient() {
                                         }
                                       )
                                     }
-                                    className="w-1/2 rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+                                    className="w-1/2 rounded-xl border border-white/10 bg-neutral-900 px-2 py-2 text-sm text-white outline-none focus:border-brand-blue-500"
                                   />
                                   <input
                                     value={s.weight}
@@ -832,7 +833,7 @@ export default function AdminTrainingClient() {
                                         }
                                       )
                                     }
-                                    className="w-1/2 rounded bg-neutral-800 px-2 py-1 text-sm text-white"
+                                    className="w-1/2 rounded-xl border border-white/10 bg-neutral-900 px-2 py-2 text-sm text-white outline-none focus:border-brand-blue-500"
                                   />
                                   <button
                                     onClick={() =>
@@ -844,7 +845,7 @@ export default function AdminTrainingClient() {
                                         si
                                       )
                                     }
-                                    className="text-xs text-red-400"
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-400/25 bg-red-500/10 text-xs font-medium text-red-300"
                                   >
                                     ✕
                                   </button>
@@ -855,7 +856,7 @@ export default function AdminTrainingClient() {
                                 onClick={() =>
                                   addSet(wi, ti, bi, ei)
                                 }
-                                className="text-xs text-blue-400"
+                                className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300"
                               >
                                 + Set
                               </button>
@@ -866,7 +867,7 @@ export default function AdminTrainingClient() {
                             onClick={() =>
                               addExercise(wi, ti, bi)
                             }
-                            className="text-sm text-green-400"
+                            className="rounded-xl border border-brand-green-500/25 bg-brand-green-500/10 px-3 py-2 text-sm font-medium text-brand-green-300"
                           >
                             + Vežba
                           </button>
@@ -875,7 +876,7 @@ export default function AdminTrainingClient() {
 
                       <button
                         onClick={() => addBlock(wi, ti)}
-                        className="text-sm text-blue-400"
+                        className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-sm font-medium text-brand-blue-300"
                       >
                         + Dodaj blok
                       </button>
@@ -885,7 +886,7 @@ export default function AdminTrainingClient() {
               ))}
             </>
           )}
-        </div>
+        </Panel>
       ))}
     </div>
   );

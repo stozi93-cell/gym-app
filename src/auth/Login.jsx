@@ -81,18 +81,23 @@ export default function Login() {
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-brand-blue-900 via-brand-blue-700 to-brand-green-900 px-4">
-      <div className="flex w-full max-w-md flex-col items-center -mt-10">
-        <Logo className="-mb-4 h-28 select-none" />
+    <div className="fixed inset-0 flex items-center justify-center bg-background-dark px-4">
+      <div className="flex w-full max-w-md -mt-6 flex-col items-center">
+        <Logo variant="full" className="mb-6 h-28 w-80 max-w-full select-none sm:h-32 sm:w-96" />
 
-        <div className="w-full rounded-3xl bg-neutral-900/90 p-8 shadow-2xl backdrop-blur-md">
-          <h1 className="mb-6 text-center text-3xl font-semibold text-white">
+        <div className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-6 shadow-premium backdrop-blur-xl">
+          <h1 className="mb-2 text-center text-2xl font-semibold text-white">
             {forgotMode ? "Resetovanje lozinke" : "Prijava"}
           </h1>
+          <p className="mb-6 text-center text-sm text-neutral-400">
+            {forgotMode
+              ? "Vrati pristup svom nalogu."
+              : "Dobrodošli nazad u ReMotion."}
+          </p>
 
           <StatusBanner {...status} />
 
-          <div className="space-y-6">
+          <div className="space-y-5">
             <InputField
               label="Email"
               type="email"
@@ -118,7 +123,7 @@ export default function Login() {
                 <button
                   onClick={login}
                   disabled={loading}
-                  className="mt-2 w-full rounded-2xl bg-brand-blue-500 py-4 text-lg font-semibold text-white transition hover:bg-brand-blue-600 disabled:opacity-50"
+                  className="mt-2 w-full rounded-xl bg-brand-blue-500 py-3.5 text-base font-semibold text-white shadow-glow transition hover:bg-brand-blue-600 disabled:opacity-50"
                 >
                   {loading ? "Prijavljivanje..." : "Prijavi se"}
                 </button>
@@ -130,21 +135,21 @@ export default function Login() {
                     setStatus(null);
                     setErrors({});
                   }}
-                  className="w-full text-sm text-red-500 hover:text-neutral-200 transition"
+                  className="w-full text-sm text-neutral-400 transition hover:text-white"
                 >
                   Zaboravio/la si lozinku?
                 </button>
               </>
             ) : (
               <>
-                <p className="text-sm text-neutral-400 text-center">
+                <p className="text-center text-sm text-neutral-400">
                   Unesi email adresu i poslaćemo ti link za resetovanje lozinke.
                 </p>
 
                 <button
                   onClick={resetPassword}
                   disabled={loading}
-                  className="mt-2 w-full rounded-2xl bg-brand-green-700 py-4 text-lg font-semibold text-white transition hover:bg-brand-green-800 disabled:opacity-50"
+                  className="mt-2 w-full rounded-xl bg-brand-blue-500 py-3.5 text-base font-semibold text-white shadow-glow transition hover:bg-brand-blue-600 disabled:opacity-50"
                 >
                   {loading ? "Slanje..." : "Pošalji link"}
                 </button>
@@ -156,7 +161,7 @@ export default function Login() {
                     setStatus(null);
                     setErrors({});
                   }}
-                  className="w-full text-sm text-neutral-400 hover:text-neutral-200 transition"
+                  className="w-full text-sm text-neutral-400 transition hover:text-white"
                 >
                   Nazad na prijavu
                 </button>
@@ -170,7 +175,7 @@ export default function Login() {
               <div className="mt-3">
                 <Link
                   to="/register"
-                  className="inline-block rounded-full bg-brand-green-900/50 px-6 py-3 font-medium text-brand-green-300 hover:bg-brand-green-900/70"
+                  className="inline-block rounded-full border border-brand-green-500/25 bg-brand-green-500/10 px-6 py-2.5 font-medium text-brand-green-300 transition hover:bg-brand-green-500/15"
                 >
                   Registruj se
                 </Link>

@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   query,
   where,
-  doc,
-  getDoc,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { EmptyState, Panel, StatusPill } from "../components/ui/Primitives";
 import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase";
 
 export default function MySubscriptions() {
   const { user } = useAuth();
@@ -30,14 +31,13 @@ export default function MySubscriptions() {
 
     for (const d of snap.docs) {
       const cs = d.data();
-
-      const pkgSnap = await getDoc(
-        doc(db, "subscriptions", cs.subscriptionId)
-      );
-
-      // Normalize dates safely
-      const startDate = cs.startDate?.toDate ? cs.startDate.toDate() : new Date(cs.startDate);
-      const endDate = cs.endDate?.toDate ? cs.endDate.toDate() : new Date(cs.endDate);
+      const pkgSnap = await getDoc(doc(db, "subscriptions", cs.subscriptionId));
+      const startDate = cs.startDate?.toDate
+        ? cs.startDate.toDate()
+        : new Date(cs.startDate);
+      const endDate = cs.endDate?.toDate
+        ? cs.endDate.toDate()
+        : new Date(cs.endDate);
 
       data.push({
         id: d.id,
@@ -52,53 +52,59 @@ export default function MySubscriptions() {
 
   const today = new Date();
 
-  // Helper to format dates in Latin months
-  const formatDate = (d) =>
-    d instanceof Date
-      ? d.toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
-      : d?.toDate
-      ? d.toDate().toLocaleDateString("sr-Latn-RS", { day: "2-digit", month: "long", year: "numeric" })
-      : "—";
+  const formatDate = (date) =>
+    date instanceof Date
+      ? date.toLocaleDateString("sr-Latn-RS", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        })
+      : date?.toDate
+        ? date.toDate().toLocaleDateString("sr-Latn-RS", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })
+        : "-";
 
   if (!subs.length) {
-    return <p>Nemaš nijednu pretplatu.</p>;
+    return (
+      <EmptyState
+        title="Nemaš nijednu pretplatu"
+        description="Kada trener dodeli članarinu, prikazaće se ovde."
+      />
+    );
   }
 
   return (
-    <div>
-      <h2>Moje pretplate</h2>
-
-      {subs.map((s) => {
-        const active = s.endDate >= today;
+    <div className="space-y-3">
+      {subs.map((subscription) => {
+        const active = subscription.endDate >= today;
 
         return (
-          <div
-            key={s.id}
-            style={{
-              border: "1px solid #ccc",
-              padding: 12,
-              marginBottom: 10,
-              borderRadius: 6,
-              backgroundColor: active ? "#eaffea" : "#ffeaea",
-            }}
-          >
-            <h3>{s.name}</h3>
-
-            <p>
-              <b>Period:</b> {formatDate(s.startDate)} – {formatDate(s.endDate)}
-            </p>
-
-            <p>
-              <b>Cena:</b> {s.price ?? "—"} RSD
-            </p>
-
-            <p>
-              <b>Status:</b>{" "}
-              <span style={{ color: active ? "green" : "red" }}>
+          <Panel key={subscription.id} className="p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate font-semibold text-white">
+                  {subscription.name}
+                </h3>
+                <p className="mt-1 text-xs text-neutral-400">
+                  {formatDate(subscription.startDate)} -{" "}
+                  {formatDate(subscription.endDate)}
+                </p>
+              </div>
+              <StatusPill tone={active ? "green" : "red"}>
                 {active ? "Aktivna" : "Istekla"}
+              </StatusPill>
+            </div>
+
+            <p className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-neutral-300">
+              Cena:{" "}
+              <span className="font-medium text-white">
+                {subscription.price ?? "-"} RSD
               </span>
             </p>
-          </div>
+          </Panel>
         );
       })}
     </div>

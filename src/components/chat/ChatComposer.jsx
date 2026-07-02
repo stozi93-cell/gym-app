@@ -33,6 +33,8 @@ export default function ChatComposer({
   sendError,
   onSend,
   onFileError,
+  replyTo,
+  onCancelReply,
 }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -76,9 +78,29 @@ export default function ChatComposer({
   }
 
   return (
-    <div className="border-t border-neutral-800 px-1 py-1">
+    <div className="border-t border-white/10 bg-neutral-950/85 px-2 py-2 backdrop-blur-xl">
+      {replyTo && (
+        <div className="mb-2 flex items-start justify-between gap-3 rounded-2xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-sm">
+          <span className="min-w-0">
+            <span className="block text-xs font-medium text-brand-blue-300">
+              Odgovor za {replyTo.senderName || "poruku"}
+            </span>
+            <span className="mt-0.5 block truncate text-xs text-neutral-300">
+              {replyTo.text || replyTo.attachmentName || "Fajl"}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-neutral-300"
+          >
+            Ukloni
+          </button>
+        </div>
+      )}
+
       {selectedFiles.length > 0 && (
-        <div className="mb-1 max-h-28 space-y-1 overflow-y-auto rounded-lg bg-neutral-900 px-2 py-2 text-xs text-neutral-200">
+        <div className="mb-2 max-h-28 space-y-1 overflow-y-auto rounded-2xl border border-white/10 bg-neutral-900/90 px-2 py-2 text-xs text-neutral-200">
           <div className="flex items-center justify-between gap-2 px-1">
             <span className="text-neutral-400">
               {selectedFiles.length === 1 ? "1 fajl" : `${selectedFiles.length} fajlova`}
@@ -92,7 +114,7 @@ export default function ChatComposer({
             </button>
           </div>
           {selectedFiles.map((file, index) => (
-            <div key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between gap-2 rounded-md bg-black/20 px-2 py-1.5">
+            <div key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between gap-2 rounded-xl bg-black/20 px-2 py-1.5">
               <span className="min-w-0 truncate">
                 {file.name} {formatSize(file.size) && `· ${formatSize(file.size)}`}
               </span>
@@ -108,13 +130,13 @@ export default function ChatComposer({
         </div>
       )}
 
-      <div className="flex items-end gap-1">
+      <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-neutral-900/80 px-2 py-1">
         <button
           type="button"
           onPointerDown={(event) => event.preventDefault()}
           onClick={() => fileInputRef.current?.click()}
           aria-label="Dodaj fajl"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-300 transition hover:text-white"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-neutral-300 transition hover:bg-white/5 hover:text-white"
         >
           <AttachIcon className="h-5 w-5" />
         </button>
@@ -125,7 +147,7 @@ export default function ChatComposer({
           rows={1}
           onChange={(event) => setText(event.target.value)}
           placeholder="Napiši poruku..."
-          className="max-h-32 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm text-white outline-none placeholder:text-neutral-400"
+          className="max-h-32 min-h-10 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm text-white outline-none placeholder:text-neutral-500"
         />
 
         <button
@@ -134,9 +156,9 @@ export default function ChatComposer({
           onPointerDown={(event) => event.preventDefault()}
           onClick={sendAndFocus}
           aria-label="Pošalji poruku"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black transition disabled:opacity-50"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-blue-500/10 transition hover:bg-brand-blue-500/15 disabled:opacity-50"
         >
-          <SendIcon className={`h-5 w-5 ${canSend ? "text-blue-400" : "text-neutral-400"}`} />
+          <SendIcon className={`h-5 w-5 ${canSend ? "text-brand-blue-300" : "text-neutral-500"}`} />
         </button>
 
         <input

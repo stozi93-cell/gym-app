@@ -15,7 +15,7 @@ export default function InputField({
 
   return (
     <div>
-      <label className="mb-2 block text-sm text-neutral-300">
+      <label className="mb-2 block text-sm font-medium text-neutral-300">
         {label}
       </label>
 
@@ -25,10 +25,10 @@ export default function InputField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`w-full rounded-2xl border bg-black/40 px-5 py-4 pr-12 text-white placeholder-neutral-500 outline-none transition ${
+          className={`w-full rounded-xl border bg-neutral-950/60 px-4 py-3.5 pr-12 text-white placeholder-neutral-500 outline-none transition shadow-inner shadow-black/10 ${
             error
               ? "border-red-500 focus:border-red-500"
-              : "border-neutral-700 focus:border-brand-blue-500"
+              : "border-white/10 focus:border-brand-blue-500 focus:bg-neutral-950"
           }`}
         />
 

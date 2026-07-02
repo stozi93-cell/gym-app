@@ -6,7 +6,7 @@ export default function TextareaField({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm text-neutral-300">
+      <label className="mb-2 block text-sm font-medium text-neutral-300">
         {label}
       </label>
 
@@ -14,7 +14,7 @@ export default function TextareaField({
         rows={rows}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full resize-none rounded-2xl border border-neutral-700 bg-black/40 px-5 py-4 text-white outline-none focus:border-brand-blue-500"
+        className="w-full resize-none rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3.5 text-white outline-none transition focus:border-brand-blue-500 focus:bg-neutral-950"
       />
     </div>
   );

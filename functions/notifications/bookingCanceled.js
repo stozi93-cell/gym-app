@@ -1,5 +1,6 @@
 const { onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
+const { getTokensFromUserData } = require("./_helpers");
 
 const TZ = "Europe/Belgrade";
 
@@ -46,7 +47,7 @@ exports.bookingCanceledByClient = onDocumentDeleted(
         .get();
 
       const tokens = adminSnap.docs.flatMap(
-        (d) => d.data().fcmTokens || []
+        (d) => getTokensFromUserData(d.data(), "BOOKING_CANCELED_BY_CLIENT")
       );
       if (!tokens.length) return;
 

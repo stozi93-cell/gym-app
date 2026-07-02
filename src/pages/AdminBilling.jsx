@@ -7,8 +7,16 @@ import {
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
 import { db } from "../firebase";
+import { Panel } from "../components/ui/Primitives";
 
-const INITIAL_LIMIT = 1;
+const INITIAL_LIMIT = 3;
+const STATUS_FILTERS = [
+  { value: "all", label: "Sve" },
+  { value: "pending", label: "Na čekanju" },
+  { value: "partially_paid", label: "Delimično" },
+  { value: "paid", label: "Plaćeno" },
+  { value: "cancelled", label: "Otkazano" },
+];
 
 function toDate(value) {
   if (!value) return null;
@@ -22,6 +30,17 @@ function formatDate(value) {
     ? date.toLocaleDateString("sr-Latn-RS", {
         day: "2-digit",
         month: "long",
+        year: "numeric",
+      })
+    : "-";
+}
+
+function formatShortDate(value) {
+  const date = toDate(value);
+  return date
+    ? date.toLocaleDateString("sr-Latn-RS", {
+        day: "2-digit",
+        month: "2-digit",
         year: "numeric",
       })
     : "-";
@@ -168,6 +187,10 @@ export default function AdminBilling() {
     (sum, invoice) => sum + (invoice.paidAmount || 0),
     0
   );
+  const pendingTotal = filteredInvoices.reduce((sum, invoice) => {
+    if (invoice.status === "paid" || invoice.status === "cancelled") return sum;
+    return sum + Math.max(0, (invoice.amount || 0) - (invoice.paidAmount || 0));
+  }, 0);
   const visibleInvoices = showAll
     ? filteredInvoices
     : filteredInvoices.slice(0, INITIAL_LIMIT);
@@ -254,40 +277,97 @@ export default function AdminBilling() {
   }
 
   return (
-    <div className="space-y-6 px-2 py-1">
+    <div className="space-y-3">
       {status && (
         <div
-          className={`mx-2 rounded-lg px-3 py-2 text-sm ${
+          className={`rounded-xl border px-4 py-3 text-sm ${
             status.type === "success"
-              ? "bg-green-950/70 text-green-300"
-              : "bg-red-950/70 text-red-300"
+              ? "border-brand-green-500/20 bg-brand-green-500/10 text-brand-green-300"
+              : "border-red-400/20 bg-red-500/10 text-red-300"
           }`}
         >
           {status.message}
         </div>
       )}
 
-      <div className="mx-2 space-y-3 rounded-xl bg-neutral-900 p-4">
+      <Panel className="space-y-3 p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-brand-green-500/20 bg-brand-green-500/10 px-3 py-2">
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-brand-green-300">
+              Naplaćeno
+            </p>
+            <p className="mt-1 text-lg font-semibold text-white">
+              {overviewTotal} RSD
+            </p>
+          </div>
+          <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2">
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-amber-200">
+              Preostalo
+            </p>
+            <p className="mt-1 text-lg font-semibold text-white">
+              {pendingTotal} RSD
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          <PresetButton onClick={() => applyOverviewPreset("today")}>Danas</PresetButton>
+          <PresetButton onClick={() => applyOverviewPreset("week")}>Ova nedelja</PresetButton>
+          <PresetButton onClick={() => applyOverviewPreset("month")}>Ovaj mesec</PresetButton>
+          <PresetButton onClick={() => applyOverviewPreset("lastMonth")}>Prošli mesec</PresetButton>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="min-w-0 text-xs text-neutral-400">
+            Od
+            <input
+              type="date"
+              value={overviewStart}
+              onChange={(event) => setOverviewStart(event.target.value)}
+              placeholder="Početni datum"
+              className="mt-1 w-full min-w-0 rounded-xl border border-white/10 bg-neutral-950/60 px-2 py-2 text-sm text-white outline-none focus:border-brand-blue-500"
+            />
+          </label>
+          <label className="min-w-0 text-xs text-neutral-400">
+            Do
+            <input
+              type="date"
+              value={overviewEnd}
+              onChange={(event) => setOverviewEnd(event.target.value)}
+              placeholder="Krajnji datum"
+              className="mt-1 w-full min-w-0 rounded-xl border border-white/10 bg-neutral-950/60 px-2 py-2 text-sm text-white outline-none focus:border-brand-blue-500"
+            />
+          </label>
+        </div>
+      </Panel>
+
+      <Panel className="space-y-2 p-3">
         <input
           placeholder="Pretraga klijenta"
           value={searchClient}
           onChange={(event) => setSearchClient(event.target.value)}
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
         />
-        <select
-          value={filterStatus}
-          onChange={(event) => setFilterStatus(event.target.value)}
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
-        >
-          <option value="all">Sve</option>
-          <option value="pending">Na čekanju</option>
-          <option value="partially_paid">Delimično plaćeno</option>
-          <option value="paid">Plaćeno</option>
-          <option value="cancelled">Otkazano</option>
-        </select>
-      </div>
 
-      <div className="space-y-3">
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {STATUS_FILTERS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setFilterStatus(option.value)}
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                filterStatus === option.value
+                  ? "border-brand-blue-500 bg-brand-blue-500 text-white shadow-glow"
+                  : "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </Panel>
+
+      <div className="space-y-2">
         {visibleInvoices.map((invoice) => (
           <InvoiceCard
             key={invoice.id}
@@ -304,87 +384,81 @@ export default function AdminBilling() {
       {filteredInvoices.length > INITIAL_LIMIT && (
         <button
           onClick={() => setShowAll(!showAll)}
-          className="mx-2 text-sm text-blue-400"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-brand-blue-300"
         >
           {showAll ? "Prikaži manje" : "Prikaži sve"}
         </button>
       )}
 
-      <div className="mx-2 space-y-3 rounded-xl bg-neutral-900 p-4">
-        <div className="grid grid-cols-4 gap-1">
-          <PresetButton onClick={() => applyOverviewPreset("today")}>Danas</PresetButton>
-          <PresetButton onClick={() => applyOverviewPreset("week")}>Ova nedelja</PresetButton>
-          <PresetButton onClick={() => applyOverviewPreset("month")}>Ovaj mesec</PresetButton>
-          <PresetButton onClick={() => applyOverviewPreset("lastMonth")}>Prošli mesec</PresetButton>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="min-w-0 text-xs text-neutral-400">
-            Od
-            <input type="date" value={overviewStart} onChange={(event) => setOverviewStart(event.target.value)} className="mt-1 w-full min-w-0 rounded bg-neutral-800 px-2 py-1 text-sm text-white" />
-          </label>
-          <label className="min-w-0 text-xs text-neutral-400">
-            Do
-            <input type="date" value={overviewEnd} onChange={(event) => setOverviewEnd(event.target.value)} className="mt-1 w-full min-w-0 rounded bg-neutral-800 px-2 py-1 text-sm text-white" />
-          </label>
-        </div>
-        <p className="text-sm text-neutral-300">
-          Ukupno naplaćeno: <span className="font-medium text-green-400">{overviewTotal} RSD</span>
-        </p>
-      </div>
     </div>
   );
 }
 
 function InvoiceCard({ invoice, onPayment, onCancel }) {
   const meta = {
-    pending: { label: "Na čekanju", color: "bg-red-900/30 text-red-300" },
-    partially_paid: { label: "Delimično plaćeno", color: "bg-yellow-900/30 text-yellow-300" },
-    paid: { label: "Plaćeno", color: "bg-green-900/30 text-green-300" },
-    cancelled: { label: "Otkazano", color: "bg-neutral-800 text-neutral-400" },
-  }[invoice.status] || { label: invoice.status, color: "bg-neutral-800 text-neutral-300" };
+    pending: { label: "Na čekanju", color: "border border-red-400/25 bg-red-500/10 text-red-300" },
+    partially_paid: { label: "Delimično plaćeno", color: "border border-amber-400/25 bg-amber-400/10 text-amber-200" },
+    paid: { label: "Plaćeno", color: "border border-brand-green-500/25 bg-brand-green-500/10 text-brand-green-300" },
+    cancelled: { label: "Otkazano", color: "border border-white/10 bg-white/5 text-neutral-400" },
+  }[invoice.status] || { label: invoice.status, color: "border border-white/10 bg-white/5 text-neutral-300" };
 
   const statusDate =
     invoice.paidAt &&
     (invoice.status === "paid" || invoice.status === "partially_paid")
-      ? ` · ${formatDate(invoice.paidAt)}`
+      ? ` · ${formatShortDate(invoice.paidAt)}`
       : "";
 
   return (
-    <div className="mx-2 space-y-2 rounded-xl bg-neutral-900 p-4">
-      <Link to={`/profil/${invoice.clientId}`} className="font-medium text-blue-400">
-        {invoice.clientName || "-"}
-      </Link>
+    <Panel className="space-y-2 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Link to={`/profil/${invoice.clientId}`} className="block truncate text-sm font-semibold text-white">
+            {invoice.clientName || "-"}
+          </Link>
+          <p className="mt-0.5 truncate text-xs text-neutral-400">
+            {invoice.subscriptionName || "-"}
+          </p>
+        </div>
 
-      <div>
-        <p className="text-sm text-neutral-300">{invoice.subscriptionName || "-"}</p>
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-semibold text-white">
+            {invoice.paidAmount || 0} / {invoice.amount || 0}
+          </p>
+          <p className="text-[10px] uppercase tracking-[0.08em] text-neutral-500">
+            RSD
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
         {invoice.membership ? (
-          <p className="text-xs text-neutral-400">
+          <p className="min-w-0 truncate text-xs text-neutral-400">
             {formatDate(invoice.membership.startDate)} - {formatDate(invoice.membership.endDate)}
           </p>
         ) : (
-          <p className="text-xs text-amber-300">Period članarine nije povezan.</p>
+          <p className="min-w-0 truncate text-xs text-amber-300">
+            Period članarine nije povezan.
+          </p>
         )}
+
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${meta.color}`}>
+          {meta.label}{statusDate}
+        </span>
       </div>
 
-      <p className="text-sm">{invoice.paidAmount || 0} / {invoice.amount || 0} RSD</p>
-
-      <span className={`inline-block rounded px-2 py-0.5 text-xs ${meta.color}`}>
-        {meta.label}{statusDate}
-      </span>
-
       {invoice.status !== "paid" && invoice.status !== "cancelled" && (
-        <div className="flex gap-2 pt-2">
-          <button onClick={onPayment} className="flex-1 rounded bg-blue-600 py-1.5 text-sm text-white">Uplata</button>
-          <button onClick={onCancel} className="flex-1 rounded bg-red-600 py-1.5 text-sm text-white">Otkaži</button>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onPayment} className="flex-1 rounded-xl bg-brand-blue-500 py-2 text-xs font-semibold text-white shadow-glow">Uplata</button>
+          <button onClick={onCancel} className="flex-1 rounded-xl border border-red-400/25 bg-red-500/10 py-2 text-xs font-semibold text-red-300">Otkaži</button>
         </div>
       )}
-    </div>
+    </Panel>
   );
 }
 
 function PresetButton({ children, onClick }) {
   return (
-    <button onClick={onClick} className="min-w-0 rounded bg-neutral-800 px-1 py-1 text-[11px] text-white">
+    <button onClick={onClick} className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-medium text-white transition hover:bg-white/10">
       {children}
     </button>
   );

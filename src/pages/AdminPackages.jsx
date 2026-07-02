@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useSearchParams } from "react-router-dom";
+import { Panel, StatusPill } from "../components/ui/Primitives";
 
 export default function AdminPackages() {
   const [packages, setPackages] = useState([]);
@@ -264,17 +265,17 @@ export default function AdminPackages() {
     });
 
   return (
-    <div className="px-2 py-1 space-y-2">
+    <div className="space-y-4">
       
 
       {/* ASSIGN */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
+      <Panel className="space-y-3 p-4">
         <p className="font-medium text-white">Dodela članarine</p>
 
         <select
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none focus:border-brand-blue-500"
         >
           <option value="">Klijent</option>
           {users.map((u) => (
@@ -285,7 +286,7 @@ export default function AdminPackages() {
         </select>
 
         {currentSubs.length > 0 && (
-          <p className="text-xs text-neutral-400">
+          <p className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-300">
             Aktivna: {currentSubs[0].name} do{" "}
             {formatDate(currentSubs[0].endDate)}
           </p>
@@ -294,7 +295,7 @@ export default function AdminPackages() {
         <select
           value={packageId}
           onChange={(e) => setPackageId(e.target.value)}
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none focus:border-brand-blue-500"
         >
           <option value="">Paket</option>
           {packages.map((p) => (
@@ -307,7 +308,7 @@ export default function AdminPackages() {
         <select
           value={checkInOption}
           onChange={(e) => setCheckInOption(e.target.value)}
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none focus:border-brand-blue-500"
         >
           {checkInOptions.map((o) => (
             <option key={o.value} value={o.value}>
@@ -322,21 +323,28 @@ export default function AdminPackages() {
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="mt-1 w-full rounded bg-neutral-800 px-3 py-2 text-sm text-white"
+            className="mt-1 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none focus:border-brand-blue-500"
           />
         </label>
 
         <button
           onClick={assignSubscription}
-          className="rounded-xl bg-blue-600 py-2 px-2 text-sm text-white"
+          className="rounded-xl bg-brand-blue-500 px-3 py-2.5 text-sm font-semibold text-white shadow-glow transition hover:bg-brand-blue-600"
         >
           Dodeli članarinu
         </button>
-      </div>
+      </Panel>
 
       {/* CREATE PACKAGE */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
-        <p className="font-medium text-white">Novi paket</p>
+      <details className="group overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/80 shadow-premium backdrop-blur-xl">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 font-medium text-white [&::-webkit-details-marker]:hidden">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm text-neutral-300 transition-transform group-open:rotate-90">
+            &gt;
+          </span>
+          <span>Kreiranje novog paketa</span>
+        </summary>
+
+        <div className="space-y-3 border-t border-white/10 p-4">
 
         <input
           placeholder="Naziv"
@@ -344,7 +352,7 @@ export default function AdminPackages() {
           onChange={(e) =>
             setNewPackage({ ...newPackage, name: e.target.value })
           }
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
         />
         <input
           type="number"
@@ -356,7 +364,7 @@ export default function AdminPackages() {
               durationDays: e.target.value,
             })
           }
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
         />
         <input
           type="number"
@@ -365,7 +373,7 @@ export default function AdminPackages() {
           onChange={(e) =>
             setNewPackage({ ...newPackage, price: e.target.value })
           }
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
         />
 
         <select
@@ -376,7 +384,7 @@ export default function AdminPackages() {
               defaultCheckIns: e.target.value,
             })
           }
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none focus:border-brand-blue-500"
         >
           {checkInOptions.map((o) => (
             <option key={o.value} value={o.value}>
@@ -387,21 +395,28 @@ export default function AdminPackages() {
 
         <button
           onClick={createPackage}
-          className="rounded-xl bg-green-600 py-2 px-2 text-sm text-white"
+          className="rounded-xl border border-brand-green-500/25 bg-brand-green-500/10 px-3 py-2.5 text-sm font-semibold text-brand-green-300 transition hover:bg-brand-green-500/15"
         >
           Kreiraj paket
         </button>
-      </div>
-
-      <p className="px-4 text-xl font-semibold text-white">Spisak paketa</p>
+        </div>
+      </details>
 
       {/* PACKAGE LIST */}
-      {/* PACKAGE LIST */}
-<div className="space-y-3">
+      <details className="group overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/80 shadow-premium backdrop-blur-xl">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 font-medium text-white [&::-webkit-details-marker]:hidden">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm text-neutral-300 transition-transform group-open:rotate-90">
+            &gt;
+          </span>
+          <span>Spisak paketa</span>
+          <StatusPill tone="neutral" className="ml-auto">{packages.length}</StatusPill>
+        </summary>
+
+        <div className="space-y-3 border-t border-white/10 p-4">
   {packages.map((p, i) => (
-    <div
+    <Panel
       key={p.id}
-      className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3"
+      className="space-y-3 p-4"
     >
       {/* NAME */}
       <input
@@ -409,7 +424,7 @@ export default function AdminPackages() {
         onChange={(e) =>
           updatePackage(p.id, "name", e.target.value)
         }
-        className="w-full rounded bg-neutral-800 px-2 py-2 text-sm"
+        className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none focus:border-brand-blue-500"
       />
 
       {/* DURATION + PRICE */}
@@ -424,7 +439,7 @@ export default function AdminPackages() {
               e.target.value
             )
           }
-          className="w-full sm:flex-1 rounded bg-neutral-800 px-2 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500 sm:flex-1"
           placeholder="Trajanje (dani)"
         />
 
@@ -434,7 +449,7 @@ export default function AdminPackages() {
           onChange={(e) =>
             updatePackage(p.id, "price", e.target.value)
           }
-          className="w-full sm:flex-1 rounded bg-neutral-800 px-2 py-2 text-sm"
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500 sm:flex-1"
           placeholder="Cena"
         />
       </div>
@@ -449,7 +464,7 @@ export default function AdminPackages() {
             e.target.value
           )
         }
-        className="w-full rounded bg-neutral-800 px-2 py-2 text-sm"
+        className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none focus:border-brand-blue-500"
       >
         {checkInOptions.map((o) => (
           <option key={o.value} value={o.value}>
@@ -460,18 +475,14 @@ export default function AdminPackages() {
 
       {/* STATUS + ACTIONS */}
       <div className="flex items-center justify-between pt-2">
-        <span
-          className={`text-sm font-medium ${
-            p.active ? "text-green-500" : "text-red-400"
-          }`}
-        >
+        <StatusPill tone={p.active ? "green" : "red"}>
           {p.active ? "Aktivan" : "Neaktivan"}
-        </span>
+        </StatusPill>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => toggleActive(p)}
-            className="rounded-md bg-neutral-800 px-3 py-1.5 text-sm text-blue-400 hover:bg-neutral-700 transition"
+            className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300 transition hover:bg-brand-blue-500/15"
           >
             {p.active ? "Deaktiviraj" : "Aktiviraj"}
           </button>
@@ -479,7 +490,7 @@ export default function AdminPackages() {
           <button
             disabled={i === 0}
             onClick={() => movePackage(p.id, "up")}
-            className="rounded-md bg-neutral-800 px-2 py-1.5 text-lg disabled:opacity-40 hover:bg-neutral-700 transition"
+            className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-lg text-neutral-200 transition hover:bg-white/10 disabled:opacity-40"
           >
             ⬆
           </button>
@@ -487,15 +498,16 @@ export default function AdminPackages() {
           <button
             disabled={i === packages.length - 1}
             onClick={() => movePackage(p.id, "down")}
-            className="rounded-md bg-neutral-800 px-2 py-1.5 text-lg disabled:opacity-40 hover:bg-neutral-700 transition"
+            className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-lg text-neutral-200 transition hover:bg-white/10 disabled:opacity-40"
           >
             ⬇
           </button>
         </div>
       </div>
-    </div>
+    </Panel>
   ))}
-</div>
+        </div>
+      </details>
     </div>
   );
 }

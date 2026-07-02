@@ -6,10 +6,11 @@ import {
   where,
 } from "firebase/firestore";
 import { Link, useNavigate } from "react-router-dom";
-import { db } from "../firebase";
 import { ensureConversation } from "../chat/ensureConversation";
-import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
+import { EmptyState, Panel } from "../components/ui/Primitives";
+import { useAuth } from "../context/AuthContext";
+import { db } from "../firebase";
 
 export default function AdminChats() {
   const { user } = useAuth();
@@ -38,7 +39,7 @@ export default function AdminChats() {
   }, []);
 
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid) return undefined;
 
     const conversationsQuery = query(
       collection(db, "conversations"),
@@ -49,9 +50,11 @@ export default function AdminChats() {
       setConversations(
         snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => {
-            return (b.updatedAt?.toMillis?.() || 0) - (a.updatedAt?.toMillis?.() || 0);
-          })
+          .sort(
+            (a, b) =>
+              (b.updatedAt?.toMillis?.() || 0) -
+              (a.updatedAt?.toMillis?.() || 0)
+          )
       );
     });
   }, [user?.uid]);
@@ -68,7 +71,9 @@ export default function AdminChats() {
   const searchActive = search.trim().length > 0;
   const searchedClients = Object.entries(usersMap)
     .filter(([, client]) =>
-      client.name.toLowerCase().includes(search.trim().toLowerCase())
+      client.name
+        .toLocaleLowerCase("sr-Latn-RS")
+        .includes(search.trim().toLocaleLowerCase("sr-Latn-RS"))
     )
     .map(([id, client]) => ({
       id,
@@ -97,17 +102,17 @@ export default function AdminChats() {
     const unread = conversation?.coachUnread > 0;
 
     return (
-      <div
+      <Panel
         onClick={() => openConversation(clientId)}
-        className={`w-full cursor-pointer rounded-xl p-4 transition hover:bg-neutral-800 ${
-          unread ? "bg-neutral-900" : "bg-neutral-900/70"
+        className={`w-full cursor-pointer p-4 transition hover:bg-white/5 ${
+          unread ? "border-brand-blue-500/35 bg-neutral-900" : "bg-neutral-900/70"
         }`}
       >
         <div className="flex items-center gap-3">
           <Link
             to={`/profil/${clientId}`}
             onClick={(event) => event.stopPropagation()}
-            className="shrink-0 rounded-full transition hover:ring-2 hover:ring-blue-500"
+            className="shrink-0 rounded-full transition hover:ring-2 hover:ring-brand-blue-500"
           >
             <Avatar name={name} photoURL={photoURL} />
           </Link>
@@ -129,29 +134,34 @@ export default function AdminChats() {
             </div>
 
             {unread && (
-              <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">
+              <span className="shrink-0 rounded-full bg-brand-blue-500 px-2 py-0.5 text-xs text-white">
                 {conversation.coachUnread}
               </span>
             )}
           </div>
         </div>
-      </div>
+      </Panel>
     );
   }
 
   return (
-    <div className="px-4 py-1">
-      <input
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Pretraži klijente..."
-        className="mb-4 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-blue-500"
-      />
+    <div className="space-y-4">
+      <Panel className="p-3">
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Pretraži klijente..."
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
+        />
+      </Panel>
 
       {!searchActive && (
         <div className="space-y-3">
           {conversations.length === 0 && (
-            <p className="text-sm text-neutral-400">Nema poruka.</p>
+            <EmptyState
+              title="Nema poruka"
+              description="Kada razgovor počne, pojaviće se ovde."
+            />
           )}
           {conversations.map((conversation) => (
             <ConversationCard
@@ -177,7 +187,10 @@ export default function AdminChats() {
             />
           ))}
           {searchedClients.length === 0 && (
-            <p className="text-sm text-neutral-400">Nema rezultata.</p>
+            <EmptyState
+              title="Nema rezultata"
+              description="Pokušaj sa drugim imenom ili prezimenom."
+            />
           )}
         </div>
       )}

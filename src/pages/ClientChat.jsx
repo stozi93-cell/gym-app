@@ -14,10 +14,16 @@ import Avatar from "../components/Avatar";
 import ChatComposer from "../components/chat/ChatComposer";
 import MessageBubble from "../components/chat/MessageBubble";
 import {
+  PinnedMessagesButton,
+  PinnedMessagesPanel,
+} from "../components/chat/PinnedMessagesPanel";
+import {
   markConversationRead,
   getChatSendErrorMessage,
   sendChatMessage,
   setMessageReaction,
+  editChatMessage,
+  toggleMessagePin,
 } from "../chat/messageTracking";
 import {
   formatDayLabel,
@@ -52,13 +58,16 @@ export default function ClientChat() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [replyTo, setReplyTo] = useState(null);
   const bottomRef = useRef(null);
   const messagesRef = useRef(null);
+  const messageRefs = useRef({});
   const sendingRef = useRef(false);
   const messageCountRef = useRef(0);
   const isNearBottomRef = useRef(true);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
 
   const selectedCoachId = searchParams.get("coach") || "";
   const selectedCoach = coaches.find((coach) => coach.id === selectedCoachId);
@@ -88,6 +97,20 @@ export default function ClientChat() {
       return a.name.localeCompare(b.name, "sr");
     });
   }, [coaches, conversationByCoachId]);
+
+  const pinnedMessages = useMemo(() => {
+    return messages
+      .filter((message) => message.pinned)
+      .sort(
+        (a, b) =>
+          (b.createdAt?.toMillis?.() || 0) -
+          (a.createdAt?.toMillis?.() || 0)
+      );
+  }, [messages]);
+
+  useEffect(() => {
+    if (!pinnedMessages.length) setPinnedOpen(false);
+  }, [pinnedMessages.length]);
 
   useEffect(() => {
     const coachesQuery = query(
@@ -197,6 +220,14 @@ export default function ClientChat() {
     setNewMessagesCount(0);
   }
 
+  function jumpToPinnedMessage(message) {
+    messageRefs.current[message.id]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    setPinnedOpen(false);
+  }
+
   async function send() {
     if ((!text.trim() && selectedFiles.length === 0) || !user?.uid || !selectedCoachId || sendingRef.current) return false;
 
@@ -229,6 +260,7 @@ export default function ClientChat() {
             attachmentFile: file,
             recipientUnreadField: "coachUnread",
             senderUnreadField: "clientUnread",
+            replyTo: index === 0 ? replyTo : null,
           });
           remainingFiles = filesToSend.slice(index + 1);
           if (index === 0 && cleanMessage) textWasSent = true;
@@ -241,9 +273,11 @@ export default function ClientChat() {
           text: cleanMessage,
           recipientUnreadField: "coachUnread",
           senderUnreadField: "clientUnread",
+          replyTo,
         });
         textWasSent = true;
       }
+      setReplyTo(null);
       return true;
     } catch (error) {
       console.error("Client chat send failed", error);
@@ -273,10 +307,56 @@ export default function ClientChat() {
     }
   }
 
+  function replyToMessage(message) {
+    const mine = message.senderId === user.uid;
+    setReplyTo({
+      messageId: message.id,
+      senderId: message.senderId,
+      senderName: mine ? "ti" : selectedCoach?.name || "trener",
+      text: message.text || "",
+      attachmentName: message.attachment?.name || "",
+    });
+  }
+
+  async function copyMessage(message) {
+    const value = message.text || message.attachment?.url || "";
+    if (!value) return;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setSendError("");
+    } catch (error) {
+      console.error("Client chat copy failed", error);
+      setSendError("Poruka nije kopirana. Pokušaj ponovo.");
+    }
+  }
+
+  async function pinMessage(message) {
+    try {
+      await toggleMessagePin({ messageId: message.id, pinned: message.pinned });
+    } catch (error) {
+      console.error("Client chat pin failed", error);
+      setSendError("Poruka nije pinovana. Pokušaj ponovo.");
+    }
+  }
+
+  async function editMessage(message, nextText) {
+    try {
+      await editChatMessage({
+        messageId: message.id,
+        userId: user.uid,
+        text: nextText,
+      });
+    } catch (error) {
+      console.error("Client chat edit failed", error);
+      setSendError("Poruka nije izmenjena. Pokušaj ponovo.");
+    }
+  }
+
   if (!selectedCoachId) {
     return (
-      <div className="px-1 py-1">
-        <h2 className="mb-4 text-lg font-semibold text-white">Treneri</h2>
+      <div className="space-y-3">
+        <p className="px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">Treneri</p>
         <div className="space-y-3">
           {sortedCoaches.map((coach) => {
             const conversation = conversationByCoachId[coach.id];
@@ -286,7 +366,7 @@ export default function ClientChat() {
               <button
                 key={coach.id}
                 onClick={() => setSearchParams({ coach: coach.id })}
-                className="flex w-full items-center gap-3 rounded-lg bg-neutral-900/75 p-4 text-left transition hover:bg-neutral-800"
+                className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-neutral-900/75 p-4 text-left transition hover:bg-white/5"
               >
                 <Avatar name={coach.name} photoURL={coach.photoURL} />
                 <span className="min-w-0 flex-1">
@@ -300,7 +380,7 @@ export default function ClientChat() {
                   )}
                 </span>
                 {unread > 0 && (
-                  <span className="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">
+                  <span className="shrink-0 rounded-full bg-brand-blue-500 px-2 py-0.5 text-xs text-white">
                     {unread}
                   </span>
                 )}
@@ -317,19 +397,32 @@ export default function ClientChat() {
 
   return (
     <div className="relative flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-border-dark px-2 py-2">
+      <div className="flex items-center gap-3 border-b border-white/10 bg-neutral-950/80 px-2 py-2 backdrop-blur-xl">
         <button
           onClick={() => setSearchParams({})}
           aria-label="Nazad na listu trenera"
-          className="flex h-9 w-9 shrink-0 items-center justify-center text-neutral-300 transition hover:text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-neutral-300 transition hover:bg-white/10 hover:text-white"
         >
           <BackIcon className="h-5 w-5" />
         </button>
         <Avatar name={selectedCoach?.name || "Trener"} photoURL={selectedCoach?.photoURL} className="h-9 w-9" />
-        <p className="min-w-0 truncate text-sm font-medium text-white">
+        <p className="min-w-0 flex-1 truncate text-sm font-medium text-white">
           {selectedCoach?.name || "Trener"}
         </p>
+        <PinnedMessagesButton
+          count={pinnedMessages.length}
+          open={pinnedOpen}
+          onToggle={() => setPinnedOpen((open) => !open)}
+        />
       </div>
+
+      {pinnedOpen && (
+        <PinnedMessagesPanel
+          messages={pinnedMessages}
+          onSelect={jumpToPinnedMessage}
+          onUnpin={pinMessage}
+        />
+      )}
 
       <div ref={messagesRef} onScroll={handleMessagesScroll} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {messages.map((message, index) => {
@@ -338,7 +431,13 @@ export default function ClientChat() {
             index === 0 ||
             getDayKey(message.createdAt) !== getDayKey(messages[index - 1].createdAt);
           return (
-            <div key={message.id}>
+            <div
+              key={message.id}
+              ref={(node) => {
+                if (node) messageRefs.current[message.id] = node;
+                else delete messageRefs.current[message.id];
+              }}
+            >
               {showDay && (
                 <div className="my-3 text-center text-[11px] text-neutral-400">
                   {formatDayLabel(message.createdAt)}
@@ -349,6 +448,10 @@ export default function ClientChat() {
                 mine={mine}
                 currentUserId={user.uid}
                 onReact={reactToMessage}
+                onReply={replyToMessage}
+                onCopy={copyMessage}
+                onPin={pinMessage}
+                onEdit={editMessage}
               />
             </div>
           );
@@ -365,7 +468,7 @@ export default function ClientChat() {
         >
           <ArrowDownIcon className="h-5 w-5" />
           {newMessagesCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-medium text-white">
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-blue-500 px-1 text-[10px] font-medium text-white">
               {newMessagesCount > 9 ? "9+" : newMessagesCount}
             </span>
           )}
@@ -381,6 +484,8 @@ export default function ClientChat() {
         sendError={sendError}
         onSend={send}
         onFileError={setSendError}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
+const { getTokensFromUserData } = require("./_helpers");
 
 const TZ = "Europe/Belgrade";
 
@@ -46,26 +47,29 @@ exports.notifySubscriptionExpiry = onSchedule(
         const userSnap = await db.doc(`users/${userId}`).get();
         if (!userSnap.exists) continue;
 
-        const tokens = userSnap.data().fcmTokens || [];
-        if (!tokens.length) continue;
-
         let title = "";
         let body = "";
+        let type = "";
 
         if (daysLeft === 7) {
+          type = "SUBSCRIPTION_ENDING";
           title = "Članarina ističe za 7 dana";
           body = "Vaša članarina ističe za 7 dana.";
         }
 
         if (daysLeft === 0) {
+          type = "SUBSCRIPTION_ENDED";
           title = "Članarina je istekla";
           body = "Vaša članarina je istekla.";
         }
 
+        const tokens = getTokensFromUserData(userSnap.data(), type);
+        if (!tokens.length) continue;
+
         await admin.messaging().sendEachForMulticast({
           tokens,
           data: {
-            type: "SUBSCRIPTION_EXPIRY",
+            type,
             target: "/profil/me",
             title,
             body,

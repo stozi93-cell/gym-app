@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   getDoc,
@@ -15,10 +15,16 @@ import Avatar from "../components/Avatar";
 import ChatComposer from "../components/chat/ChatComposer";
 import MessageBubble from "../components/chat/MessageBubble";
 import {
+  PinnedMessagesButton,
+  PinnedMessagesPanel,
+} from "../components/chat/PinnedMessagesPanel";
+import {
   markConversationRead,
   getChatSendErrorMessage,
   sendChatMessage,
   setMessageReaction,
+  editChatMessage,
+  toggleMessagePin,
 } from "../chat/messageTracking";
 import {
   formatDayLabel,
@@ -50,16 +56,33 @@ export default function AdminChat() {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [replyTo, setReplyTo] = useState(null);
   const [clientId, setClientId] = useState("");
   const [clientName, setClientName] = useState("Klijent");
   const [clientPhotoURL, setClientPhotoURL] = useState("");
   const bottomRef = useRef(null);
   const messagesRef = useRef(null);
+  const messageRefs = useRef({});
   const sendingRef = useRef(false);
   const messageCountRef = useRef(0);
   const isNearBottomRef = useRef(true);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
+
+  const pinnedMessages = useMemo(() => {
+    return messages
+      .filter((message) => message.pinned)
+      .sort(
+        (a, b) =>
+          (b.createdAt?.toMillis?.() || 0) -
+          (a.createdAt?.toMillis?.() || 0)
+      );
+  }, [messages]);
+
+  useEffect(() => {
+    if (!pinnedMessages.length) setPinnedOpen(false);
+  }, [pinnedMessages.length]);
 
   useEffect(() => {
     async function loadConversation() {
@@ -135,6 +158,14 @@ export default function AdminChat() {
     setNewMessagesCount(0);
   }
 
+  function jumpToPinnedMessage(message) {
+    messageRefs.current[message.id]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    setPinnedOpen(false);
+  }
+
   async function send() {
     if ((!text.trim() && selectedFiles.length === 0) || !user?.uid || !conversationId || !clientId || sendingRef.current) return false;
 
@@ -161,6 +192,7 @@ export default function AdminChat() {
             attachmentFile: file,
             recipientUnreadField: "clientUnread",
             senderUnreadField: "coachUnread",
+            replyTo: index === 0 ? replyTo : null,
           });
           remainingFiles = filesToSend.slice(index + 1);
           if (index === 0 && cleanMessage) textWasSent = true;
@@ -173,9 +205,11 @@ export default function AdminChat() {
           text: cleanMessage,
           recipientUnreadField: "clientUnread",
           senderUnreadField: "coachUnread",
+          replyTo,
         });
         textWasSent = true;
       }
+      setReplyTo(null);
       return true;
     } catch (error) {
       console.error("Admin chat send failed", error);
@@ -205,23 +239,82 @@ export default function AdminChat() {
     }
   }
 
+  function replyToMessage(message) {
+    const mine = message.senderId === user.uid || message.senderId === "admin";
+    setReplyTo({
+      messageId: message.id,
+      senderId: message.senderId,
+      senderName: mine ? "ti" : clientName,
+      text: message.text || "",
+      attachmentName: message.attachment?.name || "",
+    });
+  }
+
+  async function copyMessage(message) {
+    const value = message.text || message.attachment?.url || "";
+    if (!value) return;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setSendError("");
+    } catch (error) {
+      console.error("Admin chat copy failed", error);
+      setSendError("Poruka nije kopirana. Pokušaj ponovo.");
+    }
+  }
+
+  async function pinMessage(message) {
+    try {
+      await toggleMessagePin({ messageId: message.id, pinned: message.pinned });
+    } catch (error) {
+      console.error("Admin chat pin failed", error);
+      setSendError("Poruka nije pinovana. Pokušaj ponovo.");
+    }
+  }
+
+  async function editMessage(message, nextText) {
+    try {
+      await editChatMessage({
+        messageId: message.id,
+        userId: user.uid,
+        text: nextText,
+      });
+    } catch (error) {
+      console.error("Admin chat edit failed", error);
+      setSendError("Poruka nije izmenjena. Pokušaj ponovo.");
+    }
+  }
+
   return (
     <div className="relative flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-border-dark px-4 py-2">
+      <div className="flex items-center gap-3 border-b border-white/10 bg-neutral-950/80 px-4 py-2 backdrop-blur-xl">
         <Link
           to="/poruke"
           aria-label="Nazad na poruke"
-          className="flex h-9 w-9 shrink-0 items-center justify-center text-neutral-300 transition hover:text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-neutral-300 transition hover:bg-white/10 hover:text-white"
         >
           <BackIcon className="h-5 w-5" />
         </Link>
-        <Link to={`/profil/${clientId}`} className="group flex items-center gap-3">
-          <Avatar name={clientName} photoURL={clientPhotoURL} className="h-9 w-9 transition group-hover:ring-2 group-hover:ring-blue-500" />
-          <p className="text-sm font-medium text-white group-hover:underline">
+        <Link to={`/profil/${clientId}`} className="group flex min-w-0 flex-1 items-center gap-3">
+          <Avatar name={clientName} photoURL={clientPhotoURL} className="h-9 w-9 transition group-hover:ring-2 group-hover:ring-brand-blue-500" />
+          <p className="min-w-0 truncate text-sm font-medium text-white group-hover:underline">
             {clientName}
           </p>
         </Link>
+        <PinnedMessagesButton
+          count={pinnedMessages.length}
+          open={pinnedOpen}
+          onToggle={() => setPinnedOpen((open) => !open)}
+        />
       </div>
+
+      {pinnedOpen && (
+        <PinnedMessagesPanel
+          messages={pinnedMessages}
+          onSelect={jumpToPinnedMessage}
+          onUnpin={pinMessage}
+        />
+      )}
 
       <div ref={messagesRef} onScroll={handleMessagesScroll} className="flex-1 space-y-3 overflow-y-auto px-4 py-4 scrollbar-none">
         {messages.map((message, index) => {
@@ -230,7 +323,13 @@ export default function AdminChat() {
             index === 0 ||
             getDayKey(message.createdAt) !== getDayKey(messages[index - 1].createdAt);
           return (
-            <div key={message.id}>
+            <div
+              key={message.id}
+              ref={(node) => {
+                if (node) messageRefs.current[message.id] = node;
+                else delete messageRefs.current[message.id];
+              }}
+            >
               {showDay && (
                 <div className="my-3 text-center text-[11px] text-neutral-400">
                   {formatDayLabel(message.createdAt)}
@@ -241,6 +340,10 @@ export default function AdminChat() {
                 mine={mine}
                 currentUserId={user?.uid}
                 onReact={reactToMessage}
+                onReply={replyToMessage}
+                onCopy={copyMessage}
+                onPin={pinMessage}
+                onEdit={editMessage}
               />
             </div>
           );
@@ -257,7 +360,7 @@ export default function AdminChat() {
         >
           <ArrowDownIcon className="h-5 w-5" />
           {newMessagesCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-medium text-white">
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-blue-500 px-1 text-[10px] font-medium text-white">
               {newMessagesCount > 9 ? "9+" : newMessagesCount}
             </span>
           )}
@@ -273,6 +376,8 @@ export default function AdminChat() {
         sendError={sendError}
         onSend={send}
         onFileError={setSendError}
+        replyTo={replyTo}
+        onCancelReply={() => setReplyTo(null)}
       />
     </div>
   );

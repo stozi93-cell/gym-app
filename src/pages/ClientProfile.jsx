@@ -13,10 +13,18 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import Avatar from "../components/Avatar";
 import PhotoCropModal from "../components/PhotoCropModal";
+import { Panel, SegmentedControl, StatusPill } from "../components/ui/Primitives";
 import { db, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const CHECKIN_HISTORY_DAYS = 30;
+const PROFILE_TABS = [
+  { value: "checkins", label: "Dolasci" },
+  { value: "subscriptions", label: "Članarine" },
+  { value: "info", label: "Podaci" },
+  { value: "notes", label: "Napomene" },
+];
 
 function toDate(value) {
   if (!value) return null;
@@ -46,6 +54,26 @@ function formatDate(value) {
         year: "numeric",
       })
     : "-";
+}
+
+function formatShortDate(value) {
+  const date = toDate(value);
+  return date
+    ? date.toLocaleDateString("sr-Latn-RS", {
+        day: "2-digit",
+        month: "2-digit",
+      })
+    : "-";
+}
+
+function getWeekRange(membership, weekIndex) {
+  const start = new Date(membership.startDate);
+  start.setDate(start.getDate() + weekIndex * 7);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+
+  if (end > membership.endDate) return `${formatShortDate(start)} - ${formatShortDate(membership.endDate)}`;
+  return `${formatShortDate(start)} - ${formatShortDate(end)}`;
 }
 
 function toRoman(value) {
@@ -146,6 +174,18 @@ function findOverlaps(memberships) {
   return overlaps;
 }
 
+function isVisitInMembership(visit, membership) {
+  const visitDate = toDate(visit.slotTimestamp) || toDate(visit.checkedInAt);
+  if (!visitDate) return false;
+
+  const start = new Date(membership.startDate);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(membership.endDate);
+  end.setHours(23, 59, 59, 999);
+
+  return visitDate >= start && visitDate <= end;
+}
+
 export default function ClientProfile() {
   const { uid: routeUid } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -161,12 +201,14 @@ export default function ClientProfile() {
   const [packagesMap, setPackagesMap] = useState({});
   const [billings, setBillings] = useState([]);
   const [bookingLastVisit, setBookingLastVisit] = useState(null);
+  const [checkInHistory, setCheckInHistory] = useState([]);
   const [showAllSubs, setShowAllSubs] = useState(false);
   const [editingSubId, setEditingSubId] = useState("");
   const [subscriptionForm, setSubscriptionForm] = useState({});
   const [status, setStatus] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [cropImageURL, setCropImageURL] = useState("");
+  const [activeProfileTab, setActiveProfileTab] = useState("checkins");
   const canUploadPhoto = authUser?.uid === uid;
 
   useEffect(() => {
@@ -190,11 +232,16 @@ export default function ClientProfile() {
     return onSnapshot(
       query(collection(db, "bookings"), where("userId", "==", uid)),
       (snap) => {
+        const historyCutoff = new Date(Date.now() - CHECKIN_HISTORY_DAYS * DAY_MS);
         const visits = snap.docs
-          .map((booking) => booking.data())
-          .filter((booking) => booking.checkedInAt)
+          .map((booking) => ({ id: booking.id, ...booking.data() }))
+          .filter((booking) => {
+            const checkedInAt = toDate(booking.checkedInAt);
+            return checkedInAt && checkedInAt >= historyCutoff;
+          })
           .sort((a, b) => toDate(b.checkedInAt) - toDate(a.checkedInAt));
         setBookingLastVisit(toDate(visits[0]?.checkedInAt));
+        setCheckInHistory(visits);
       }
     );
   }, [uid, authLoading]);
@@ -254,11 +301,15 @@ export default function ClientProfile() {
   const activeSubs = memberships.filter(
     (membership) => membership.active !== false && membership.endDate >= today
   );
-  const visibleSubs = showAllSubs
+  const activeCheckInHistory = checkInHistory.filter((visit) =>
+    activeSubs.some((membership) => isVisitInMembership(visit, membership))
+  );
+  const currentSubs = activeSubs.length
+    ? activeSubs
+    : memberships.slice(0, 1);
+  const visibleSubscriptionSubs = showAllSubs
     ? memberships
-    : activeSubs.length
-      ? activeSubs
-      : memberships.slice(0, 1);
+    : currentSubs;
 
   useEffect(() => {
     if (
@@ -272,6 +323,7 @@ export default function ClientProfile() {
 
     const membership = activeSubs[0];
     const timer = window.setTimeout(() => {
+      setActiveProfileTab("subscriptions");
       setEditingSubId(membership.id);
       setSubscriptionForm({
         startDate: toInputDate(membership.startDate),
@@ -380,6 +432,7 @@ export default function ClientProfile() {
   }
 
   function beginSubscriptionEdit(membership) {
+    setActiveProfileTab("subscriptions");
     setEditingSubId(membership.id);
     setSubscriptionForm({
       startDate: toInputDate(membership.startDate),
@@ -444,10 +497,10 @@ export default function ClientProfile() {
     <div className="mx-auto max-w-[420px] space-y-5 px-1">
       {status && (
         <div
-          className={`rounded-lg px-3 py-2 text-sm ${
+          className={`rounded-xl border px-4 py-3 text-sm ${
             status.type === "success"
-              ? "bg-green-950/70 text-green-300"
-              : "bg-red-950/70 text-red-300"
+              ? "border-brand-green-500/20 bg-brand-green-500/10 text-brand-green-300"
+              : "border-red-400/20 bg-red-500/10 text-red-300"
           }`}
         >
           {status.message}
@@ -462,148 +515,270 @@ export default function ClientProfile() {
         />
       )}
 
-      <CollapsibleSection
-        header={
-          <div className="flex items-center gap-3">
+      <Panel className="p-4">
+        <div className="flex items-center gap-4">
+          {canUploadPhoto ? (
+            <label className="relative shrink-0 cursor-pointer rounded-full transition hover:ring-2 hover:ring-brand-blue-500">
+              <Avatar
+                name={getFullName(user)}
+                photoURL={user.photoURL}
+                className="h-16 w-16 text-lg"
+              />
+              {uploadingPhoto && (
+                <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/55 text-[10px] font-medium text-white">
+                  Čuvanje
+                </span>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                disabled={uploadingPhoto}
+                onChange={chooseProfilePhoto}
+                className="hidden"
+              />
+            </label>
+          ) : (
             <Avatar
               name={getFullName(user)}
               photoURL={user.photoURL}
-              className="h-14 w-14"
+              className="h-16 w-16 text-lg"
             />
-            <div>
-              <h2 className="text-xl font-semibold text-white">{getFullName(user)}</h2>
-              <p className={`mt-1 text-sm ${lastVisitColor()}`}>
-                Poslednji trening: {formatDate(lastVisit)}
-              </p>
-            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-xl font-semibold text-white">
+              {getFullName(user)}
+            </h2>
+            <p className={`mt-1 text-sm ${lastVisitColor()}`}>
+              Poslednji trening: {formatDate(lastVisit)}
+            </p>
+            {role === "admin" && (
+              <div className="mt-2 flex flex-wrap gap-2">
+              <StatusPill tone={activeSubs.length ? "green" : "red"}>
+                {activeSubs.length ? "Aktivna članarina" : "Bez članarine"}
+              </StatusPill>
+              {memberships.length > 1 && (
+                <StatusPill tone="neutral">
+                  {memberships.length} članarine
+                </StatusPill>
+              )}
+              </div>
+            )}
           </div>
-        }
-      >
-        {canUploadPhoto && (
-          <label className="inline-flex cursor-pointer text-sm text-blue-400">
-            {uploadingPhoto ? "Čuvanje fotografije..." : "Promeni fotografiju"}
-            <input
-              type="file"
-              accept="image/*"
-              disabled={uploadingPhoto}
-              onChange={chooseProfilePhoto}
-              className="hidden"
-            />
-          </label>
-        )}
-        <EditControls
-          editMode={editMode}
-          onEdit={() => setEditMode(true)}
-          onSave={saveProfile}
-          onCancel={() => {
-            setEditMode(false);
-            setFormData(user);
-          }}
-        />
-        <ProfileField label="Ime">
-          {editMode ? <Input value={formData.name} onChange={(value) => setFormData({ ...formData, name: value })} /> : user.name || "-"}
-        </ProfileField>
-        <ProfileField label="Prezime">
-          {editMode ? <Input value={formData.surname} onChange={(value) => setFormData({ ...formData, surname: value })} /> : user.surname || "-"}
-        </ProfileField>
-        <ProfileField label="Email">
-          {editMode ? <Input value={formData.email} onChange={(value) => setFormData({ ...formData, email: value })} /> : user.email || "-"}
-        </ProfileField>
-        <ProfileField label="Telefon">
-          {editMode ? <Input value={formData.phone} onChange={(value) => setFormData({ ...formData, phone: value })} /> : user.phone || "-"}
-        </ProfileField>
-        <ProfileField label="Datum rođenja">
-          {editMode ? (
-            <input
-              type="date"
-              value={formData.dob || ""}
-              onChange={(event) => setFormData({ ...formData, dob: event.target.value })}
-              className="w-full rounded-lg bg-neutral-800 p-2 text-white"
-            />
-          ) : formatDate(user.dob)}
-        </ProfileField>
-      </CollapsibleSection>
+        </div>
+      </Panel>
 
-      <div className="space-y-4 rounded-2xl bg-neutral-900/90 p-5 shadow">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-medium text-neutral-300">Članarina</h3>
-          {role === "admin" && (
-            <button
-              onClick={() => navigate(`/paketi?clientId=${uid}`)}
-              className="text-sm text-blue-400"
-            >
-              Dodaj članarinu
-            </button>
+          <SegmentedControl
+        options={PROFILE_TABS}
+        value={activeProfileTab}
+        onChange={setActiveProfileTab}
+      />
+
+      {activeProfileTab === "checkins" && (
+        <div className="space-y-3">
+          {activeSubs.length > 0 ? (
+            activeSubs.map((membership) => (
+              <MembershipCard
+                key={membership.id}
+                variant="checkins"
+                membership={membership}
+                role={role}
+                editing={false}
+                form={subscriptionForm}
+                setForm={setSubscriptionForm}
+                onBeginEdit={() => beginSubscriptionEdit(membership)}
+                onCancelEdit={() => setEditingSubId("")}
+                onExtend={() => extendSubscription(7)}
+                onSaveEdit={saveSubscriptionEdit}
+                onChangeCheckIn={changeCheckIn}
+              />
+            ))
+          ) : (
+            <Panel className="p-4 text-sm text-neutral-400">
+              {role === "admin"
+                ? "Klijent nema aktivnih članarina."
+                : "Nemate aktivnih članarina."}
+            </Panel>
+          )}
+
+          {activeSubs.length > 0 && (
+            <CheckInHistory visits={activeCheckInHistory} />
           )}
         </div>
+      )}
 
-        {overlaps.length > 0 && (
-          <p className="rounded-lg bg-amber-950/70 px-3 py-2 text-xs text-amber-200">
-            Upozorenje: postoje članarine čiji se datumi preklapaju.
-          </p>
-        )}
-
-        {visibleSubs.map((membership) => (
-          <MembershipCard
-            key={membership.id}
-            membership={membership}
-            role={role}
-            editing={editingSubId === membership.id}
-            form={subscriptionForm}
-            setForm={setSubscriptionForm}
-            onBeginEdit={() => beginSubscriptionEdit(membership)}
-            onCancelEdit={() => setEditingSubId("")}
-            onExtend={() => extendSubscription(7)}
-            onSaveEdit={saveSubscriptionEdit}
-            onChangeCheckIn={changeCheckIn}
-          />
-        ))}
-
-        {!memberships.length && (
-          <p className="text-sm text-neutral-500">Nema članarina.</p>
-        )}
-
-        {unmatchedLegacyPayments.length > 0 && (
-          <div className="rounded-lg bg-neutral-950/70 p-3 text-sm">
-            <p className="mb-2 text-xs text-amber-300">
-              Starije uplate bez jasne veze sa pojedinačnom članarinom:
-            </p>
-            <PaymentList payments={unmatchedLegacyPayments} />
+      {activeProfileTab === "subscriptions" && (
+        <Panel className="space-y-4 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-medium text-neutral-300">Članarine</h3>
+            {role === "admin" && (
+              <button
+                onClick={() => navigate(`/paketi?clientId=${uid}`)}
+                className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300"
+              >
+                Dodaj članarinu
+              </button>
+            )}
           </div>
-        )}
 
-        {memberships.length > 1 && (
-          <button
-            onClick={() => setShowAllSubs(!showAllSubs)}
-            className="w-full text-sm text-blue-400"
-          >
-            {showAllSubs ? "Sakrij prethodne članarine" : "Prikaži prethodne članarine"}
-          </button>
-        )}
-      </div>
+          {overlaps.length > 0 && (
+            <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+              Upozorenje: postoje članarine čiji se datumi preklapaju.
+            </p>
+          )}
 
-      <CollapsibleSection title="Napomene">
-        <EditControls
-          editMode={editMode}
-          onEdit={() => setEditMode(true)}
-          onSave={saveProfile}
-          onCancel={() => {
-            setEditMode(false);
-            setFormData(user);
-          }}
-        />
-        <ProfileField label="Ciljevi">
-          {editMode ? <Textarea value={formData.goals} onChange={(value) => setFormData({ ...formData, goals: value })} /> : user.goals || "-"}
-        </ProfileField>
-        <ProfileField label="Zdravlje">
-          {editMode ? <Textarea value={formData.healthNotes} onChange={(value) => setFormData({ ...formData, healthNotes: value })} /> : user.healthNotes || "-"}
-        </ProfileField>
-      </CollapsibleSection>
+          {visibleSubscriptionSubs.map((membership) => (
+            <MembershipCard
+              key={membership.id}
+              variant="subscriptions"
+              membership={membership}
+              role={role}
+              editing={editingSubId === membership.id}
+              form={subscriptionForm}
+              setForm={setSubscriptionForm}
+              onBeginEdit={() => beginSubscriptionEdit(membership)}
+              onCancelEdit={() => setEditingSubId("")}
+              onExtend={() => extendSubscription(7)}
+              onSaveEdit={saveSubscriptionEdit}
+              onChangeCheckIn={changeCheckIn}
+            />
+          ))}
+
+          {!memberships.length && (
+            <p className="text-sm text-neutral-500">Nema članarina.</p>
+          )}
+
+          {unmatchedLegacyPayments.length > 0 && (
+            <div className="rounded-xl border border-white/10 bg-neutral-950/70 p-3 text-sm">
+              <p className="mb-2 text-xs text-amber-300">
+                Starije uplate bez jasne veze sa pojedinačnom članarinom:
+              </p>
+              <PaymentList payments={unmatchedLegacyPayments} />
+            </div>
+          )}
+
+          {memberships.length > 1 && (
+            <button
+              onClick={() => setShowAllSubs(!showAllSubs)}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-brand-blue-300"
+            >
+              {showAllSubs ? "Sakrij prethodne članarine" : "Prikaži prethodne članarine"}
+            </button>
+          )}
+        </Panel>
+      )}
+
+      {activeProfileTab === "info" && (
+        <Panel className="space-y-3 p-5">
+          <ProfileField label="Ime">
+            {editMode ? <Input value={formData.name} onChange={(value) => setFormData({ ...formData, name: value })} /> : user.name || "-"}
+          </ProfileField>
+          <ProfileField label="Prezime">
+            {editMode ? <Input value={formData.surname} onChange={(value) => setFormData({ ...formData, surname: value })} /> : user.surname || "-"}
+          </ProfileField>
+          <ProfileField label="Email">
+            {editMode ? <Input value={formData.email} onChange={(value) => setFormData({ ...formData, email: value })} /> : user.email || "-"}
+          </ProfileField>
+          <ProfileField label="Telefon">
+            {editMode ? <Input value={formData.phone} onChange={(value) => setFormData({ ...formData, phone: value })} /> : user.phone || "-"}
+          </ProfileField>
+          <ProfileField label="Datum rođenja">
+            {editMode ? (
+              <input
+                type="date"
+                value={formData.dob || ""}
+                onChange={(event) => setFormData({ ...formData, dob: event.target.value })}
+                className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2 text-white outline-none focus:border-brand-blue-500"
+              />
+            ) : formatDate(user.dob)}
+          </ProfileField>
+          <EditControls
+            editMode={editMode}
+            onEdit={() => setEditMode(true)}
+            onSave={saveProfile}
+            onCancel={() => {
+              setEditMode(false);
+              setFormData(user);
+            }}
+          />
+        </Panel>
+      )}
+
+      {activeProfileTab === "notes" && (
+        <Panel className="space-y-3 p-5">
+          <ProfileField label="Ciljevi">
+            {editMode ? <Textarea value={formData.goals} onChange={(value) => setFormData({ ...formData, goals: value })} /> : user.goals || "-"}
+          </ProfileField>
+          <ProfileField label="Zdravlje">
+            {editMode ? <Textarea value={formData.healthNotes} onChange={(value) => setFormData({ ...formData, healthNotes: value })} /> : user.healthNotes || "-"}
+          </ProfileField>
+          <EditControls
+            editMode={editMode}
+            onEdit={() => setEditMode(true)}
+            onSave={saveProfile}
+            onCancel={() => {
+              setEditMode(false);
+              setFormData(user);
+            }}
+          />
+        </Panel>
+      )}
     </div>
   );
 }
 
+function CheckInHistory({ visits }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Panel className="p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <span className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
+          Istorija dolazaka
+        </span>
+        <span className="flex items-center gap-2">
+          <StatusPill tone="neutral">{visits.length}</StatusPill>
+          <span className={`text-sm text-neutral-400 transition-transform ${open ? "rotate-180" : ""}`}>
+            ˅
+          </span>
+        </span>
+      </button>
+
+      {open && visits.length > 0 && (
+        <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+          {visits.map((visit) => (
+            <li
+              key={visit.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
+            >
+              <span className="text-neutral-200">
+                {formatDate(visit.slotTimestamp)}
+              </span>
+              <span className="text-xs text-neutral-400">
+                {toDate(visit.slotTimestamp)?.toLocaleTimeString("sr-Latn-RS", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {open && visits.length === 0 && (
+        <p className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-neutral-500">
+          Nema evidentiranih dolazaka.
+        </p>
+      )}
+    </Panel>
+  );
+}
+
 function MembershipCard({
+  variant = "full",
   membership,
   role,
   editing,
@@ -624,25 +799,39 @@ function MembershipCard({
     membership.checkInsArray.length,
     getWeekCount(membership.startDate, membership.endDate)
   );
+  const showCheckIns = variant !== "subscriptions";
+  const showSubscriptionDetails = variant !== "checkins";
+  const cardTone = showSubscriptionDetails
+    ? active
+      ? "border-brand-green-500/30 bg-brand-green-500/5"
+      : "border-red-400/30 bg-red-500/10"
+    : "border-white/10 bg-neutral-900/70";
 
   return (
-    <div className={`mb-3 rounded-xl border-l-4 p-4 ${active ? "border-green-500" : "border-red-500"} bg-neutral-900/80`}>
+    <div className={`rounded-2xl border p-4 ${cardTone}`}>
+      {showSubscriptionDetails && (
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-medium text-white">{membership.name}</p>
+          <p className="truncate font-semibold text-white">{membership.name}</p>
           <p className="text-sm text-neutral-400">
             {formatDate(membership.startDate)} - {formatDate(membership.endDate)}
           </p>
         </div>
-        {role === "admin" && !editing && (
-          <button onClick={onBeginEdit} className="shrink-0 text-sm text-blue-400">
-            Izmeni
-          </button>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <StatusPill tone={active ? "green" : "red"}>
+            {active ? "Aktivna" : "Istekla"}
+          </StatusPill>
+          {role === "admin" && !editing && showSubscriptionDetails && (
+            <button onClick={onBeginEdit} className="shrink-0 rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300">
+              Izmeni
+            </button>
+          )}
+        </div>
       </div>
+      )}
 
-      {editing && (
-        <div className="mt-3 space-y-2 rounded-lg bg-neutral-950/70 p-3">
+      {showSubscriptionDetails && editing && (
+        <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-neutral-950/70 p-3">
           <div className="grid grid-cols-2 gap-2">
             <label className="min-w-0 text-xs text-neutral-400">
               Početak
@@ -650,7 +839,7 @@ function MembershipCard({
                 type="date"
                 value={form.startDate || ""}
                 onChange={(event) => setForm({ ...form, startDate: event.target.value })}
-                className="mt-1 w-full min-w-0 rounded bg-neutral-800 px-2 py-1.5 text-xs text-white"
+                className="mt-1 w-full min-w-0 rounded-xl border border-white/10 bg-neutral-900 px-2 py-2 text-xs text-white outline-none focus:border-brand-blue-500"
               />
             </label>
             <label className="min-w-0 text-xs text-neutral-400">
@@ -659,57 +848,64 @@ function MembershipCard({
                 type="date"
                 value={form.endDate || ""}
                 onChange={(event) => setForm({ ...form, endDate: event.target.value })}
-                className="mt-1 w-full min-w-0 rounded bg-neutral-800 px-2 py-1.5 text-xs text-white"
+                className="mt-1 w-full min-w-0 rounded-xl border border-white/10 bg-neutral-900 px-2 py-2 text-xs text-white outline-none focus:border-brand-blue-500"
               />
             </label>
           </div>
           <select
             value={form.weeklyCheckIns}
             onChange={(event) => setForm({ ...form, weeklyCheckIns: event.target.value })}
-            className="w-full rounded bg-neutral-800 px-2 py-1.5 text-xs text-white"
+            className="w-full rounded-xl border border-white/10 bg-neutral-900 px-2 py-2 text-xs text-white outline-none focus:border-brand-blue-500"
           >
             {[1, 2, 3, 4, 5, 6].map((count) => (
               <option key={count} value={count}>{count}x nedeljno</option>
             ))}
             <option value="unlimited">Neograničeno</option>
           </select>
-          <div className="flex flex-wrap gap-3 pt-1 text-sm">
-            <button onClick={onExtend} className="text-green-400">Produži 7 dana</button>
-            <button onClick={onSaveEdit} className="text-blue-400">Sačuvaj</button>
-            <button onClick={onCancelEdit} className="text-red-400">Otkaži</button>
+          <div className="flex flex-wrap gap-2 pt-1 text-sm">
+            <button onClick={onExtend} className="rounded-xl border border-brand-green-500/25 bg-brand-green-500/10 px-3 py-2 text-xs font-medium text-brand-green-300">Produži 7 dana</button>
+            <button onClick={onSaveEdit} className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300">Sačuvaj</button>
+            <button onClick={onCancelEdit} className="rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300">Otkaži</button>
           </div>
         </div>
       )}
 
-      <ul className="mt-3 space-y-2">
-        {Array.from({ length: weekCount }, (_, index) => {
-          const checkIns = membership.checkInsArray[index] || 0;
-          return (
-            <li key={index} className="flex min-w-0 items-center gap-2">
-              <span className="w-[68px] shrink-0 whitespace-nowrap text-xs text-white">
-                {toRoman(index + 1)} nedelja
-              </span>
-              {allowed !== "unlimited" && (
-                <SegmentedProgress value={checkIns} allowed={allowed} />
-              )}
-              <span className="ml-auto w-[42px] shrink-0 text-right text-sm font-medium text-white tabular-nums">
-                {checkIns} / {allowed === "unlimited" ? "∞" : allowed}
-              </span>
-              {role === "admin" && (
-                <div className="flex shrink-0 items-center gap-1">
-                  <button onClick={() => onChangeCheckIn(membership.id, index, -1)} className="h-8 w-8 rounded-md bg-neutral-800 text-lg font-medium text-white hover:bg-neutral-700">-</button>
-                  <button onClick={() => onChangeCheckIn(membership.id, index, 1)} className="h-8 w-8 rounded-md bg-neutral-800 text-lg font-medium text-white hover:bg-neutral-700">+</button>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      {showCheckIns && (
+        <ul className={showSubscriptionDetails ? "mt-3 space-y-2" : "space-y-2"}>
+          {Array.from({ length: weekCount }, (_, index) => {
+            const checkIns = membership.checkInsArray[index] || 0;
+            return (
+              <li key={index} className="flex min-w-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                <span className="w-[98px] shrink-0 text-xs text-white">
+                  <span className="block whitespace-nowrap">{toRoman(index + 1)} nedelja</span>
+                  <span className="block whitespace-nowrap text-[10px] text-neutral-400">
+                    {getWeekRange(membership, index)}
+                  </span>
+                </span>
+                {allowed !== "unlimited" && (
+                  <SegmentedProgress value={checkIns} allowed={allowed} />
+                )}
+                <span className="ml-auto w-[42px] shrink-0 text-right text-sm font-medium text-white tabular-nums">
+                  {checkIns} / {allowed === "unlimited" ? "∞" : allowed}
+                </span>
+                {role === "admin" && (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button onClick={() => onChangeCheckIn(membership.id, index, -1)} className="h-8 w-8 rounded-lg border border-white/10 bg-neutral-900 text-lg font-medium text-white hover:bg-neutral-800">-</button>
+                    <button onClick={() => onChangeCheckIn(membership.id, index, 1)} className="h-8 w-8 rounded-lg border border-white/10 bg-neutral-900 text-lg font-medium text-white hover:bg-neutral-800">+</button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-      <div className="mt-3 text-sm">
-        <p className="text-neutral-400">Uplata:</p>
-        {membership.payments.length ? <PaymentList payments={membership.payments} /> : <p className="text-neutral-500">-</p>}
-      </div>
+      {showSubscriptionDetails && (
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
+          <p className="text-neutral-400">Uplata:</p>
+          {membership.payments.length ? <PaymentList payments={membership.payments} /> : <p className="text-neutral-500">-</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -741,17 +937,17 @@ const PAYMENT_STATUS_LABELS = {
 
 function PaymentList({ payments }) {
   return (
-    <ul className="ml-4 list-disc">
+    <ul className="mt-2 space-y-1">
       {payments.map((payment) => (
         <li
           key={payment.id}
-          className={
+          className={`rounded-lg border px-3 py-2 text-xs ${
             payment.status === "paid"
-              ? "text-green-400"
+              ? "border-brand-green-500/25 bg-brand-green-500/10 text-brand-green-300"
               : payment.status === "partially_paid"
-                ? "text-orange-400"
-                : "text-red-400"
-          }
+                ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
+                : "border-red-400/25 bg-red-500/10 text-red-300"
+          }`}
         >
           {payment.paidAmount || 0} / {payment.amount} RSD -{" "}
           {PAYMENT_STATUS_LABELS[payment.status] ?? payment.status}
@@ -763,45 +959,32 @@ function PaymentList({ payments }) {
 
 function EditControls({ editMode, onEdit, onSave, onCancel }) {
   return (
-    <div className="mb-2 flex justify-end gap-4">
+    <div className="mt-3 flex justify-end gap-2">
       {!editMode ? (
-        <button onClick={onEdit} className="text-sm text-blue-400">Izmeni</button>
+        <button onClick={onEdit} className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300">Izmeni</button>
       ) : (
         <>
-          <button onClick={onSave} className="text-sm text-blue-400">Sačuvaj</button>
-          <button onClick={onCancel} className="text-sm text-red-400">Otkaži</button>
+          <button onClick={onSave} className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300">Sačuvaj</button>
+          <button onClick={onCancel} className="rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300">Otkaži</button>
         </>
       )}
     </div>
   );
 }
 
-function CollapsibleSection({ title, header, children }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="rounded-2xl bg-neutral-900/90 p-5 shadow">
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between text-left">
-        <div>{header || <h3 className="text-sm font-medium text-neutral-300">{title}</h3>}</div>
-        <span className={`pb-2 text-2xl text-neutral-400 transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
-      </button>
-      {open && <div className="mt-4 space-y-3">{children}</div>}
-    </div>
-  );
-}
-
 function ProfileField({ label, children }) {
   return (
-    <div>
+    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
       <p className="text-xs text-neutral-400">{label}</p>
-      <div className="text-sm text-white">{children}</div>
+      <div className="mt-1 text-sm text-white">{children}</div>
     </div>
   );
 }
 
 function Input({ value, onChange }) {
-  return <input value={value || ""} onChange={(event) => onChange(event.target.value)} className="w-full rounded-lg bg-neutral-800 p-2 text-white" />;
+  return <input value={value || ""} onChange={(event) => onChange(event.target.value)} className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2 text-white outline-none focus:border-brand-blue-500" />;
 }
 
 function Textarea({ value, onChange }) {
-  return <textarea value={value || ""} onChange={(event) => onChange(event.target.value)} rows={3} className="w-full rounded-lg bg-neutral-800 p-2 text-white" />;
+  return <textarea value={value || ""} onChange={(event) => onChange(event.target.value)} rows={3} className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2 text-white outline-none focus:border-brand-blue-500" />;
 }

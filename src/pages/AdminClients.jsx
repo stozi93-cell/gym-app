@@ -5,10 +5,19 @@ import {
   query,
   where,
 } from "firebase/firestore";
+import { Link, useNavigate } from "react-router-dom";
+import Avatar from "../components/Avatar";
+import { EmptyState, Panel, StatusPill } from "../components/ui/Primitives";
 import { db } from "../firebase";
-import { useNavigate, Link } from "react-router-dom";
 
 const EXPIRY_WARNING_DAYS = 7;
+
+const FILTER_OPTIONS = [
+  { value: "all", label: "Svi" },
+  { value: "active", label: "Aktivni" },
+  { value: "expiring", label: "Pred istekom" },
+  { value: "inactive", label: "Bez pretplate" },
+];
 
 function startOfDay(date) {
   const normalized = new Date(date);
@@ -18,10 +27,7 @@ function startOfDay(date) {
 
 function getDaysRemaining(endDate) {
   if (!(endDate instanceof Date)) return null;
-  const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  return Math.ceil(
-    (startOfDay(endDate) - startOfDay(new Date())) / millisecondsPerDay
-  );
+  return Math.ceil((startOfDay(endDate) - startOfDay(new Date())) / 86400000);
 }
 
 export default function AdminClients() {
@@ -57,16 +63,16 @@ export default function AdminClients() {
       }
     }
 
-    const data = userSnap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-      hasActiveSub: !!activeSubs[d.id],
-      subEnd: activeSubs[d.id]?.endDate || null,
-      activeSubId: activeSubs[d.id]?.subId || null,
-      daysRemaining: getDaysRemaining(activeSubs[d.id]?.endDate),
-    }));
-
-    setClients(data);
+    setClients(
+      userSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+        hasActiveSub: !!activeSubs[d.id],
+        subEnd: activeSubs[d.id]?.endDate || null,
+        activeSubId: activeSubs[d.id]?.subId || null,
+        daysRemaining: getDaysRemaining(activeSubs[d.id]?.endDate),
+      }))
+    );
   }
 
   useEffect(() => {
@@ -75,14 +81,14 @@ export default function AdminClients() {
   }, []);
 
   function applyFilter(list) {
-    if (filter === "active") return list.filter((c) => c.hasActiveSub);
-    if (filter === "inactive") return list.filter((c) => !c.hasActiveSub);
+    if (filter === "active") return list.filter((client) => client.hasActiveSub);
+    if (filter === "inactive") return list.filter((client) => !client.hasActiveSub);
     if (filter === "expiring") {
       return list.filter(
-        (c) =>
-          c.hasActiveSub &&
-          c.daysRemaining >= 0 &&
-          c.daysRemaining <= EXPIRY_WARNING_DAYS
+        (client) =>
+          client.hasActiveSub &&
+          client.daysRemaining >= 0 &&
+          client.daysRemaining <= EXPIRY_WARNING_DAYS
       );
     }
     return list;
@@ -93,160 +99,184 @@ export default function AdminClients() {
 
     if (sort === "name-asc") {
       sorted.sort((a, b) =>
-        `${a.name} ${a.surname}`.localeCompare(
-          `${b.name} ${b.surname}`
+        `${a.name || ""} ${a.surname || ""}`.localeCompare(
+          `${b.name || ""} ${b.surname || ""}`,
+          "sr-Latn-RS"
         )
       );
     }
 
     if (sort === "name-desc") {
       sorted.sort((a, b) =>
-        `${b.name} ${b.surname}`.localeCompare(
-          `${a.name} ${a.surname}`
+        `${b.name || ""} ${b.surname || ""}`.localeCompare(
+          `${a.name || ""} ${a.surname || ""}`,
+          "sr-Latn-RS"
         )
       );
     }
 
     if (sort === "sub") {
-      sorted.sort(
-        (a, b) =>
-          (b.hasActiveSub === true) -
-          (a.hasActiveSub === true)
-      );
+      sorted.sort((a, b) => (b.hasActiveSub === true) - (a.hasActiveSub === true));
     }
 
     return sorted;
   }
 
-  const visibleClients = applySort(
-    applyFilter(clients)
-  ).filter((c) =>
-    `${c.name} ${c.surname} ${c.email}`
-      .toLowerCase()
-      .includes(search.toLowerCase())
+  const visibleClients = applySort(applyFilter(clients)).filter((client) =>
+    `${client.name || ""} ${client.surname || ""} ${client.email || ""}`
+      .toLocaleLowerCase("sr-Latn-RS")
+      .includes(search.toLocaleLowerCase("sr-Latn-RS"))
   );
 
-  const formatDate = (d) =>
-    d instanceof Date
-      ? d.toLocaleDateString("sr-Latn-RS", {
+  const activeCount = clients.filter((client) => client.hasActiveSub).length;
+  const expiringCount = clients.filter(
+    (client) =>
+      client.hasActiveSub &&
+      client.daysRemaining >= 0 &&
+      client.daysRemaining <= EXPIRY_WARNING_DAYS
+  ).length;
+
+  const formatDate = (date) =>
+    date instanceof Date
+      ? date.toLocaleDateString("sr-Latn-RS", {
           day: "2-digit",
           month: "long",
           year: "numeric",
         })
-      : "—";
+      : "-";
 
   return (
-    <div className="px-2 py-1 space-y-6">
+    <div className="space-y-4">
+      <Panel className="space-y-3 p-3">
+        <div className="grid grid-cols-3 gap-2">
+          <ClientMetric label="Ukupno" value={clients.length} />
+          <ClientMetric label="Aktivni" value={activeCount} />
+          <ClientMetric label="Ističe" value={expiringCount} />
+        </div>
 
-      {/* TOOLS */}
-      <div className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-3">
         <input
           type="text"
-          placeholder="Pretraga…"
+          placeholder="Pretraga..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-sm text-white placeholder:text-neutral-400"
+          onChange={(event) => setSearch(event.target.value)}
+          className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-neutral-500 transition focus:border-brand-blue-500 focus:bg-neutral-950"
         />
 
-        <div className="flex gap-2">
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="flex-1 rounded bg-neutral-800 px-2 py-1 text-sm"
-          >
-            <option value="all">Svi</option>
-            <option value="active">Aktivni</option>
-            <option value="expiring">Pred istekom</option>
-            <option value="inactive">Bez pretplate</option>
-          </select>
+        <div className="grid grid-cols-2 gap-2">
+          {FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setFilter(option.value)}
+              className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                filter === option.value
+                  ? "border-brand-blue-500 bg-brand-blue-500 text-white shadow-glow"
+                  : "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
 
+        <label className="block text-xs font-medium text-neutral-400">
+          Sortiranje
           <select
             value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="flex-1 rounded bg-neutral-800 px-2 py-1 text-sm"
+            onChange={(event) => setSort(event.target.value)}
+            className="mt-1 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none focus:border-brand-blue-500"
           >
-            <option value="name-asc">Ime A–Z</option>
-            <option value="name-desc">Ime Z–A</option>
+            <option value="name-asc">Ime A-Z</option>
+            <option value="name-desc">Ime Z-A</option>
             <option value="sub">Aktivne prve</option>
           </select>
-        </div>
-      </div>
+        </label>
+      </Panel>
 
-      {/* CLIENT LIST */}
       <div className="space-y-3">
-        {visibleClients.map((c) => (
-          <div
-            key={c.id}
-            className="mx-2 rounded-xl bg-neutral-900 p-4 space-y-2"
-          >
+        {visibleClients.map((client) => (
+          <Panel key={client.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <Link
-                  to={`/profil/${c.id}`}
-                  className="block truncate font-medium text-blue-400"
-                >
-                  {c.name} {c.surname}
-                </Link>
-                <p className="truncate text-xs text-neutral-400">
-                  {c.email}
-                </p>
+              <div className="flex min-w-0 gap-3">
+                <Avatar
+                  name={`${client.name || ""} ${client.surname || ""}`.trim()}
+                  photoURL={client.photoURL || ""}
+                  className="h-11 w-11 text-sm"
+                />
+                <div className="min-w-0">
+                  <Link
+                    to={`/profil/${client.id}`}
+                    className="block truncate font-semibold text-white"
+                  >
+                    {client.name} {client.surname}
+                  </Link>
+                  <p className="truncate text-xs text-neutral-400">
+                    {client.email}
+                  </p>
+                </div>
               </div>
 
-              {c.hasActiveSub ? (
-                <span className="text-xs font-medium text-green-500">
+              {client.hasActiveSub ? (
+                <StatusPill tone={client.daysRemaining <= EXPIRY_WARNING_DAYS ? "amber" : "green"}>
                   Aktivna
-                </span>
+                </StatusPill>
               ) : (
-                <span className="text-xs font-medium text-red-400">
-                  Nema
-                </span>
+                <StatusPill tone="red">Nema</StatusPill>
               )}
             </div>
 
-            {c.hasActiveSub && (
+            {client.hasActiveSub && (
               <p
-                className={`text-xs ${
-                  c.daysRemaining <= EXPIRY_WARNING_DAYS
-                    ? "font-medium text-amber-300"
-                    : "text-neutral-400"
+                className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                  client.daysRemaining <= EXPIRY_WARNING_DAYS
+                    ? "border-amber-400/20 bg-amber-400/10 font-medium text-amber-200"
+                    : "border-white/10 bg-white/5 text-neutral-300"
                 }`}
               >
-                Važi do {formatDate(c.subEnd)}
-                {c.daysRemaining <= EXPIRY_WARNING_DAYS &&
-                  ` (${c.daysRemaining} dana)`}
+                Važi do {formatDate(client.subEnd)}
+                {client.daysRemaining <= EXPIRY_WARNING_DAYS &&
+                  ` (${client.daysRemaining} dana)`}
               </p>
             )}
 
-            <div className="flex gap-3 pt-2">
-              {c.hasActiveSub && (
+            <div className="mt-3 flex gap-2">
+              {client.hasActiveSub && (
                 <button
-                  onClick={() =>
-                    navigate(`/profil/${c.id}?editSubscription=1`)
-                  }
-                  className="text-sm text-green-400"
+                  onClick={() => navigate(`/profil/${client.id}?editSubscription=1`)}
+                  className="rounded-xl border border-brand-green-500/25 bg-brand-green-500/10 px-3 py-2 text-xs font-medium text-brand-green-300 transition hover:bg-brand-green-500/15"
                 >
                   Izmeni
                 </button>
               )}
 
               <button
-                onClick={() =>
-                  navigate(`/paketi?clientId=${c.id}`)
-                }
-                className="text-sm text-blue-400"
+                onClick={() => navigate(`/paketi?clientId=${client.id}`)}
+                className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300 transition hover:bg-brand-blue-500/15"
               >
                 Dodeli paket
               </button>
             </div>
-          </div>
+          </Panel>
         ))}
 
         {!visibleClients.length && (
-          <p className="px-4 text-sm text-neutral-400">
-            Nema rezultata.
-          </p>
+          <EmptyState
+            title="Nema rezultata"
+            description="Promeni pretragu ili izabrani filter."
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+function ClientMetric({ label, value }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2 text-center">
+      <p className="text-base font-semibold text-white">{value}</p>
+      <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+        {label}
+      </p>
     </div>
   );
 }

@@ -45,11 +45,11 @@ export default function AppUpdatePrompt() {
   if (!updateAvailable) return null;
 
   return (
-    <div className="fixed inset-x-3 top-3 z-[70] mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg border border-blue-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 shadow-xl">
+    <div className="fixed inset-x-3 top-3 z-[70] mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl border border-brand-blue-500/25 bg-neutral-950/95 px-4 py-3 text-sm text-neutral-100 shadow-premium backdrop-blur-xl">
       <span>Dostupna je nova verzija aplikacije.</span>
       <button
         onClick={() => window.location.reload()}
-        className="shrink-0 rounded bg-blue-600 px-3 py-1.5 text-white"
+        className="shrink-0 rounded-xl bg-brand-blue-500 px-3 py-2 text-xs font-semibold text-white shadow-glow"
       >
         Osveži
       </button>

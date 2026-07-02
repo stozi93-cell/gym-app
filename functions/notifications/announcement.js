@@ -1,6 +1,6 @@
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
-const { send } = require("./_helpers");
+const { getTokensFromUserData, send } = require("./_helpers");
 
 exports.sendAnnouncementNotification = onDocumentCreated(
     "forumPosts/{postId}",
@@ -12,7 +12,9 @@ exports.sendAnnouncementNotification = onDocumentCreated(
     if (post._notified) return;
 
     const usersSnap = await admin.firestore().collection("users").get();
-    const tokens = usersSnap.docs.flatMap(d => d.data().fcmTokens || []);
+    const tokens = usersSnap.docs.flatMap((d) =>
+      getTokensFromUserData(d.data(), "ANNOUNCEMENT")
+    );
     if (!tokens.length) return;
 
     await send(tokens, {

@@ -13,7 +13,7 @@ export function Logo({ variant = "icon", className }: LogoProps) {
     <img
       src={src}
       alt="ReMotion"
-      className={className}
+      className={`object-contain ${className || ""}`}
       draggable={false}
     />
   );

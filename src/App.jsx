@@ -5,8 +5,11 @@ import Login from "./auth/Login";
 import Register from "./auth/Register";
 
 import Bookings from "./pages/Bookings";
+import ClientDashboard from "./pages/ClientDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import AdminSlots from "./pages/AdminSlots";
 import ClientProfile from "./pages/ClientProfile";
+import ClientProgress from "./pages/ClientProgress";
 import AdminClients from "./pages/AdminClients";
 import AdminPackages from "./pages/AdminPackages";
 import MySubscriptions from "./pages/MySubscriptions";
@@ -17,6 +20,7 @@ import AdminChat from "./pages/AdminChat";
 import AdminChats from "./pages/AdminChats";
 import AdminTrainingStudio from "./pages/AdminTrainingStudio";
 import AdminTrainingClient from "./pages/AdminTrainingClient";
+import Settings from "./pages/Settings";
 
 import Splash from "./components/Splash";
 import AppShell from "./components/AppShell";
@@ -51,12 +55,15 @@ export default function App() {
         <Routes>
           {/* Forum — accessible to all */}
           <Route path="/forum" element={<Forum />} />
+          <Route path="/podesavanja" element={<Settings />} />
 
           {/* CLIENT */}
           {role === "client" && (
             <>
-              <Route path="/" element={<Bookings />} />
+              <Route path="/" element={<ClientDashboard />} />
+              <Route path="/rezervacije" element={<Bookings />} />
               <Route path="/profil/:uid" element={<ClientProfile />} />
+              <Route path="/napredak" element={<ClientProgress />} />
               <Route path="/moje-pretplate" element={<MySubscriptions />} />
               <Route path="/chat" element={<ClientChat />} />
             </>
@@ -65,7 +72,7 @@ export default function App() {
           {/* ADMIN */}
           {role === "admin" && (
             <>
-              <Route path="/" element={<AdminSlots />} />
+              <Route path="/" element={<AdminDashboard />} />
               <Route path="/raspored" element={<AdminSlots />} />
               <Route path="/klijenti" element={<AdminClients />} />
               <Route path="/paketi" element={<AdminPackages />} />

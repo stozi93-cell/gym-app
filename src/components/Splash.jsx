@@ -4,16 +4,13 @@ export default function Splash() {
       className="
         fixed inset-0
         flex items-center justify-center
-        bg-gradient-to-br
-        from-brand-blue-900
-        via-brand-blue-700
-        to-brand-green-900
+        bg-background-dark
       "
     >
       <img
         src="/assets/brand/full-logo.png"
         alt="ReMotion"
-        className="h-32 select-none"
+        className="h-28 w-72 select-none object-contain"
         draggable={false}
       />
     </div>

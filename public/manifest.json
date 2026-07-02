@@ -4,8 +4,8 @@
   "description": "Rehabilitacija i trening",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0b1220",
-  "theme_color": "#0b1220",
+  "background_color": "#03060D",
+  "theme_color": "#03060D",
   "icons": [
     {
       "src": "/assets/brand/icon-192.png",
