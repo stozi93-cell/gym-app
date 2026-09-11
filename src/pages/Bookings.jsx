@@ -351,7 +351,7 @@ const end = Timestamp.fromDate(endDate);
 
   if (loading) {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="space-y-4">
       {statusMessage && (
         <div className="rounded-xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-4 py-3 text-sm text-brand-blue-300">
           {statusMessage}
@@ -432,7 +432,7 @@ const end = Timestamp.fromDate(endDate);
         </div>
       )}
       {/* Slots */}
-      <Panel className="shrink-0 p-3">
+      <Panel className="sticky top-0 z-20 p-3">
         <DayPicker
           days={dayPickerDays}
           selectedKey={selectedDayKey}
@@ -444,7 +444,7 @@ const end = Timestamp.fromDate(endDate);
         />
       </Panel>
 
-      <div className="min-h-0 flex-1">
+      <div>
         {visibleSelectedDaySlots.length === 0 && (
           <Panel className="p-4 text-center text-sm text-neutral-400">
             Nema termina za izabrani dan.
@@ -452,7 +452,7 @@ const end = Timestamp.fromDate(endDate);
         )}
 
         {visibleSelectedDaySlots.length > 0 && (
-          <div className="grid h-full min-h-0 grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <SlotColumn
               title="Prepodne"
               slots={morningSlots}
@@ -512,43 +512,45 @@ export function SlotColumn({
       container?.querySelectorAll("[data-slot-id]") || []
     ).find((element) => element.dataset.slotId === scrollTargetSlotId);
 
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (target && container) {
+      const centeredTop =
+        target.offsetTop - (container.clientHeight - target.offsetHeight) / 2;
+      container.scrollTo({ top: Math.max(0, centeredTop), behavior: "smooth" });
+    }
   }, [scrollTargetSlotId]);
 
   return (
-    <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
-      <p className="shrink-0 px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
+    <section className="min-w-0 space-y-2">
+      <p className="px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
         {title}
       </p>
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={scrollRef}
-          role="region"
-          tabIndex={0}
-          aria-label={`Termini - ${title}`}
-          className="booking-shift-scroll absolute inset-0 space-y-2 overflow-y-scroll pb-2 outline-none"
-        >
-          {slots.map((slot) => (
-            <SlotCard
-              key={slot.id}
-              slot={slot}
-              bookings={bookings}
-              availabilityBySlot={availabilityBySlot}
-              actionPending={actionPending}
-              userBookingForDay={userBookingForDay}
-              hasSlotId={hasSlotId}
-              formatTime={formatTime}
-              book={book}
-              cancel={cancel}
-              canBook={canBook}
-            />
-          ))}
-          {!slots.length && (
-            <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-neutral-500">
-              Nema
-            </div>
-          )}
-        </div>
+      <div
+        ref={scrollRef}
+        role="region"
+        tabIndex={0}
+        aria-label={`Termini - ${title}`}
+        className="booking-shift-scroll relative min-h-48 max-h-[calc(100dvh-20rem)] space-y-2 overflow-y-auto pb-2 outline-none"
+      >
+        {slots.map((slot) => (
+          <SlotCard
+            key={slot.id}
+            slot={slot}
+            bookings={bookings}
+            availabilityBySlot={availabilityBySlot}
+            actionPending={actionPending}
+            userBookingForDay={userBookingForDay}
+            hasSlotId={hasSlotId}
+            formatTime={formatTime}
+            book={book}
+            cancel={cancel}
+            canBook={canBook}
+          />
+        ))}
+        {!slots.length && (
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-neutral-500">
+            Nema
+          </div>
+        )}
       </div>
     </section>
   );

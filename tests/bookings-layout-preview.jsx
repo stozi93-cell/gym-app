@@ -30,11 +30,11 @@ export function Preview() {
   const days = buildDayPickerDays(today, 6);
   return <div className="app-viewport flex flex-col bg-background-dark text-text-primaryDark">
     <header className="h-14 shrink-0 border-b border-white/10" />
-    <main className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden px-4 py-4 pb-24">
-      <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <Panel className="shrink-0 p-3"><DayPicker days={days} selectedKey={days[0].key} onSelect={() => {}} /></Panel>
-        <div className="min-h-0 flex-1">
-          <div className="grid h-full min-h-0 grid-cols-2 gap-3">
+    <main className="min-h-0 flex-1 overflow-y-auto px-4 py-4 pb-24">
+      <div className="space-y-4">
+        <Panel className="sticky top-0 z-20 p-3"><DayPicker days={days} selectedKey={days[0].key} onSelect={() => {}} /></Panel>
+        <div>
+          <div className="grid grid-cols-2 gap-3">
             <SlotColumn title="Prepodne" slots={morning} {...common} />
             <SlotColumn title="Popodne" slots={afternoon} {...common} />
           </div>
