@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   collection,
-  doc,
   onSnapshot,
-  updateDoc,
 } from "firebase/firestore";
 import { Link } from "react-router-dom";
-import { db } from "../firebase";
+import { auth, db } from "../firebase";
+import InvoiceEditor from "../components/InvoiceEditor";
+import { updateInvoice } from "../billing/updateInvoice.mjs";
 
 const INITIAL_LIMIT = 1;
 
@@ -107,6 +107,8 @@ export default function AdminBilling() {
   const [overviewStart, setOverviewStart] = useState("");
   const [overviewEnd, setOverviewEnd] = useState("");
   const [status, setStatus] = useState(null);
+  const [editingInvoice, setEditingInvoice] = useState(null);
+  const [pendingInvoice, setPendingInvoice] = useState(null);
 
   useEffect(() => {
     return onSnapshot(collection(db, "billing"), (snap) => {
@@ -178,6 +180,7 @@ export default function AdminBilling() {
   }
 
   async function handlePartialPayment(invoice) {
+    if (pendingInvoice) return;
     const max = invoice.amount - (invoice.paidAmount || 0);
     const input = prompt(`Unesite iznos (maks ${max} RSD):`);
     if (!input) return;
@@ -188,32 +191,38 @@ export default function AdminBilling() {
       return;
     }
 
-    const newPaid = (invoice.paidAmount || 0) + paid;
+    setPendingInvoice(invoice.id);
     try {
-      await updateDoc(doc(db, "billing", invoice.id), {
-        paidAmount: newPaid,
-        status: newPaid === invoice.amount ? "paid" : "partially_paid",
-        paidAt: new Date(),
-      });
+      await updateInvoice(db, invoice.id, invoice, { type: "payment", amount: paid }, auth.currentUser?.uid);
       showStatus("success", "Uplata je sačuvana.");
     } catch (error) {
       console.error("Payment save failed", error);
-      showStatus("error", "Uplata nije sačuvana. Pokušaj ponovo.");
+      showStatus("error", error.code ? "Uplata nije sačuvana. Pokušaj ponovo." : error.message);
+    } finally {
+      setPendingInvoice(null);
     }
   }
 
   async function handleCancel(invoice) {
+    if (pendingInvoice) return;
     if (!window.confirm("Otkaži fakturu?")) return;
 
+    setPendingInvoice(invoice.id);
     try {
-      await updateDoc(doc(db, "billing", invoice.id), {
-        status: "cancelled",
-      });
+      await updateInvoice(db, invoice.id, invoice, { type: "cancel" }, auth.currentUser?.uid);
       showStatus("success", "Faktura je otkazana.");
     } catch (error) {
       console.error("Invoice cancel failed", error);
-      showStatus("error", "Faktura nije otkazana. Pokušaj ponovo.");
+      showStatus("error", error.code ? "Faktura nije otkazana. Pokušaj ponovo." : error.message);
+    } finally {
+      setPendingInvoice(null);
     }
+  }
+
+  async function handleCorrection(changes) {
+    await updateInvoice(db, editingInvoice.id, editingInvoice, { type: "correction", ...changes }, auth.currentUser?.uid);
+    setEditingInvoice(null);
+    showStatus("success", "Cena i uplata su sačuvane.");
   }
 
   function applyOverviewPreset(preset) {
@@ -294,6 +303,8 @@ export default function AdminBilling() {
             invoice={invoice}
             onPayment={() => handlePartialPayment(invoice)}
             onCancel={() => handleCancel(invoice)}
+            onEdit={() => setEditingInvoice(invoice)}
+            disabled={Boolean(pendingInvoice)}
           />
         ))}
         {!visibleInvoices.length && (
@@ -331,11 +342,12 @@ export default function AdminBilling() {
           Ukupno naplaćeno: <span className="font-medium text-green-400">{overviewTotal} RSD</span>
         </p>
       </div>
+      {editingInvoice && <InvoiceEditor key={editingInvoice.id} invoice={editingInvoice} onSave={handleCorrection} onClose={() => setEditingInvoice(null)} />}
     </div>
   );
 }
 
-function InvoiceCard({ invoice, onPayment, onCancel }) {
+function InvoiceCard({ invoice, onPayment, onCancel, onEdit, disabled }) {
   const meta = {
     pending: { label: "Na čekanju", color: "bg-red-900/30 text-red-300" },
     partially_paid: { label: "Delimično plaćeno", color: "bg-yellow-900/30 text-yellow-300" },
@@ -374,10 +386,11 @@ function InvoiceCard({ invoice, onPayment, onCancel }) {
 
       {invoice.status !== "paid" && invoice.status !== "cancelled" && (
         <div className="flex gap-2 pt-2">
-          <button onClick={onPayment} className="flex-1 rounded bg-blue-600 py-1.5 text-sm text-white">Uplata</button>
-          <button onClick={onCancel} className="flex-1 rounded bg-red-600 py-1.5 text-sm text-white">Otkaži</button>
+          <button disabled={disabled} onClick={onPayment} className="flex-1 rounded bg-blue-600 py-1.5 text-sm text-white disabled:opacity-50">Uplata</button>
+          <button disabled={disabled} onClick={onCancel} className="flex-1 rounded bg-red-600 py-1.5 text-sm text-white disabled:opacity-50">Otkaži</button>
         </div>
       )}
+      <button type="button" disabled={disabled} onClick={onEdit} className="min-h-11 w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-neutral-200 disabled:opacity-50">Izmeni fakturu</button>
     </div>
   );
 }
