@@ -68,6 +68,7 @@ export default function AppShell({ children }) {
   const isChatPage =
     (location.pathname === "/chat" && !!selectedCoachId) ||
     location.pathname.startsWith("/admin-chat/");
+  const isBookingsPage = location.pathname === "/rezervacije";
 
   return (
     <div
@@ -141,7 +142,13 @@ export default function AppShell({ children }) {
       )}
 
       {/* MAIN CONTENT */}
-      <main className={`flex-1 overflow-y-auto px-4 py-4 ${isChatPage ? "pb-4" : "pb-24"}`}>
+      <main
+        className={`min-h-0 flex-1 px-4 py-4 ${
+          isBookingsPage
+            ? "flex flex-col overflow-hidden pb-24"
+            : `overflow-y-auto ${isChatPage ? "pb-4" : "pb-24"}`
+        }`}
+      >
         {children}
       </main>
 

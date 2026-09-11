@@ -309,7 +309,7 @@ const end = Timestamp.fromDate(endDate);
 
   if (loading) {
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       {statusMessage && (
         <div className="rounded-xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-4 py-3 text-sm text-brand-blue-300">
           {statusMessage}
@@ -387,7 +387,7 @@ const end = Timestamp.fromDate(endDate);
         </div>
       )}
       {/* Slots */}
-      <Panel className="p-3">
+      <Panel className="shrink-0 p-3">
         <DayPicker
           days={dayPickerDays}
           selectedKey={selectedDayKey}
@@ -396,7 +396,7 @@ const end = Timestamp.fromDate(endDate);
         />
       </Panel>
 
-      <div className="space-y-4">
+      <div className="min-h-0 flex-1">
         {visibleSelectedDaySlots.length === 0 && (
           <Panel className="p-4 text-center text-sm text-neutral-400">
             Nema termina za izabrani dan.
@@ -404,7 +404,7 @@ const end = Timestamp.fromDate(endDate);
         )}
 
         {visibleSelectedDaySlots.length > 0 && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid h-full min-h-0 grid-cols-2 gap-3">
             <SlotColumn
               title="Prepodne"
               slots={morningSlots}
@@ -439,7 +439,7 @@ const end = Timestamp.fromDate(endDate);
   );
 }
 
-function SlotColumn({
+export function SlotColumn({
   title,
   slots,
   bookings,
@@ -453,11 +453,14 @@ function SlotColumn({
   canBook,
 }) {
   return (
-    <section className="min-w-0 space-y-2">
-      <p className="px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
+    <section className="flex min-h-0 min-w-0 flex-col gap-2">
+      <p className="shrink-0 px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
         {title}
       </p>
-      <div className="space-y-2">
+      <div
+        aria-label={`Termini - ${title}`}
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pb-2"
+      >
         {slots.map((slot) => (
           <SlotCard
             key={slot.id}
@@ -483,7 +486,7 @@ function SlotColumn({
   );
 }
 
-function SlotCard({
+export function SlotCard({
   slot,
   bookings,
   availabilityBySlot,
@@ -510,7 +513,9 @@ function SlotCard({
       className={`min-h-[76px] rounded-xl border px-2.5 py-2 transition-opacity ${
         slot.locked
           ? "border-red-400/20 bg-red-500/10 text-neutral-500 opacity-70"
-          : "border-white/10 bg-neutral-950/60"
+          : booked && !checkedIn
+            ? "border-brand-blue-500/45 bg-brand-blue-500/10 shadow-[inset_0_0_0_1px_rgba(47,107,255,0.08)]"
+            : "border-white/10 bg-neutral-950/60"
       } ${disabledByOtherBooking ? "pointer-events-none opacity-40" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -534,13 +539,18 @@ function SlotCard({
         )}
 
         {booked && !checkedIn && (
-          <button
-            disabled={actionPending}
-            className="w-full rounded-lg border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
-            onClick={() => cancel(booking.slotId)}
-          >
-            Otkaži
-          </button>
+          <div className="grid grid-cols-2 gap-1.5">
+            <span className="inline-flex min-w-0 items-center justify-center rounded-lg border border-brand-blue-500/30 bg-brand-blue-500/10 px-1 py-1.5 text-[10px] font-semibold text-brand-blue-200">
+              Rezervisano
+            </span>
+            <button
+              disabled={actionPending}
+              className="min-w-0 rounded-lg border border-red-400/25 bg-red-500/10 px-1 py-1.5 text-[10px] font-semibold text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
+              onClick={() => cancel(booking.slotId)}
+            >
+              Otkaži
+            </button>
+          </div>
         )}
 
         {checkedIn && (
