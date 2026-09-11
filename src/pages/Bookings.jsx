@@ -15,8 +15,7 @@ import {
   bookSlot as createBooking,
   getBookingErrorMessage,
 } from "../bookings/bookSlot";
-import { startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
-import { Panel, StatusPill } from "../components/ui/Primitives";
+import { Panel } from "../components/ui/Primitives";
 import DayPicker, {
   buildDayPickerDays,
   makeDayKey,
@@ -326,45 +325,13 @@ const end = Timestamp.fromDate(endDate);
 
   /* ---------------- formatting ---------------- */
 
-  const formatDate = (d, o) =>
-    toDate(d).toLocaleDateString("sr-Latn-RS", o);
-
   const formatTime = (d) =>
     toDate(d).toLocaleTimeString("sr-Latn-RS", {
       hour: "2-digit",
       minute: "2-digit",
     });
 
-  const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-
   /* ---------------- derived data ---------------- */
-
-  const today = new Date();
-
-  const weeklyDone = bookings.filter((b) => {
-  if (!b.checkedIn) return false;
-  if (!b.slotTimestamp) return false;
-
-  const d = b.slotTimestamp.toDate();
-
-  return isWithinInterval(d, {
-    start: startOfWeek(today, { weekStartsOn: 1 }),
-    end: endOfWeek(today, { weekStartsOn: 1 }),
-  });
-});
-
-
-  const pastVisits = weeklyDone
-  .map((b) => b.slotTimestamp.toDate())
-  .sort((a, b) => b - a);
-
-  const futureBookings = bookings
-    .map((b) => slots.find((s) => hasSlotId(s, b.slotId)))
-    .filter((s) => s && s.timestamp >= today)
-    .sort((a, b) => a.timestamp - b.timestamp);
-
-  const nextTraining = futureBookings[0];
-  const additionalBookings = futureBookings.slice(1);
 
   const groupedSlots = slots.reduce((acc, slot) => {
     const key = makeDayKey(slot.timestamp);
@@ -419,85 +386,6 @@ const end = Timestamp.fromDate(endDate);
           {statusMessage}
         </div>
       )}
-      {/* Sledeći trening */}
-      <Panel className="p-4">
-        <div>
-          <div className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
-            Sledeći trening
-          </div>
-
-          {nextTraining ? (
-            <>
-              <div className="mt-1 text-3xl font-semibold leading-tight text-white">
-                {formatTime(nextTraining.timestamp)}
-              </div>
-              <div className="text-xs text-neutral-400">
-                {capitalize(
-                  formatDate(nextTraining.timestamp, {
-                    weekday: "long",
-                    day: "2-digit",
-                    month: "long",
-                  })
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="mt-2 rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-              Nemate zakazanih treninga.
-            </div>
-          )}
-        </div>
-        <div className="border-t border-white/10" />
-
-
-        {additionalBookings.length > 0 && (
-          <div>
-            <div className="text-xs font-medium mb-0.5 text-neutral-300">
-              Ostale rezervacije:
-            </div>
-            <ul className="space-y-1 text-xs text-brand-blue-300">
-              {additionalBookings.map((s) => (
-                <li key={s.id}>
-                  {formatTime(s.timestamp)} —{" "}
-                  {capitalize(
-                    formatDate(s.timestamp, {
-                      weekday: "long",
-                      day: "2-digit",
-                      month: "long",
-                    })
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="my-2 border-t border-white/10" />
-
-        <div>
-          <div className="text-xs font-medium mb-0.5 text-neutral-300">
-            Odrađeni treninzi:
-          </div>
-
-          {pastVisits.length > 0 && (
-            <ul className="space-y-1 text-xs text-brand-green-300">
-              {pastVisits.map((d, i) => (
-                <li key={i}>
-                  {formatTime(d)} —{" "}
-                  {capitalize(
-                    formatDate(d, {
-                      weekday: "long",
-                      day: "2-digit",
-                      month: "long",
-                    })
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </Panel>
-
       {/* Slots */}
       <Panel className="p-3">
         <DayPicker

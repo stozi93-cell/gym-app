@@ -1,9 +1,8 @@
 # Booking Capacity Checkpoint
 
-Status on 2026-09-11: implementation and emulator tests are saved; NOT DEPLOYED.
-The urgent live invoice correction took priority. No capacity functions or capacity
-frontend have been published. The existing redesign preview still has the earlier
-15:30 afternoon split, not this dynamic-capacity change.
+Status on 2026-09-11: implementation and emulator tests are saved. The preview-only
+`bookSlotPreview` function and redesign preview frontend are deployed for owner testing.
+The live `bookSlot` function and live frontend have NOT received this capacity change.
 
 ## Intended Rules
 
@@ -20,16 +19,15 @@ frontend have been published. The existing redesign preview still has the earlie
 - A per-day `bookingCapacityDays` transaction document serializes adjacent-slot bookings.
 - `bookSlotPreview` is a separate callable name for preview isolation. Development mode
   and `.env.preview` select it. Production still calls `bookSlot`.
-- The shared handler source changes both exported callables, but deployment can and
-  should initially target ONLY `functions:bookSlotPreview`.
+- The shared handler source changes both exported callables. The initial deployment
+  targeted ONLY `functions:bookSlotPreview`.
 - Client/admin availability follows realtime booking snapshots.
 - Old capacity guard cleanup is included in source, not deployed.
 
-IMPORTANT: Until `bookSlotPreview` is deployed, local development bookings against
-that endpoint will fail. The live app still uses the unchanged deployed `bookSlot`.
-Mixed live/preview booking traffic does not gain the full shared-guard guarantee until
-both callable deployments use the new handler. Existing live bookings remain real data
-in a Firebase Hosting preview; never casually test with real client accounts.
+The live app still uses the unchanged deployed `bookSlot`. Mixed live/preview booking
+traffic does not gain the full shared-guard guarantee until both callable deployments
+use the new handler. Existing live bookings remain real data in a Firebase Hosting
+preview; never casually test with real client accounts.
 
 ## Verification Completed
 
@@ -37,8 +35,8 @@ in a Firebase Hosting preview; never casually test with real client accounts.
 - Nine isolated Firestore emulator cases: concurrent materialization, adjacent races,
   both neighbors, cancellation races, legacy duplicates, admin override, gaps,
   capacities, one-per-day guards and invalid client override flags.
-- Preview build passed. Calendar browser interaction checks and preview deployment
-  remain outstanding.
+- Preview build passed and was published to the `redesign-preview` channel, expiring
+  2026-10-11. Owner interaction checks remain outstanding.
 
 ```powershell
 npm run test:capacity
@@ -53,7 +51,6 @@ Set `JAVA_HOME` and prepend its `bin` folder to the command session's PATH. Test
 
 ## Next Steps
 
-Review the calendar UI and handler changes, deploy only the preview callable, rebuild
-with `npm run build:preview`, and publish only the `redesign-preview` hosting channel.
-Then have the owner test before any live booking backend changes. Do not deploy all
-functions as part of the unrelated invoice hotfix.
+Have the owner test the preview before any live booking backend changes. Once accepted,
+deploy the existing live callable and release the complete redesign using a separate,
+documented live rollout. Do not deploy all functions for this feature.
