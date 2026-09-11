@@ -1,0 +1,7 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Local demo project only. Never deploy these test rules.
+    match /{document=**} { allow read, write: if true; }
+  }
+}
