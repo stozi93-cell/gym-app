@@ -20,6 +20,9 @@ exports.notifySubscriptionExpiry =
 exports.bookSlot =
   require("./bookings/bookSlot").bookSlot;
 
+exports.bookSlotPreview =
+  require("./bookings/bookSlot").bookSlotPreview;
+
 exports.checkInBooking =
   require("./bookings/checkInBooking").checkInBooking;
 

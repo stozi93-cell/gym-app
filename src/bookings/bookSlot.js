@@ -1,7 +1,10 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 
-const callBookSlot = httpsCallable(functions, "bookSlot");
+const callBookSlot = httpsCallable(
+  functions,
+  import.meta.env.VITE_BOOKING_FUNCTION || (import.meta.env.DEV ? "bookSlotPreview" : "bookSlot")
+);
 
 export function getTemplateSlotId(templateId, timestamp) {
   return `tpl_${templateId}_${timestamp.getTime()}`;

@@ -1,8 +1,14 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const {
+  getCapacity,
+  getBelgradeDayKey,
+  getWindowTimestamps,
+  countBookingsByTimestamp,
+  getSlotAvailability,
+} = require("./capacity.mjs");
 
 const REGION = "europe-west8";
-const DEFAULT_CAPACITY = 5;
 const BOOKING_CUTOFF_HOURS = 1;
 const WEEKDAYS = {
   Sun: 0,
@@ -14,13 +20,6 @@ const WEEKDAYS = {
   Sat: 6,
 };
 
-function getCapacity(value) {
-  const capacity = Number(value);
-  return Number.isFinite(capacity) && capacity > 0
-    ? capacity
-    : DEFAULT_CAPACITY;
-}
-
 function templateSlotId(templateId, timestampMillis) {
   return `tpl_${templateId}_${timestampMillis}`;
 }
@@ -31,22 +30,6 @@ function parseTimestampMillis(value) {
     throw new HttpsError("invalid-argument", "Termin nema ispravno vreme.");
   }
   return timestampMillis;
-}
-
-function getBelgradeDayKey(timestampMillis) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Europe/Belgrade",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    })
-      .formatToParts(new Date(timestampMillis))
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, part.value])
-  );
-
-  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function isTemplateOccurrence(template, timestampMillis) {
@@ -73,7 +56,7 @@ function isTemplateOccurrence(template, timestampMillis) {
   );
 }
 
-exports.bookSlot = onCall({ region: REGION }, async (request) => {
+async function handleBookSlot(request) {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Morate biti prijavljeni.");
   }
@@ -120,6 +103,10 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
     let newSlotData = null;
     let bookingDayRef = null;
     const bookingDayKey = getBelgradeDayKey(timestampMillis);
+    // Adjacent slots share this document, including before either slot exists.
+    // Reservation documents remain the source of counts, so deletes free space immediately.
+    const capacityDayRef = db.doc(`bookingCapacityDays/${bookingDayKey}`);
+    await transaction.get(capacityDayRef);
 
     if (!isAdmin) {
       bookingDayRef = db.doc(`bookingDays/${requestedUserId}_${bookingDayKey}`);
@@ -201,24 +188,52 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
       }
 
       slotData = slotSnap.data();
+      if (slotData.timestamp?.toMillis() !== timestampMillis) {
+        throw new HttpsError("failed-precondition", "Vreme termina je promenjeno. Osvežite raspored.");
+      }
     }
 
     const matchingSlotIds = new Set(matchingSlotsSnap.docs.map((doc) => doc.id));
     matchingSlotIds.add(slotRef.id);
 
-    let bookingCount = 0;
-    let alreadyBooked = false;
+    const occurrenceBookings = new Map();
 
     for (const slotId of matchingSlotIds) {
       const bookingSnap = await transaction.get(
         db.collection("bookings").where("slotId", "==", slotId)
       );
 
-      bookingCount += bookingSnap.size;
-      alreadyBooked ||= bookingSnap.docs.some(
-        (doc) => doc.data().userId === requestedUserId
-      );
+      bookingSnap.docs.forEach((doc) => occurrenceBookings.set(doc.id, { id: doc.id, ...doc.data() }));
     }
+
+    const windowTimestamps = getWindowTimestamps(timestampMillis)
+      .map((value) => admin.firestore.Timestamp.fromMillis(value));
+    const windowSlots = await transaction.get(
+      db.collection("slots").where("timestamp", "in", windowTimestamps)
+    );
+    const windowBookings = new Map(occurrenceBookings);
+    const timestampBookings = await transaction.get(
+      db.collection("bookings").where("slotTimestamp", "in", windowTimestamps)
+    );
+    timestampBookings.docs.forEach((doc) => windowBookings.set(doc.id, { id: doc.id, ...doc.data() }));
+
+    const neighborSlotIds = windowSlots.docs.filter((doc) => !matchingSlotIds.has(doc.id)).map((doc) => doc.id);
+    for (let index = 0; index < neighborSlotIds.length; index += 10) {
+      const neighborBookings = await transaction.get(
+        db.collection("bookings").where("slotId", "in", neighborSlotIds.slice(index, index + 10))
+      );
+      neighborBookings.docs.forEach((doc) => windowBookings.set(doc.id, { id: doc.id, ...doc.data() }));
+    }
+
+    const slots = windowSlots.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const counts = countBookingsByTimestamp([...windowBookings.values()], slots);
+    const availability = getSlotAvailability({ timestamp, capacity: slotData.capacity }, counts);
+    const bookingCount = availability.booked;
+    const alreadyBooked = [...windowBookings.values()].some((booking) =>
+      booking.userId === requestedUserId && (
+        matchingSlotIds.has(booking.slotId) || booking.slotTimestamp?.toMillis() === timestampMillis
+      )
+    );
 
     if (alreadyBooked) {
       throw new HttpsError("already-exists", "Klijent je vec rezervisao ovaj termin.");
@@ -232,12 +247,20 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
       throw new HttpsError("failed-precondition", "Termin je zakljucan.");
     }
 
-    const capacity = getCapacity(slotData.capacity);
-    if (bookingCount >= capacity && !allowOverbook && !adminOverride) {
-      throw new HttpsError("resource-exhausted", "Termin je popunjen.");
+    if (availability.available === 0 && !allowOverbook && !adminOverride) {
+      throw new HttpsError("resource-exhausted",
+        availability.neighborLimited
+          ? "Termin je popunjen zbog rezervacija u susednim terminima. Izaberite drugi termin."
+          : "Termin je popunjen."
+      );
     }
 
     const nextBookingCount = bookingCount + 1;
+
+    transaction.set(capacityDayRef, {
+      slotTimestamp: timestamp,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
 
     if (newSlotData) {
       transaction.set(slotRef, {
@@ -271,6 +294,11 @@ exports.bookSlot = onCall({ region: REGION }, async (request) => {
     return {
       bookingId: bookingRef.id,
       slotId: slotRef.id,
+      overCapacity: nextBookingCount > availability.effectiveCapacity,
     };
   });
-});
+}
+
+exports.bookSlot = onCall({ region: REGION }, handleBookSlot);
+// Only deploy this endpoint during preview; the existing live endpoint stays unchanged.
+exports.bookSlotPreview = onCall({ region: REGION }, handleBookSlot);

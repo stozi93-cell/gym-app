@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   getDocs,
@@ -21,37 +21,48 @@ import DayPicker, {
   buildDayPickerDays,
   makeDayKey,
 } from "../components/ui/DayPicker";
+import {
+  getCapacity,
+  countBookingsByTimestamp,
+  getSlotAvailability,
+} from "../../functions/bookings/capacity.mjs";
 
 const WINDOW_DAYS = 7;
-const DEFAULT_CAPACITY = 5;
 const BOOKING_CUTOFF_HOURS = 1;
-
-function getCapacity(value) {
-  const capacity = Number(value);
-  return Number.isFinite(capacity) && capacity > 0
-    ? capacity
-    : DEFAULT_CAPACITY;
-}
 
 export default function Bookings() {
   const [slots, setSlots] = useState([]);
-  const [bookings, setBookings] = useState([]);
-  const [bookingCounts, setBookingCounts] = useState({});
-  const [templates, setTemplates] = useState([]);
+  const [allBookings, setAllBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate] = useState(null);
   const [selectedDayKey, setSelectedDayKey] = useState(() =>
     makeDayKey(new Date())
   );
   const refreshTimerRef = useRef(null);
+  const loadRequestRef = useRef(0);
+  const actionPendingRef = useRef(false);
+  const [actionPending, setActionPending] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
+  const bookings = useMemo(
+    () => allBookings.filter((booking) => booking.userId === auth.currentUser?.uid),
+    [allBookings]
+  );
+  const countsByTimestamp = useMemo(
+    () => countBookingsByTimestamp(allBookings, slots),
+    [allBookings, slots]
+  );
+  const availabilityBySlot = useMemo(
+    () => Object.fromEntries(slots.map((slot) => [slot.id, getSlotAvailability(slot, countsByTimestamp)])),
+    [slots, countsByTimestamp]
+  );
 
   useEffect(() => {
     loadData();
   }, []);
 
   useEffect(() => {
-    let initialSnapshotsRemaining = 3;
+    let initialSnapshotsRemaining = 2;
 
     const scheduleRefresh = () => {
       if (initialSnapshotsRemaining > 0) {
@@ -61,13 +72,20 @@ export default function Bookings() {
 
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = setTimeout(() => {
-        loadData(selectedDate);
+        loadData(selectedDate, true);
       }, 150);
     };
 
     const unsubBookings = onSnapshot(
       collection(db, "bookings"),
-      scheduleRefresh
+      (snapshot) => {
+        setAllBookings(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+        setBookingsLoading(false);
+      },
+      () => {
+        setBookingsLoading(true);
+        setStatusMessage("Raspoloživost nije učitana. Proverite vezu i osvežite stranicu.");
+      }
     );
     const unsubSlots = onSnapshot(
       collection(db, "slots"),
@@ -140,8 +158,10 @@ export default function Bookings() {
 
   /* ---------------- data load ---------------- */
 
-  async function loadData(dateOverride) {
-    setLoading(true);
+  async function loadData(dateOverride, background = false) {
+    const requestId = ++loadRequestRef.current;
+    if (!background) setLoading(true);
+    try {
 
     const startDate = dateOverride ? new Date(dateOverride) : new Date();
 startDate.setHours(0, 0, 0, 0);
@@ -158,7 +178,6 @@ const end = Timestamp.fromDate(endDate);
       id: d.id,
       ...d.data(),
     }));
-    setTemplates(tplData);
 
     // real slots
     const slotSnap = await getDocs(
@@ -220,52 +239,14 @@ const end = Timestamp.fromDate(endDate);
       (a, b) => a.timestamp - b.timestamp
     );
 
-    setSlots(allSlots);
-
-    // bookings
-    const bookingSnap = await getDocs(
-      query(
-        collection(db, "bookings"),
-        where("userId", "==", auth.currentUser.uid)
-      )
-    );
-
-    const userBookings = bookingSnap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    setBookings(userBookings);
-
-    // counts (real slots only)
-    const counts = {};
-    const realSlotIds = realSlots.map((s) => s.id);
-
-    if (realSlotIds.length) {
-      const CHUNK = 10;
-      for (let i = 0; i < realSlotIds.length; i += CHUNK) {
-        const snap = await getDocs(
-          query(
-            collection(db, "bookings"),
-            where("slotId", "in", realSlotIds.slice(i, i + CHUNK))
-          )
-        );
-        snap.docs.forEach((b) => {
-          const id = b.data().slotId;
-          counts[id] = (counts[id] || 0) + 1;
-        });
+    if (requestId === loadRequestRef.current) setSlots(allSlots);
+    } catch {
+      if (requestId === loadRequestRef.current) {
+        setStatusMessage("Raspored nije učitan. Proverite vezu i osvežite stranicu.");
       }
+    } finally {
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
-
-    const displayedCounts = {};
-    allSlots.forEach((slot) => {
-      displayedCounts[slot.id] = (slot.slotIds || [slot.id]).reduce(
-        (sum, slotId) => sum + (counts[slotId] || 0),
-        0
-      );
-    });
-
-    setBookingCounts(displayedCounts);
-    setLoading(false);
   }
 
   /* ---------------- booking ---------------- */
@@ -279,6 +260,7 @@ const end = Timestamp.fromDate(endDate);
   }
 
   async function book(slot) {
+    if (actionPendingRef.current || bookingsLoading) return;
     if (slot.locked) {
   alert("Ovaj termin je zaključan.");
   return;
@@ -289,28 +271,41 @@ const end = Timestamp.fromDate(endDate);
       return;
     }
 
-    if ((bookingCounts[slot.id] || 0) >= slot.capacity) {
+    if (availabilityBySlot[slot.id]?.available === 0) {
       alert("Termin je popunjen.");
       return;
     }
 
+    actionPendingRef.current = true;
+    setActionPending(true);
     try {
       await createBooking({ slot });
-      setStatusMessage("Rezervacija je sacuvana.");
-      loadData(selectedDate);
+      setStatusMessage("Rezervacija je sačuvana.");
     } catch (error) {
       const message = getBookingErrorMessage(error);
       setStatusMessage(message);
       alert(message);
+    } finally {
+      actionPendingRef.current = false;
+      setActionPending(false);
     }
   }
 
   async function cancel(slotId) {
+    if (actionPendingRef.current) return;
     const b = bookings.find((b) => b.slotId === slotId);
     if (!b) return;
-    await deleteDoc(doc(db, "bookings", b.id));
-    setStatusMessage("Rezervacija je otkazana.");
-    loadData(selectedDate);
+    actionPendingRef.current = true;
+    setActionPending(true);
+    try {
+      await deleteDoc(doc(db, "bookings", b.id));
+      setStatusMessage("Rezervacija je otkazana.");
+    } catch {
+      setStatusMessage("Rezervacija nije otkazana. Pokušajte ponovo.");
+    } finally {
+      actionPendingRef.current = false;
+      setActionPending(false);
+    }
   }
 
   if (loading) {
@@ -526,7 +521,8 @@ const end = Timestamp.fromDate(endDate);
               title="Prepodne"
               slots={morningSlots}
               bookings={bookings}
-              bookingCounts={bookingCounts}
+              availabilityBySlot={availabilityBySlot}
+              actionPending={actionPending || bookingsLoading}
               userBookingForDay={userBookingForDay}
               hasSlotId={hasSlotId}
               formatTime={formatTime}
@@ -539,7 +535,8 @@ const end = Timestamp.fromDate(endDate);
               title="Popodne"
               slots={afternoonSlots}
               bookings={bookings}
-              bookingCounts={bookingCounts}
+              availabilityBySlot={availabilityBySlot}
+              actionPending={actionPending || bookingsLoading}
               userBookingForDay={userBookingForDay}
               hasSlotId={hasSlotId}
               formatTime={formatTime}
@@ -558,7 +555,8 @@ function SlotColumn({
   title,
   slots,
   bookings,
-  bookingCounts,
+  availabilityBySlot,
+  actionPending,
   userBookingForDay,
   hasSlotId,
   formatTime,
@@ -577,7 +575,8 @@ function SlotColumn({
             key={slot.id}
             slot={slot}
             bookings={bookings}
-            bookingCounts={bookingCounts}
+            availabilityBySlot={availabilityBySlot}
+            actionPending={actionPending}
             userBookingForDay={userBookingForDay}
             hasSlotId={hasSlotId}
             formatTime={formatTime}
@@ -599,7 +598,8 @@ function SlotColumn({
 function SlotCard({
   slot,
   bookings,
-  bookingCounts,
+  availabilityBySlot,
+  actionPending,
   userBookingForDay,
   hasSlotId,
   formatTime,
@@ -612,8 +612,8 @@ function SlotCard({
   const checkedIn = booking?.checkedIn === true;
   const hasBookingThatDay = !!userBookingForDay;
   const isUsersSlotForDay = hasSlotId(slot, userBookingForDay?.slotId);
-  const count = bookingCounts[slot.id] || 0;
-  const full = count >= slot.capacity;
+  const available = availabilityBySlot[slot.id]?.available || 0;
+  const full = available === 0;
   const allowed = !booked && !slot.locked && canBook(slot.timestamp);
   const disabledByOtherBooking = hasBookingThatDay && !isUsersSlotForDay && !booked;
 
@@ -630,14 +630,15 @@ function SlotCard({
           {formatTime(slot.timestamp)}
         </span>
         <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-neutral-300">
-          {count}/{slot.capacity}
+          Slobodno: {available}
         </span>
       </div>
 
       <div className="mt-2">
         {!booked && !full && allowed && !hasBookingThatDay && (
           <button
-            className="w-full rounded-lg border border-brand-green-500/25 bg-brand-green-500/10 px-2 py-1.5 text-xs font-semibold text-brand-green-300 transition hover:bg-brand-green-500/15"
+            disabled={actionPending}
+            className="w-full rounded-lg border border-brand-green-500/25 bg-brand-green-500/10 px-2 py-1.5 text-xs font-semibold text-brand-green-300 transition hover:bg-brand-green-500/15 disabled:opacity-50"
             onClick={() => book(slot)}
           >
             Rezerviši
@@ -646,7 +647,8 @@ function SlotCard({
 
         {booked && !checkedIn && (
           <button
-            className="w-full rounded-lg border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/15"
+            disabled={actionPending}
+            className="w-full rounded-lg border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
             onClick={() => cancel(booking.slotId)}
           >
             Otkaži

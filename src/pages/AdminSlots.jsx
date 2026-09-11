@@ -28,8 +28,12 @@ import {
   getTemplateSlotId,
 } from "../bookings/bookSlot";
 import { checkInBooking } from "../bookings/checkInBooking";
+import {
+  getCapacity,
+  countBookingsByTimestamp,
+  getSlotAvailability,
+} from "../../functions/bookings/capacity.mjs";
 
-const DEFAULT_CAPACITY = 5;
 const MANUAL_SLOT_CAPACITY = 4;
 const WINDOW_DAYS = 7;
 
@@ -63,13 +67,6 @@ function LockIcon({ locked }) {
       <path d="M7 11V7a5 5 0 0 1 9.9-1" />
     </svg>
   );
-}
-
-function getCapacity(value) {
-  const capacity = Number(value);
-  return Number.isFinite(capacity) && capacity > 0
-    ? capacity
-    : DEFAULT_CAPACITY;
 }
 
 /* ─────────────────────────────
@@ -123,6 +120,11 @@ export default function AdminSlots() {
   const [bookingSlot, setBookingSlot] = useState(null);
   const [clientSearch, setClientSearch] = useState("");
   const [clientBookingPending, setClientBookingPending] = useState(false);
+  const loadRequestRef = useRef(0);
+  const countsByTimestamp = useMemo(
+    () => countBookingsByTimestamp(bookings, slots),
+    [bookings, slots]
+  );
 
   useEffect(() => {
   if (filterDate) {
@@ -142,8 +144,30 @@ export default function AdminSlots() {
     });
   }, []);
 
-  async function loadData(dateOverride) {
-    setLoading(true);
+  useEffect(() => {
+    let initialSnapshotsRemaining = 2;
+    let timer;
+    const refreshSlots = () => {
+      if (initialSnapshotsRemaining > 0) {
+        initialSnapshotsRemaining -= 1;
+        return;
+      }
+      clearTimeout(timer);
+      timer = setTimeout(() => loadData(filterDate ? dateFromDayKey(filterDate) : undefined, true), 150);
+    };
+    const unsubSlots = onSnapshot(collection(db, "slots"), refreshSlots);
+    const unsubTemplates = onSnapshot(collection(db, "slotTemplates"), refreshSlots);
+    return () => {
+      clearTimeout(timer);
+      unsubSlots();
+      unsubTemplates();
+    };
+  }, [filterDate]);
+
+  async function loadData(dateOverride, background = false) {
+    const requestId = ++loadRequestRef.current;
+    if (!background) setLoading(true);
+    try {
 
     const startDate = dateOverride
   ? new Date(dateOverride)
@@ -211,10 +235,8 @@ const manualSlots = realSlots.filter(
     )
 );
 
-setSlots(
-  [...mergedTemplateSlots, ...manualSlots].sort(
+const nextSlots = [...mergedTemplateSlots, ...manualSlots].sort(
     (a, b) => a.timestamp - b.timestamp
-  )
 );
 
     const userSnap = await getDocs(collection(db, "users"));
@@ -239,6 +261,8 @@ setSlots(
       }
     });
 
+    if (requestId !== loadRequestRef.current) return;
+    setSlots(nextSlots);
     setUsers(
       userSnap.docs.map((d) => {
         const data = d.data();
@@ -251,13 +275,21 @@ setSlots(
       })
     );
 
-    setLoading(false);
+    } catch {
+      if (requestId === loadRequestRef.current) {
+        setStatusMessage("Raspored nije učitan. Proverite vezu i osvežite stranicu.");
+      }
+    } finally {
+      if (requestId === loadRequestRef.current) setLoading(false);
+    }
   }
 
   /* helpers */
   const slotBookings = (slot) => {
     const slotIds = slot.slotIds || [slot.id];
-    return bookings.filter((b) => slotIds.includes(b.slotId));
+    return bookings.filter((b) =>
+      slotIds.includes(b.slotId) || b.slotTimestamp?.toMillis() === slot.timestamp.getTime()
+    );
   };
   const beginBookingAction = (bookingId) => {
     if (pendingBookingIdsRef.current.has(bookingId)) return false;
@@ -310,13 +342,15 @@ setSlots(
     if (!userId) return false;
 
     try {
-      await createBooking({
+      const result = await createBooking({
         slot,
         userId,
         adminOverride: true,
       });
-      setStatusMessage("Rezervacija je sacuvana.");
-      loadData(filterDate ? new Date(filterDate) : undefined);
+      setStatusMessage(result.overCapacity
+        ? "Rezervacija je sačuvana preko uobičajenog limita."
+        : "Rezervacija je sačuvana."
+      );
       return true;
     } catch (error) {
       const message = getBookingErrorMessage(error);
@@ -534,6 +568,7 @@ setSlots(
 
         {selectedDaySlots.map((slot) => {
           const bks = slotBookings(slot);
+          const availability = getSlotAvailability(slot, countsByTimestamp);
 
           return (
             <div
@@ -553,9 +588,15 @@ setSlots(
                     })}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <StatusPill tone={bks.length >= slot.capacity ? "red" : "neutral"}>
-                      {bks.length} / {slot.capacity}
+                    <StatusPill tone={availability.available === 0 ? "red" : "neutral"}>
+                      {availability.booked} / {availability.effectiveCapacity}
                     </StatusPill>
+                    {availability.neighborLimited && (
+                      <StatusPill tone="amber">Susedni termini</StatusPill>
+                    )}
+                    {availability.overCapacity && (
+                      <StatusPill tone="red">Preko limita</StatusPill>
+                    )}
                     {slot.locked && (
                       <StatusPill tone="red">Zaključano</StatusPill>
                     )}
@@ -685,6 +726,12 @@ setSlots(
               placeholder="Pretraži klijente"
               className="mb-3 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-3 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
             />
+
+            {getSlotAvailability(bookingSlot, countsByTimestamp).available === 0 && (
+              <p className="mb-3 text-xs text-amber-300">
+                Termin je popunjen. Rezervacija će biti dodata preko uobičajenog limita.
+              </p>
+            )}
 
             <div className="max-h-72 space-y-1 overflow-y-auto">
               {matchingUsers.map((user) => {
