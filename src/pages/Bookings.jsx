@@ -409,10 +409,10 @@ const end = Timestamp.fromDate(endDate);
     return !!booking || canBook(slot.timestamp);
   });
   const morningSlots = visibleSelectedDaySlots.filter(
-    (slot) => slot.timestamp.getHours() < 16
+    (slot) => slot.timestamp.getHours() * 60 + slot.timestamp.getMinutes() < 15 * 60 + 30
   );
   const afternoonSlots = visibleSelectedDaySlots.filter(
-    (slot) => slot.timestamp.getHours() >= 16
+    (slot) => slot.timestamp.getHours() * 60 + slot.timestamp.getMinutes() >= 15 * 60 + 30
   );
 
   /* ---------------- JSX ---------------- */

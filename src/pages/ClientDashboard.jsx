@@ -175,7 +175,7 @@ function getPreferredShift(checkedBookings) {
     (result, booking) => {
       const date = toDate(booking.slotTimestamp);
       if (!date) return result;
-      if (date.getHours() < 16) result.morning += 1;
+      if (date.getHours() * 60 + date.getMinutes() < 15 * 60 + 30) result.morning += 1;
       else result.afternoon += 1;
       return result;
     },
