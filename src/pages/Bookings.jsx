@@ -504,26 +504,6 @@ export function SlotColumn({
   scrollTargetSlotId,
 }) {
   const scrollRef = useRef(null);
-  const [showBottomShadow, setShowBottomShadow] = useState(false);
-
-  useEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return undefined;
-
-    const updateShadow = () => {
-      const remaining =
-        container.scrollHeight - container.scrollTop - container.clientHeight;
-      setShowBottomShadow(remaining > 2);
-    };
-    const frame = window.requestAnimationFrame(updateShadow);
-    const resizeObserver = new ResizeObserver(updateShadow);
-    resizeObserver.observe(container);
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      resizeObserver.disconnect();
-    };
-  }, [slots.length]);
 
   useEffect(() => {
     if (!scrollTargetSlotId) return;
@@ -546,13 +526,6 @@ export function SlotColumn({
           role="region"
           tabIndex={0}
           aria-label={`Termini - ${title}`}
-          onScroll={() => {
-            const container = scrollRef.current;
-            const remaining = container
-              ? container.scrollHeight - container.scrollTop - container.clientHeight
-              : 0;
-            setShowBottomShadow(remaining > 2);
-          }}
           className="booking-shift-scroll absolute inset-0 space-y-2 overflow-y-scroll pb-2 outline-none"
         >
           {slots.map((slot) => (
@@ -576,13 +549,6 @@ export function SlotColumn({
             </div>
           )}
         </div>
-        {showBottomShadow && (
-          <div
-            aria-hidden="true"
-            data-scroll-shadow={title}
-            className="pointer-events-none absolute inset-x-2 bottom-0 h-px shadow-[0_-10px_18px_8px_rgba(3,6,13,0.78)]"
-          />
-        )}
       </div>
     </section>
   );
