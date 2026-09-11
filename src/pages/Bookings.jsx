@@ -529,7 +529,7 @@ export function SlotColumn({
         role="region"
         tabIndex={0}
         aria-label={`Termini - ${title}`}
-        className="booking-shift-scroll relative min-h-48 max-h-[calc(100dvh-20rem)] space-y-2 overflow-y-auto pb-2 outline-none"
+        className="booking-shift-scroll relative min-h-48 max-h-[calc(100dvh-17rem)] space-y-2 overflow-y-auto pb-2 outline-none"
       >
         {slots.map((slot) => (
           <SlotCard
