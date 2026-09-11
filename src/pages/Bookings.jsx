@@ -504,6 +504,26 @@ export function SlotColumn({
   scrollTargetSlotId,
 }) {
   const scrollRef = useRef(null);
+  const [showBottomShadow, setShowBottomShadow] = useState(false);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return undefined;
+
+    const updateShadow = () => {
+      const remaining =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      setShowBottomShadow(remaining > 2);
+    };
+    const frame = window.requestAnimationFrame(updateShadow);
+    const resizeObserver = new ResizeObserver(updateShadow);
+    resizeObserver.observe(container);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+    };
+  }, [slots.length]);
 
   useEffect(() => {
     if (!scrollTargetSlotId) return;
@@ -524,32 +544,48 @@ export function SlotColumn({
       <p className="px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
         {title}
       </p>
-      <div
-        ref={scrollRef}
-        role="region"
-        tabIndex={0}
-        aria-label={`Termini - ${title}`}
-        className="booking-shift-scroll relative min-h-48 max-h-[calc(100dvh-17rem)] space-y-2 overflow-y-auto pb-2 outline-none"
-      >
-        {slots.map((slot) => (
-          <SlotCard
-            key={slot.id}
-            slot={slot}
-            bookings={bookings}
-            availabilityBySlot={availabilityBySlot}
-            actionPending={actionPending}
-            userBookingForDay={userBookingForDay}
-            hasSlotId={hasSlotId}
-            formatTime={formatTime}
-            book={book}
-            cancel={cancel}
-            canBook={canBook}
+      <div className="relative">
+        <div
+          ref={scrollRef}
+          role="region"
+          tabIndex={0}
+          aria-label={`Termini - ${title}`}
+          onScroll={() => {
+            const container = scrollRef.current;
+            const remaining = container
+              ? container.scrollHeight - container.scrollTop - container.clientHeight
+              : 0;
+            setShowBottomShadow(remaining > 2);
+          }}
+          className="booking-shift-scroll relative min-h-48 max-h-[calc(100dvh-17rem)] space-y-2 overflow-y-auto pb-2 outline-none"
+        >
+          {slots.map((slot) => (
+            <SlotCard
+              key={slot.id}
+              slot={slot}
+              bookings={bookings}
+              availabilityBySlot={availabilityBySlot}
+              actionPending={actionPending}
+              userBookingForDay={userBookingForDay}
+              hasSlotId={hasSlotId}
+              formatTime={formatTime}
+              book={book}
+              cancel={cancel}
+              canBook={canBook}
+            />
+          ))}
+          {!slots.length && (
+            <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-neutral-500">
+              Nema
+            </div>
+          )}
+        </div>
+        {showBottomShadow && (
+          <div
+            aria-hidden="true"
+            data-scroll-shadow={title}
+            className="pointer-events-none absolute inset-x-2 bottom-0 h-px shadow-[0_-10px_18px_8px_rgba(3,6,13,0.78)]"
           />
-        ))}
-        {!slots.length && (
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-neutral-500">
-            Nema
-          </div>
         )}
       </div>
     </section>
