@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "build:preview": "vite build --mode preview",
-    "test:capacity": "node --test tests/capacity.test.mjs",
+    "test:capacity": "node --test tests/capacity.test.mjs tests/booking-day-selection.test.mjs",
     "test:capacity:integration": "firebase emulators:exec --project demo-gym-capacity --only firestore --config tests/firebase.capacity.json \"node --test tests/booking-capacity.integration.cjs\"",
     "preview": "vite preview",
     "lint": "eslint .",

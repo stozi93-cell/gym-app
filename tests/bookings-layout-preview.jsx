@@ -15,7 +15,7 @@ const makeSlots = (hours) => hours.map((time, index) => {
 });
 const morning = makeSlots(["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00"]);
 const afternoon = makeSlots(["15:30", "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30"]);
-const reserved = morning[2];
+const reserved = morning[6];
 const bookings = [{ id: "demo", slotId: reserved.id, checkedIn: false }];
 const availability = Object.fromEntries([...morning, ...afternoon].map((slot) => [slot.id, { available: slot.id === reserved.id ? 3 : 4 }]));
 const formatTime = (date) => date.toLocaleTimeString("sr-Latn-RS", { hour: "2-digit", minute: "2-digit" });
@@ -23,6 +23,7 @@ const common = {
   bookings, availabilityBySlot: availability, actionPending: false,
   userBookingForDay: bookings[0], hasSlotId: (slot, id) => slot.id === id,
   formatTime, book: () => {}, cancel: () => {}, canBook: () => true,
+  scrollTargetSlotId: reserved.id,
 };
 
 export function Preview() {

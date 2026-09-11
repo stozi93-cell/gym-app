@@ -25,6 +25,15 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+.booking-shift-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.booking-shift-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 ::selection {
   background: rgba(26, 92, 255, 0.35);
 }

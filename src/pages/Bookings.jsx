@@ -15,6 +15,7 @@ import {
   bookSlot as createBooking,
   getBookingErrorMessage,
 } from "../bookings/bookSlot";
+import { selectInitialBookingDay } from "../bookings/selectInitialBookingDay.mjs";
 import { Panel } from "../components/ui/Primitives";
 import DayPicker, {
   buildDayPickerDays,
@@ -41,6 +42,8 @@ export default function Bookings() {
   const refreshTimerRef = useRef(null);
   const loadRequestRef = useRef(0);
   const actionPendingRef = useRef(false);
+  const initialDayResolvedRef = useRef(false);
+  const userSelectedDayRef = useRef(false);
   const [actionPending, setActionPending] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const bookings = useMemo(
@@ -112,6 +115,45 @@ export default function Bookings() {
       setSelectedDayKey(visibleDays[0].key);
     }
   }, [selectedDate, selectedDayKey]);
+
+  useEffect(() => {
+    if (
+      loading ||
+      bookingsLoading ||
+      initialDayResolvedRef.current ||
+      userSelectedDayRef.current
+    ) {
+      return;
+    }
+
+    const today = new Date();
+    const todayKey = makeDayKey(today);
+    const visibleDays = buildDayPickerDays(today, 6);
+    const slotsForDay = (dayKey) =>
+      slots.filter((slot) => makeDayKey(slot.timestamp) === dayKey);
+    const hasUserBooking = (daySlots) =>
+      daySlots.some((slot) =>
+        bookings.some((booking) => hasSlotId(slot, booking.slotId))
+      );
+    const isBookable = (slot) =>
+      !slot.locked &&
+      canBook(slot.timestamp) &&
+      availabilityBySlot[slot.id]?.available > 0;
+
+    initialDayResolvedRef.current = true;
+    const slotsByDay = Object.fromEntries(
+      visibleDays.map((day) => [day.key, slotsForDay(day.key)])
+    );
+    slotsByDay[todayKey] ||= slotsForDay(todayKey);
+    const initialDayKey = selectInitialBookingDay({
+      todayKey,
+      days: visibleDays,
+      slotsByDay,
+      hasUserBooking,
+      isBookable,
+    });
+    if (initialDayKey !== todayKey) setSelectedDayKey(initialDayKey);
+  }, [availabilityBySlot, bookings, bookingsLoading, loading, slots]);
 
   /* ---------------- helpers ---------------- */
 
@@ -366,6 +408,9 @@ const end = Timestamp.fromDate(endDate);
   const userBookingForDay = bookings.find((booking) =>
     selectedDaySlots.some((slot) => hasSlotId(slot, booking.slotId))
   );
+  const userBookedSlotForDay = selectedDaySlots.find((slot) =>
+    hasSlotId(slot, userBookingForDay?.slotId)
+  );
   const visibleSelectedDaySlots = selectedDaySlots.filter((slot) => {
     const booking = bookings.find((item) => hasSlotId(slot, item.slotId));
     return !!booking || canBook(slot.timestamp);
@@ -391,7 +436,10 @@ const end = Timestamp.fromDate(endDate);
         <DayPicker
           days={dayPickerDays}
           selectedKey={selectedDayKey}
-          onSelect={setSelectedDayKey}
+          onSelect={(dayKey) => {
+            userSelectedDayRef.current = true;
+            setSelectedDayKey(dayKey);
+          }}
           metaByKey={dayMetaByKey}
         />
       </Panel>
@@ -417,6 +465,7 @@ const end = Timestamp.fromDate(endDate);
               book={book}
               cancel={cancel}
               canBook={canBook}
+              scrollTargetSlotId={userBookedSlotForDay?.id}
             />
 
             <SlotColumn
@@ -431,6 +480,7 @@ const end = Timestamp.fromDate(endDate);
               book={book}
               cancel={cancel}
               canBook={canBook}
+              scrollTargetSlotId={userBookedSlotForDay?.id}
             />
           </div>
         )}
@@ -451,35 +501,85 @@ export function SlotColumn({
   book,
   cancel,
   canBook,
+  scrollTargetSlotId,
 }) {
+  const scrollRef = useRef(null);
+  const [showBottomShadow, setShowBottomShadow] = useState(false);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return undefined;
+
+    const updateShadow = () => {
+      const remaining =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      setShowBottomShadow(remaining > 2);
+    };
+    const frame = window.requestAnimationFrame(updateShadow);
+    const resizeObserver = new ResizeObserver(updateShadow);
+    resizeObserver.observe(container);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+    };
+  }, [slots.length]);
+
+  useEffect(() => {
+    if (!scrollTargetSlotId) return;
+    const container = scrollRef.current;
+    const target = Array.from(
+      container?.querySelectorAll("[data-slot-id]") || []
+    ).find((element) => element.dataset.slotId === scrollTargetSlotId);
+
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [scrollTargetSlotId]);
+
   return (
     <section className="flex min-h-0 min-w-0 flex-col gap-2">
       <p className="shrink-0 px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
         {title}
       </p>
-      <div
-        aria-label={`Termini - ${title}`}
-        className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pb-2"
-      >
-        {slots.map((slot) => (
-          <SlotCard
-            key={slot.id}
-            slot={slot}
-            bookings={bookings}
-            availabilityBySlot={availabilityBySlot}
-            actionPending={actionPending}
-            userBookingForDay={userBookingForDay}
-            hasSlotId={hasSlotId}
-            formatTime={formatTime}
-            book={book}
-            cancel={cancel}
-            canBook={canBook}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          aria-label={`Termini - ${title}`}
+          onScroll={() => {
+            const container = scrollRef.current;
+            const remaining = container
+              ? container.scrollHeight - container.scrollTop - container.clientHeight
+              : 0;
+            setShowBottomShadow(remaining > 2);
+          }}
+          className="booking-shift-scroll h-full space-y-2 overflow-y-auto overscroll-contain pb-2"
+        >
+          {slots.map((slot) => (
+            <SlotCard
+              key={slot.id}
+              slot={slot}
+              bookings={bookings}
+              availabilityBySlot={availabilityBySlot}
+              actionPending={actionPending}
+              userBookingForDay={userBookingForDay}
+              hasSlotId={hasSlotId}
+              formatTime={formatTime}
+              book={book}
+              cancel={cancel}
+              canBook={canBook}
+            />
+          ))}
+          {!slots.length && (
+            <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-neutral-500">
+              Nema
+            </div>
+          )}
+        </div>
+        {showBottomShadow && (
+          <div
+            aria-hidden="true"
+            data-scroll-shadow={title}
+            className="pointer-events-none absolute inset-x-2 bottom-0 h-px shadow-[0_-10px_18px_8px_rgba(3,6,13,0.78)]"
           />
-        ))}
-        {!slots.length && (
-          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-4 text-center text-xs text-neutral-500">
-            Nema
-          </div>
         )}
       </div>
     </section>
@@ -510,6 +610,7 @@ export function SlotCard({
 
   return (
     <div
+      data-slot-id={slot.id}
       className={`min-h-[76px] rounded-xl border px-2.5 py-2 transition-opacity ${
         slot.locked
           ? "border-red-400/20 bg-red-500/10 text-neutral-500 opacity-70"
