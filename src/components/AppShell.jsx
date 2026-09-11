@@ -73,7 +73,7 @@ export default function AppShell({ children }) {
   return (
     <div
       className="
-        flex h-screen flex-col
+        app-viewport flex flex-col
         bg-background-dark
         text-text-primaryDark
       "
@@ -145,7 +145,7 @@ export default function AppShell({ children }) {
       <main
         className={`min-h-0 flex-1 px-4 py-4 ${
           isBookingsPage
-            ? "flex flex-col overflow-hidden pb-24"
+            ? "grid grid-rows-[minmax(0,1fr)] overflow-hidden pb-24"
             : `overflow-y-auto ${isChatPage ? "pb-4" : "pb-24"}`
         }`}
       >

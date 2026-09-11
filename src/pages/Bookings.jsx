@@ -351,7 +351,7 @@ const end = Timestamp.fromDate(endDate);
 
   if (loading) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {statusMessage && (
         <div className="rounded-xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-4 py-3 text-sm text-brand-blue-300">
           {statusMessage}
@@ -536,13 +536,15 @@ export function SlotColumn({
   }, [scrollTargetSlotId]);
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-col gap-2">
+    <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-2">
       <p className="shrink-0 px-1 text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
         {title}
       </p>
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
+          role="region"
+          tabIndex={0}
           aria-label={`Termini - ${title}`}
           onScroll={() => {
             const container = scrollRef.current;
@@ -551,7 +553,7 @@ export function SlotColumn({
               : 0;
             setShowBottomShadow(remaining > 2);
           }}
-          className="booking-shift-scroll h-full space-y-2 overflow-y-auto overscroll-contain pb-2"
+          className="booking-shift-scroll absolute inset-0 space-y-2 overflow-y-scroll pb-2 outline-none"
         >
           {slots.map((slot) => (
             <SlotCard
