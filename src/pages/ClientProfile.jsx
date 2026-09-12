@@ -56,6 +56,17 @@ function formatDate(value) {
     : "-";
 }
 
+function formatCompactDate(value) {
+  const date = toDate(value);
+  return date
+    ? date.toLocaleDateString("sr-Latn-RS", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "-";
+}
+
 function formatShortDate(value) {
   const date = toDate(value);
   return date
@@ -549,7 +560,7 @@ export default function ClientProfile() {
               {getFullName(user)}
             </h2>
             <p className={`mt-1 text-sm ${lastVisitColor()}`}>
-              Poslednji trening: {formatDate(lastVisit)}
+              Poslednji trening: {formatCompactDate(lastVisit)}
             </p>
             {role === "admin" && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -814,7 +825,7 @@ function MembershipCard({
         <div className="min-w-0">
           <p className="truncate font-semibold text-white">{membership.name}</p>
           <p className="text-sm text-neutral-400">
-            {formatDate(membership.startDate)} - {formatDate(membership.endDate)}
+            {formatCompactDate(membership.startDate)} - {formatCompactDate(membership.endDate)}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
