@@ -1,6 +1,6 @@
 import { formatDayLabel, formatMessageTime } from "../../chat/messageDisplay";
 
-function PinIcon({ className }) {
+export function PinIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="m16 3 5 5-4.5 4.5 1 4.5-1 1-5-5L6 18.5 4.5 17l5.5-5.5-5-5 1-1 4.5 1L16 3Z" />

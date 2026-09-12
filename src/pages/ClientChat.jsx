@@ -446,7 +446,6 @@ export default function ClientChat() {
               <MessageBubble
                 message={message}
                 mine={mine}
-                currentUserId={user.uid}
                 onReact={reactToMessage}
                 onReply={replyToMessage}
                 onCopy={copyMessage}

@@ -8,6 +8,7 @@ import {
   getMessageStatus,
   linkifyText,
 } from "../../chat/messageDisplay";
+import { PinIcon } from "./PinnedMessagesPanel";
 
 function FileIcon({ className }) {
   return (
@@ -125,7 +126,6 @@ function ReplyPreview({ replyTo, mine }) {
 export default function MessageBubble({
   message,
   mine,
-  currentUserId,
   onReact,
   onReply,
   onCopy,
@@ -293,9 +293,9 @@ export default function MessageBubble({
         )}
 
         {message.pinned && (
-          <p className={`mb-1 text-[10px] font-semibold uppercase tracking-[0.08em] ${mine ? "text-amber-100" : "text-amber-300"}`}>
-            Pinovano
-          </p>
+          <div className="mb-1 flex text-amber-200" aria-label="Pinovano" title="Pinovano">
+            <PinIcon className="h-3.5 w-3.5" />
+          </div>
         )}
 
         <ReplyPreview replyTo={message.replyTo} mine={mine} />

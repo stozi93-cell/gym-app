@@ -338,7 +338,6 @@ export default function AdminChat() {
               <MessageBubble
                 message={message}
                 mine={mine}
-                currentUserId={user?.uid}
                 onReact={reactToMessage}
                 onReply={replyToMessage}
                 onCopy={copyMessage}
