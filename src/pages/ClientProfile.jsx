@@ -58,13 +58,14 @@ function formatDate(value) {
 
 function formatCompactDate(value) {
   const date = toDate(value);
-  return date
+  const formatted = date
     ? date.toLocaleDateString("sr-Latn-RS", {
         day: "numeric",
         month: "short",
         year: "numeric",
       })
     : "-";
+  return formatted.replace(/\.$/, "");
 }
 
 function formatShortDate(value) {
@@ -679,20 +680,21 @@ export default function ClientProfile() {
       )}
 
       {activeProfileTab === "info" && (
-        <Panel className="space-y-3 p-5">
-          <ProfileField label="Ime">
+        <Panel className="p-4">
+          <div className={editMode ? "space-y-2" : "divide-y divide-white/10"}>
+          <ProfileField label="Ime" compact={!editMode}>
             {editMode ? <Input value={formData.name} onChange={(value) => setFormData({ ...formData, name: value })} /> : user.name || "-"}
           </ProfileField>
-          <ProfileField label="Prezime">
+          <ProfileField label="Prezime" compact={!editMode}>
             {editMode ? <Input value={formData.surname} onChange={(value) => setFormData({ ...formData, surname: value })} /> : user.surname || "-"}
           </ProfileField>
-          <ProfileField label="Email">
+          <ProfileField label="Email" compact={!editMode}>
             {editMode ? <Input value={formData.email} onChange={(value) => setFormData({ ...formData, email: value })} /> : user.email || "-"}
           </ProfileField>
-          <ProfileField label="Telefon">
+          <ProfileField label="Telefon" compact={!editMode}>
             {editMode ? <Input value={formData.phone} onChange={(value) => setFormData({ ...formData, phone: value })} /> : user.phone || "-"}
           </ProfileField>
-          <ProfileField label="Datum rođenja">
+          <ProfileField label="Datum rođenja" compact={!editMode}>
             {editMode ? (
               <input
                 type="date"
@@ -702,6 +704,7 @@ export default function ClientProfile() {
               />
             ) : formatDate(user.dob)}
           </ProfileField>
+          </div>
           <EditControls
             editMode={editMode}
             onEdit={() => setEditMode(true)}
@@ -983,7 +986,18 @@ function EditControls({ editMode, onEdit, onSave, onCancel }) {
   );
 }
 
-function ProfileField({ label, children }) {
+function ProfileField({ label, children, compact = false }) {
+  if (compact) {
+    return (
+      <div className="flex min-w-0 items-center justify-between gap-4 py-2 first:pt-0 last:pb-0">
+        <p className="shrink-0 text-xs text-neutral-400">{label}</p>
+        <div className="min-w-0 max-w-[68%] truncate text-right text-sm text-white">
+          {children}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
       <p className="text-xs text-neutral-400">{label}</p>
