@@ -465,6 +465,7 @@ const end = Timestamp.fromDate(endDate);
               book={book}
               cancel={cancel}
               canBook={canBook}
+              resetKey={selectedDayKey}
               scrollTargetSlotId={userBookedSlotForDay?.id}
             />
 
@@ -480,6 +481,7 @@ const end = Timestamp.fromDate(endDate);
               book={book}
               cancel={cancel}
               canBook={canBook}
+              resetKey={selectedDayKey}
               scrollTargetSlotId={userBookedSlotForDay?.id}
             />
           </div>
@@ -501,6 +503,7 @@ export function SlotColumn({
   book,
   cancel,
   canBook,
+  resetKey,
   scrollTargetSlotId,
 }) {
   const scrollRef = useRef(null);
@@ -524,6 +527,10 @@ export function SlotColumn({
       resizeObserver.disconnect();
     };
   }, [slots.length]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [resetKey]);
 
   useEffect(() => {
     if (!scrollTargetSlotId) return;
@@ -584,8 +591,12 @@ export function SlotColumn({
           <div
             aria-hidden="true"
             data-scroll-shadow={title}
-            className="pointer-events-none absolute inset-x-2 bottom-0 h-px shadow-[0_-10px_18px_8px_rgba(3,6,13,0.78)]"
-          />
+            className="pointer-events-none absolute inset-x-0 bottom-0 flex h-10 items-end justify-center bg-gradient-to-t from-[#03060d] via-[#03060d]/80 to-transparent pb-1"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-neutral-950/85 text-neutral-300 shadow-[0_2px_10px_rgba(0,0,0,0.7)]">
+              <ScrollDownIcon className="h-3.5 w-3.5" />
+            </span>
+          </div>
         )}
       </div>
     </section>
@@ -611,6 +622,7 @@ export function SlotCard({
   const isUsersSlotForDay = hasSlotId(slot, userBookingForDay?.slotId);
   const available = availabilityBySlot[slot.id]?.available || 0;
   const full = available === 0;
+  const lowAvailability = available === 1;
   const allowed = !booked && !slot.locked && canBook(slot.timestamp);
   const disabledByOtherBooking = hasBookingThatDay && !isUsersSlotForDay && !booked;
 
@@ -629,7 +641,15 @@ export function SlotCard({
         <span className="text-sm font-semibold leading-tight text-white">
           {formatTime(slot.timestamp)}
         </span>
-        <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-neutral-300">
+        <span
+          className={`rounded-full border px-1.5 py-0.5 text-[10px] ${
+            full
+              ? "border-red-400/30 bg-red-500/10 text-red-300"
+              : lowAvailability
+                ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                : "border-white/10 bg-white/5 text-neutral-300"
+          }`}
+        >
           Slobodno: {available}
         </span>
       </div>
@@ -685,5 +705,21 @@ export function SlotCard({
         )}
       </div>
     </div>
+  );
+}
+
+function ScrollDownIcon({ className }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
   );
 }
