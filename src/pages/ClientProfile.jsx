@@ -620,17 +620,16 @@ export default function ClientProfile() {
 
       {activeProfileTab === "subscriptions" && (
         <Panel className="space-y-4 p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-medium text-neutral-300">Članarine</h3>
-            {role === "admin" && (
+          {role === "admin" && (
+            <div className="flex justify-end">
               <button
                 onClick={() => navigate(`/paketi?clientId=${uid}`)}
                 className="rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 px-3 py-2 text-xs font-medium text-brand-blue-300"
               >
                 Dodaj članarinu
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {overlaps.length > 0 && (
             <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
@@ -719,10 +718,10 @@ export default function ClientProfile() {
 
       {activeProfileTab === "notes" && (
         <Panel className="space-y-3 p-5">
-          <ProfileField label="Ciljevi">
+          <ProfileField label="Ciljevi" preserveWhitespace={!editMode}>
             {editMode ? <Textarea value={formData.goals} onChange={(value) => setFormData({ ...formData, goals: value })} /> : user.goals || "-"}
           </ProfileField>
-          <ProfileField label="Zdravlje">
+          <ProfileField label="Zdravlje" preserveWhitespace={!editMode}>
             {editMode ? <Textarea value={formData.healthNotes} onChange={(value) => setFormData({ ...formData, healthNotes: value })} /> : user.healthNotes || "-"}
           </ProfileField>
           <EditControls
@@ -986,7 +985,7 @@ function EditControls({ editMode, onEdit, onSave, onCancel }) {
   );
 }
 
-function ProfileField({ label, children, compact = false }) {
+function ProfileField({ label, children, compact = false, preserveWhitespace = false }) {
   if (compact) {
     return (
       <div className="flex min-w-0 items-center justify-between gap-4 py-2 first:pt-0 last:pb-0">
@@ -1001,7 +1000,9 @@ function ProfileField({ label, children, compact = false }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
       <p className="text-xs text-neutral-400">{label}</p>
-      <div className="mt-1 text-sm text-white">{children}</div>
+      <div className={`mt-1 text-sm text-white ${preserveWhitespace ? "whitespace-pre-wrap break-words" : ""}`}>
+        {children}
+      </div>
     </div>
   );
 }
