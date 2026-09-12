@@ -384,7 +384,6 @@ export default function ClientProgress() {
   const [status, setStatus] = useState(null);
 
   const todayKey = getDateKey();
-  const fullName = [profile?.name, profile?.surname].filter(Boolean).join(" ");
   const todayLog = healthLogs.find((log) => log.dateKey === todayKey) || {};
   const past7Keys = getPastDateKeys(7);
   const past7Logs = past7Keys.map((key) => healthLogs.find((log) => log.dateKey === key));
@@ -573,30 +572,6 @@ export default function ClientProgress() {
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      {status && (
-        <div
-          className={`rounded-xl border px-4 py-3 text-sm ${
-            status.type === "success"
-              ? "border-brand-green-500/20 bg-brand-green-500/10 text-brand-green-300"
-              : "border-red-400/20 bg-red-500/10 text-red-300"
-          }`}
-        >
-          {status.message}
-        </div>
-      )}
-
-      <div className="px-1">
-        <p className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-500">
-          Napredak
-        </p>
-        <h1 className="mt-1 text-2xl font-semibold text-white">
-          {fullName ? `Pregled za ${profile?.name || fullName}` : "Tvoj napredak"}
-        </h1>
-        <p className="mt-1 text-sm leading-relaxed text-neutral-400">
-          San, ishrana i trening. Prvo smernice, a praćenje samo kada želiš.
-        </p>
-      </div>
-
       <div className="grid grid-cols-5 gap-1 overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/70 p-1">
         {TAB_OPTIONS.map((tab) => (
           <button
@@ -613,6 +588,18 @@ export default function ClientProgress() {
           </button>
         ))}
       </div>
+
+      {status && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            status.type === "success"
+              ? "border-brand-green-500/20 bg-brand-green-500/10 text-brand-green-300"
+              : "border-red-400/20 bg-red-500/10 text-red-300"
+          }`}
+        >
+          {status.message}
+        </div>
+      )}
 
       {activeTab === "overview" && (
         <OverviewTab
