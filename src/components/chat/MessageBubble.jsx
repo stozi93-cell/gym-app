@@ -234,6 +234,8 @@ export default function MessageBubble({
     >
       <div
         className={`relative w-fit max-w-full border px-4 py-2 text-sm leading-relaxed shadow-[0_10px_24px_rgba(0,0,0,0.18)] transition-[min-width] duration-150 ${
+          message.pinned ? "pr-10" : ""
+        } ${
           reactionMenuOpen ? "min-w-[188px]" : actionsOpen ? "min-w-[154px]" : ""
         } ${
           mine
@@ -293,7 +295,12 @@ export default function MessageBubble({
         )}
 
         {message.pinned && (
-          <div className="mb-1 flex text-amber-200" aria-label="Pinovano" title="Pinovano">
+          <div
+            role="img"
+            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border border-amber-300/25 bg-amber-400/10 text-amber-200"
+            aria-label="Pinovano"
+            title="Pinovano"
+          >
             <PinIcon className="h-3.5 w-3.5" />
           </div>
         )}
