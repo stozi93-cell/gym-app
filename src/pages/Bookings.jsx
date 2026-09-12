@@ -591,12 +591,8 @@ export function SlotColumn({
           <div
             aria-hidden="true"
             data-scroll-shadow={title}
-            className="pointer-events-none absolute inset-x-0 bottom-0 flex h-10 items-end justify-center bg-gradient-to-t from-[#03060d] via-[#03060d]/80 to-transparent pb-1"
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-neutral-950/85 text-neutral-300 shadow-[0_2px_10px_rgba(0,0,0,0.7)]">
-              <ScrollDownIcon className="h-3.5 w-3.5" />
-            </span>
-          </div>
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-neutral-500/30 via-neutral-700/15 to-transparent"
+          />
         )}
       </div>
     </section>
@@ -705,21 +701,5 @@ export function SlotCard({
         )}
       </div>
     </div>
-  );
-}
-
-function ScrollDownIcon({ className }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
   );
 }
