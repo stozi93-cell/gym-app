@@ -591,7 +591,7 @@ export function SlotColumn({
           <div
             aria-hidden="true"
             data-scroll-shadow={title}
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-neutral-500/30 via-neutral-700/15 to-transparent"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-zinc-700/85 via-zinc-900/50 to-transparent"
           />
         )}
       </div>
