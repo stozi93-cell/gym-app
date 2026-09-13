@@ -16,7 +16,6 @@ import { Panel, StatusPill } from "../components/ui/Primitives";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TAB_OPTIONS = [
-  { value: "overview", label: "Pregled" },
   { value: "sleep", label: "San" },
   { value: "nutrition", label: "Ishrana" },
   { value: "training", label: "Trening" },
@@ -204,7 +203,7 @@ function getPreferredShift(checkedBookings) {
 }
 
 function getSleepMeta(hours) {
-  if (!hours) {
+  if (hours === undefined || hours === null || hours === "" || Number.isNaN(Number(hours))) {
     return {
       tone: "neutral",
       label: "Nije upisano",
@@ -213,8 +212,17 @@ function getSleepMeta(hours) {
     };
   }
 
-  const percent = Math.max(0, Math.min(100, ((Number(hours) - 5) / 5) * 100));
-  if (hours < 6) {
+  const numericHours = Number(hours);
+  const percent = Math.max(0, Math.min(100, (numericHours / 12) * 100));
+  if (numericHours === 0) {
+    return {
+      tone: "red",
+      label: "Bez sna",
+      percent,
+      description: "Noć bez sna zahteva oprez i lakši tempo kad god je moguće.",
+    };
+  }
+  if (numericHours < 6) {
     return {
       tone: "red",
       label: "Premalo",
@@ -222,7 +230,7 @@ function getSleepMeta(hours) {
       description: "Ispod 6h je signal za oprez, posebno uz jače treninge.",
     };
   }
-  if (hours < 7.5) {
+  if (numericHours < 7.5) {
     return {
       tone: "amber",
       label: "Može bolje",
@@ -230,7 +238,7 @@ function getSleepMeta(hours) {
       description: "Solidno za povremeno, ali ciljaj stabilnije noći.",
     };
   }
-  if (hours <= 10) {
+  if (numericHours <= 10) {
     return {
       tone: "green",
       label: "Odlično",
@@ -294,14 +302,6 @@ function getMilestones({ checkedBookings, last30Visits, weeklyStreak, bestWeek }
       detail: `${Math.min(last30Visits.length, 8)} / 8`,
     },
   ];
-}
-
-function MoonIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 7.5 7.5 0 1 0 20.5 14.5Z" />
-    </svg>
-  );
 }
 
 function PlateIcon({ className }) {
@@ -374,7 +374,7 @@ function ArrowIcon({ className }) {
 
 export default function ClientProgress() {
   const { user, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("sleep");
   const [bookings, setBookings] = useState([]);
   const [memberships, setMemberships] = useState([]);
   const [packages, setPackages] = useState([]);
@@ -493,22 +493,14 @@ export default function ClientProgress() {
   }, [profile]);
 
   const sleepValues = past7Logs
-    .map((log) => Number(log?.sleepHours || 0))
-    .filter(Boolean);
+    .map((log) => log?.sleepHours)
+    .filter((value) => value !== undefined && value !== null && value !== "")
+    .map(Number);
   const sleepAverage = sleepValues.length
     ? sleepValues.reduce((sum, value) => sum + value, 0) / sleepValues.length
     : null;
-  const sleepMeta = getSleepMeta(todayLog.sleepHours || sleepAverage);
   const nutritionScore = getNutritionScore(todayLog);
   const nutritionMeta = getNutritionMeta(nutritionScore);
-  const trainingTone =
-    !activeMembership
-      ? "red"
-      : weekProgress.allowed === "unlimited" || weekProgress.ratio >= 1
-        ? "green"
-        : weekProgress.ratio >= 0.5
-          ? "amber"
-          : "red";
 
   function showStatus(type, message) {
     setStatus({ type, message });
@@ -572,7 +564,7 @@ export default function ClientProgress() {
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <div className="grid grid-cols-5 gap-1 overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/70 p-1">
+      <div className="grid grid-cols-4 gap-1 overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/70 p-1">
         {TAB_OPTIONS.map((tab) => (
           <button
             key={tab.value}
@@ -599,19 +591,6 @@ export default function ClientProgress() {
         >
           {status.message}
         </div>
-      )}
-
-      {activeTab === "overview" && (
-        <OverviewTab
-          sleepMeta={sleepMeta}
-          sleepAverage={sleepAverage}
-          nutritionMeta={nutritionMeta}
-          nutritionScore={nutritionScore}
-          trainingTone={trainingTone}
-          weekProgress={weekProgress}
-          activeMembership={activeMembership}
-          setActiveTab={setActiveTab}
-        />
       )}
 
       {activeTab === "sleep" && (
@@ -664,147 +643,154 @@ export default function ClientProgress() {
   );
 }
 
-function OverviewTab({
-  sleepMeta,
-  sleepAverage,
-  nutritionMeta,
-  nutritionScore,
-  trainingTone,
-  weekProgress,
-  activeMembership,
-  setActiveTab,
-}) {
-  return (
-    <div className="space-y-4">
-      <PillarCard
-        icon={<MoonIcon className="h-5 w-5" />}
-        title="San"
-        tone={sleepMeta.tone}
-        value={sleepAverage ? `${formatNumber(sleepAverage)} h` : "Nije praćeno"}
-        description="Oporavak prvo. Ciljaj 7.5-9h kad god život dozvoli."
-        buttonLabel="Prati san"
-        onClick={() => setActiveTab("sleep")}
-      />
-
-      <PillarCard
-        icon={<PlateIcon className="h-5 w-5" />}
-        title="Ishrana"
-        tone={nutritionMeta.tone}
-        value={`${nutritionScore} / ${NUTRITION_ITEMS.length}`}
-        description="Bez brojanja kalorija za početak: proteini, voda, biljke i kontrola."
-        buttonLabel="Prati ishranu"
-        onClick={() => setActiveTab("nutrition")}
-      />
-
-      <PillarCard
-        icon={<TrainingIcon className="h-5 w-5" />}
-        title="Trening"
-        tone={trainingTone}
-        value={
-          activeMembership
-            ? weekProgress.allowed === "unlimited"
-              ? `${weekProgress.done} dolazaka`
-              : `${weekProgress.done} / ${weekProgress.allowed}`
-            : "Nema članarine"
-        }
-        description="Ovaj deo se puni automatski iz čekiranja u teretani."
-        buttonLabel="Vidi trening"
-        onClick={() => setActiveTab("training")}
-      />
-
-      <Link
-        to="/forum"
-        className="flex items-center justify-between gap-3 rounded-2xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-4 py-3 text-brand-blue-100 transition hover:bg-brand-blue-500/15"
-      >
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-white">
-            Saveti trenera u Forumu
-          </span>
-          <span className="block truncate text-xs text-brand-blue-100/75">
-            San, ishrana, trening i opšte smernice.
-          </span>
-        </span>
-        <ArrowIcon className="h-4 w-4 shrink-0" />
-      </Link>
-    </div>
-  );
-}
-
 function SleepTab({ todayLog, sleepAverage, past7Logs, past7Keys, saving, onSave }) {
-  const [hours, setHours] = useState(Number(todayLog.sleepHours) || 8);
+  const savedHours = Number(todayLog.sleepHours);
+  const hasEntry =
+    todayLog.sleepHours !== undefined &&
+    todayLog.sleepHours !== null &&
+    !Number.isNaN(savedHours);
+  const [hours, setHours] = useState(hasEntry ? savedHours : 8);
+  const [napMinutes, setNapMinutes] = useState(Number(todayLog.napMinutes) || 0);
+  const [sleepQuality, setSleepQuality] = useState(todayLog.sleepQuality || "");
+  const [sleepWakeups, setSleepWakeups] = useState(todayLog.sleepWakeups || "");
   const selectedSleepMeta = getSleepMeta(hours);
-  const hasEntry = Number(todayLog.sleepHours) > 0;
+  const hasSleepAverage = sleepAverage !== null;
 
   return (
     <div className="space-y-4">
-      <Panel className="space-y-4 p-4">
-        <SectionHeader
-          icon={<MoonIcon className="h-5 w-5" />}
-          title="San"
-          subtitle="6h je minimum za oprez, 8-9h je najbolja zona za većinu ljudi."
+      <Panel className="p-4">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-2xl font-semibold text-white">{hours} h</p>
+          <StatusPill tone={selectedSleepMeta.tone}>{selectedSleepMeta.label}</StatusPill>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="12"
+          step="0.5"
+          value={hours}
+          onChange={(event) => setHours(Number(event.target.value))}
+          aria-label="Broj sati sna"
+          className="sleep-guideline-range w-full"
         />
+        <div className="mt-2 flex items-center justify-between text-xs text-neutral-500">
+          <span>0h</span>
+          <span>12h</span>
+        </div>
 
-        <div className="rounded-2xl border border-white/10 bg-neutral-950/45 px-3 py-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-white">Današnji san</p>
-            <StatusPill tone={selectedSleepMeta.tone}>{selectedSleepMeta.label}</StatusPill>
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium text-white">Dremka</span>
+            <span className="text-neutral-300">
+              {napMinutes ? `${napMinutes} min` : "Nije bilo"}
+            </span>
           </div>
           <input
             type="range"
-            min="4"
-            max="10"
-            step="0.5"
-            value={hours}
-            onChange={(event) => setHours(Number(event.target.value))}
-            aria-label="Broj sati sna"
-            className="sleep-guideline-range w-full"
+            min="0"
+            max="180"
+            step="15"
+            value={napMinutes}
+            onChange={(event) => setNapMinutes(Number(event.target.value))}
+            aria-label="Trajanje dremke u minutima"
+            className="mt-2 w-full accent-brand-blue-500"
           />
-          <div className="mt-2 flex items-center justify-between text-xs text-neutral-500">
-            <span>4h</span>
-            <span className="text-base font-semibold text-white">{hours} h</span>
-            <span>10h</span>
-          </div>
-          <p className="mt-2 text-xs leading-relaxed text-neutral-400">
-            {selectedSleepMeta.description}
-          </p>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => onSave({ sleepHours: Number(hours) })}
-            className="mt-3 w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
-          >
-            {saving ? "Čuvanje..." : hasEntry ? "Izmeni" : "Upiši"}
-          </button>
         </div>
+
+        <SleepChoiceRow
+          label="Osećaj odmora"
+          value={sleepQuality}
+          onChange={setSleepQuality}
+          options={[
+            { value: "poor", label: "Loše" },
+            { value: "okay", label: "Solidno" },
+            { value: "good", label: "Dobro" },
+          ]}
+        />
+
+        <SleepChoiceRow
+          label="Buđenja"
+          value={sleepWakeups}
+          onChange={setSleepWakeups}
+          options={[
+            { value: "none", label: "Nisam" },
+            { value: "once", label: "Jednom" },
+            { value: "multiple", label: "Više puta" },
+          ]}
+        />
+
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() =>
+            onSave({
+              sleepHours: Number(hours),
+              napMinutes: Number(napMinutes),
+              sleepQuality,
+              sleepWakeups,
+            })
+          }
+          className="mt-4 w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
+        >
+          {saving ? "Čuvanje..." : hasEntry ? "Izmeni" : "Upiši"}
+        </button>
       </Panel>
 
       <Panel className="space-y-3 p-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-semibold text-white">Poslednjih 7 dana</p>
-          <StatusPill tone={sleepAverage ? getSleepMeta(sleepAverage).tone : "neutral"}>
-            {sleepAverage ? `${formatNumber(sleepAverage)} h` : "bez unosa"}
+          <StatusPill tone={hasSleepAverage ? getSleepMeta(sleepAverage).tone : "neutral"}>
+            {hasSleepAverage ? `${formatNumber(sleepAverage)} h` : "bez unosa"}
           </StatusPill>
         </div>
         <div className="grid grid-cols-7 gap-1.5">
           {past7Logs.map((log, index) => {
-            const value = Number(log?.sleepHours || 0);
+            const hasValue =
+              log?.sleepHours !== undefined &&
+              log?.sleepHours !== null &&
+              log?.sleepHours !== "";
+            const value = hasValue ? Number(log.sleepHours) : 0;
             const meta = getSleepMeta(value);
             return (
               <div key={past7Keys[index]} className="space-y-1 text-center">
                 <div className="flex h-20 items-end rounded-full bg-white/[0.04] p-1">
                   <div
                     className={`w-full rounded-full ${toneBarClass(meta.tone)}`}
-                    style={{ height: `${value ? Math.max(12, meta.percent) : 8}%` }}
+                    style={{ height: `${hasValue ? Math.max(8, meta.percent) : 8}%` }}
                   />
                 </div>
                 <p className="text-[10px] text-neutral-500">
-                  {value ? value : "-"}
+                  {hasValue ? value : "-"}
                 </p>
               </div>
             );
           })}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+function SleepChoiceRow({ label, value, onChange, options }) {
+  return (
+    <div className="mt-4 border-t border-white/10 pt-4">
+      <p className="mb-2 text-sm font-medium text-white">{label}</p>
+      <div className="grid grid-cols-3 gap-1 rounded-xl bg-neutral-950/55 p-1">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(value === option.value ? "" : option.value)}
+            className={`min-h-9 rounded-lg px-1.5 py-2 text-[11px] font-medium transition ${
+              value === option.value
+                ? "bg-brand-blue-500 text-white"
+                : "text-neutral-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1078,35 +1064,6 @@ function SectionHeader({ icon, title, subtitle }) {
   );
 }
 
-function PillarCard({ icon, title, tone, value, description, buttonLabel, onClick }) {
-  return (
-    <Panel className="space-y-3 p-4">
-      <div className="flex items-start gap-3">
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneIconClass(tone)}`}>
-          {icon}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-white">{title}</h2>
-            <StatusPill tone={tone}>{value}</StatusPill>
-          </div>
-          <p className="mt-1 text-sm leading-relaxed text-neutral-400">
-            {description}
-          </p>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left text-sm font-medium text-white transition hover:bg-white/10"
-      >
-        {buttonLabel}
-        <ArrowIcon className="h-4 w-4 text-neutral-400" />
-      </button>
-    </Panel>
-  );
-}
-
 function GuidelineMeter({ label, value, tone, percent, description }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
@@ -1238,15 +1195,6 @@ function toneLabel(tone) {
     red: "oprez",
     neutral: "info",
   }[tone] || "info";
-}
-
-function toneIconClass(tone) {
-  return {
-    green: "border-brand-green-500/25 bg-brand-green-500/10 text-brand-green-300",
-    amber: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-    red: "border-red-400/25 bg-red-500/10 text-red-300",
-    neutral: "border-brand-blue-500/25 bg-brand-blue-500/10 text-brand-blue-300",
-  }[tone] || "border-brand-blue-500/25 bg-brand-blue-500/10 text-brand-blue-300";
 }
 
 function toneBarClass(tone) {

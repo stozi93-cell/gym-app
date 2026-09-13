@@ -53,7 +53,7 @@ body {
 .sleep-guideline-range::-webkit-slider-runnable-track {
   height: 0.5rem;
   border-radius: 9999px;
-  background: linear-gradient(90deg, #ef4444 0%, #fbbf24 45%, #22c55e 75%, #22c55e 100%);
+  background: linear-gradient(90deg, #ef4444 0%, #ef4444 40%, #fbbf24 55%, #22c55e 65%, #22c55e 82%, #fbbf24 100%);
 }
 
 .sleep-guideline-range::-webkit-slider-thumb {
@@ -71,7 +71,7 @@ body {
 .sleep-guideline-range::-moz-range-track {
   height: 0.5rem;
   border-radius: 9999px;
-  background: linear-gradient(90deg, #ef4444 0%, #fbbf24 45%, #22c55e 75%, #22c55e 100%);
+  background: linear-gradient(90deg, #ef4444 0%, #ef4444 40%, #fbbf24 55%, #22c55e 65%, #22c55e 82%, #fbbf24 100%);
 }
 
 .sleep-guideline-range::-moz-range-thumb {
