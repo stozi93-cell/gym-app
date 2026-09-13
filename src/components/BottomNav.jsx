@@ -28,16 +28,6 @@ function HomeIcon({ className }) {
   );
 }
 
-function UserIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-      className={className}>
-      <circle cx="12" cy="7" r="4" />
-      <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
-    </svg>
-  );
-}
-
 function RepeatIcon({ className }) {
   return (
     <svg
@@ -217,7 +207,6 @@ export default function BottomNav({ role }) {
           <>
             <NavItem to="/" label="Početna" icon={<HomeIcon className={iconClass} />} />
             <NavItem to="/rezervacije" label="Termini" icon={<CalendarIcon className={iconClass} />} />
-            <NavItem to="/profil/me" label="Profil" icon={<UserIcon className={iconClass} />} />
             <NavItem to="/forum" label="Forum" icon={<MegaphoneIcon className={iconClass} />} />
             <NavItem
               to="/chat"

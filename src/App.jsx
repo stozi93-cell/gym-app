@@ -21,6 +21,7 @@ import AdminChats from "./pages/AdminChats";
 import AdminTrainingStudio from "./pages/AdminTrainingStudio";
 import AdminTrainingClient from "./pages/AdminTrainingClient";
 import Settings from "./pages/Settings";
+import ClientInfo from "./pages/ClientInfo";
 
 import Splash from "./components/Splash";
 import AppShell from "./components/AppShell";
@@ -56,6 +57,9 @@ export default function App() {
           {/* Forum — accessible to all */}
           <Route path="/forum" element={<Forum />} />
           <Route path="/podesavanja" element={<Settings />} />
+          <Route path="/pravila-teretane" element={<ClientInfo type="rules" />} />
+          <Route path="/uputstvo" element={<ClientInfo type="instructions" />} />
+          <Route path="/cenovnik" element={<ClientInfo type="pricing" />} />
 
           {/* CLIENT */}
           {role === "client" && (
