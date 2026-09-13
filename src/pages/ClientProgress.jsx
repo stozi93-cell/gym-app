@@ -22,6 +22,18 @@ const TAB_OPTIONS = [
   { value: "body", label: "Mere" },
 ];
 
+const SLEEP_QUALITY_OPTIONS = [
+  { value: "poor", label: "Loše" },
+  { value: "okay", label: "Solidno" },
+  { value: "good", label: "Dobro" },
+];
+
+const SLEEP_WAKEUP_OPTIONS = [
+  { value: "none", label: "Nisam" },
+  { value: "once", label: "Jednom" },
+  { value: "multiple", label: "Više puta" },
+];
+
 const NUTRITION_ITEMS = [
   { key: "protein", label: "Proteini", hint: "u svakom većem obroku" },
   { key: "water", label: "Voda", hint: "redovno tokom dana" },
@@ -64,14 +76,6 @@ function getDateKey(value = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function getPastDateKeys(days) {
-  return Array.from({ length: days }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (days - 1 - index));
-    return getDateKey(date);
-  });
 }
 
 function getWeekKey(value) {
@@ -254,6 +258,40 @@ function getSleepMeta(hours) {
   };
 }
 
+function getSleepOptionLabel(options, value) {
+  return options.find((option) => option.value === value)?.label || "Nije upisano";
+}
+
+function getSleepReview({ hours, napMinutes, sleepQuality, sleepWakeups }) {
+  let primary;
+  if (hours === 0) {
+    primary = "Noć bez sna. Danas smanji intenzitet i daj prednost oporavku.";
+  } else if (hours < 6) {
+    primary = "San je bio kratak. Danas obrati pažnju na energiju i oporavak.";
+  } else if (hours < 7.5) {
+    primary = "Trajanje sna je solidno, ali bi malo više sna verovatno poboljšalo oporavak.";
+  } else if (hours <= 10) {
+    primary = "Trajanje sna je u dobroj zoni za oporavak.";
+  } else {
+    primary = "San je bio duži nego obično. Prati da li se ipak osećaš odmorno.";
+  }
+
+  let secondary = "";
+  if (sleepQuality === "poor") {
+    secondary = "Loš osećaj odmora govori da sam broj sati možda ne prikazuje celu sliku.";
+  } else if (sleepWakeups === "multiple") {
+    secondary = "Više buđenja može značajno umanjiti kvalitet sna.";
+  } else if (napMinutes >= 90) {
+    secondary = "Duža dremka može pomoći danas, ali može otežati večerašnje uspavljivanje.";
+  } else if (napMinutes > 0 && hours < 7.5) {
+    secondary = "Kratka dremka može donekle nadoknaditi manjak sna.";
+  } else if (sleepQuality === "good") {
+    secondary = "Dobar osećaj odmora potvrđuje da ti je ova količina sna prijala.";
+  }
+
+  return [primary, secondary].filter(Boolean).join(" ");
+}
+
 function getNutritionScore(log = {}) {
   return NUTRITION_ITEMS.filter((item) => log[item.key]).length;
 }
@@ -385,8 +423,6 @@ export default function ClientProgress() {
 
   const todayKey = getDateKey();
   const todayLog = healthLogs.find((log) => log.dateKey === todayKey) || {};
-  const past7Keys = getPastDateKeys(7);
-  const past7Logs = past7Keys.map((key) => healthLogs.find((log) => log.dateKey === key));
 
   const [profileForm, setProfileForm] = useState({
     heightCm: "",
@@ -492,13 +528,6 @@ export default function ClientProgress() {
     return { heightCm, weightKg, age, sex, bmi, bmr };
   }, [profile]);
 
-  const sleepValues = past7Logs
-    .map((log) => log?.sleepHours)
-    .filter((value) => value !== undefined && value !== null && value !== "")
-    .map(Number);
-  const sleepAverage = sleepValues.length
-    ? sleepValues.reduce((sum, value) => sum + value, 0) / sleepValues.length
-    : null;
   const nutritionScore = getNutritionScore(todayLog);
   const nutritionMeta = getNutritionMeta(nutritionScore);
 
@@ -508,7 +537,7 @@ export default function ClientProgress() {
   }
 
   async function saveTodayLog(updates) {
-    if (!user?.uid) return;
+    if (!user?.uid) return false;
 
     setSavingLog(true);
     try {
@@ -523,9 +552,11 @@ export default function ClientProgress() {
         { merge: true }
       );
       showStatus("success", "Sačuvano.");
+      return true;
     } catch (error) {
       console.error("Health log save failed", error);
       showStatus("error", "Nije sačuvano. Proveri konekciju i pokušaj ponovo.");
+      return false;
     } finally {
       setSavingLog(false);
     }
@@ -597,9 +628,6 @@ export default function ClientProgress() {
         <SleepTab
           key={todayLog.sleepHours ?? "no-entry"}
           todayLog={todayLog}
-          sleepAverage={sleepAverage}
-          past7Logs={past7Logs}
-          past7Keys={past7Keys}
           saving={savingLog}
           onSave={saveTodayLog}
         />
@@ -643,7 +671,7 @@ export default function ClientProgress() {
   );
 }
 
-function SleepTab({ todayLog, sleepAverage, past7Logs, past7Keys, saving, onSave }) {
+function SleepTab({ todayLog, saving, onSave }) {
   const savedHours = Number(todayLog.sleepHours);
   const hasEntry =
     todayLog.sleepHours !== undefined &&
@@ -653,14 +681,81 @@ function SleepTab({ todayLog, sleepAverage, past7Logs, past7Keys, saving, onSave
   const [napMinutes, setNapMinutes] = useState(Number(todayLog.napMinutes) || 0);
   const [sleepQuality, setSleepQuality] = useState(todayLog.sleepQuality || "");
   const [sleepWakeups, setSleepWakeups] = useState(todayLog.sleepWakeups || "");
+  const [editing, setEditing] = useState(!hasEntry);
+  const [savedLocally, setSavedLocally] = useState(false);
   const selectedSleepMeta = getSleepMeta(hours);
-  const hasSleepAverage = sleepAverage !== null;
+  const showSummary = (hasEntry || savedLocally) && !editing;
+
+  function resetForm() {
+    setHours(hasEntry ? savedHours : 8);
+    setNapMinutes(Number(todayLog.napMinutes) || 0);
+    setSleepQuality(todayLog.sleepQuality || "");
+    setSleepWakeups(todayLog.sleepWakeups || "");
+  }
+
+  async function saveEntry() {
+    const saved = await onSave({
+      sleepHours: Number(hours),
+      napMinutes: Number(napMinutes),
+      sleepQuality,
+      sleepWakeups,
+    });
+    if (saved) {
+      setSavedLocally(true);
+      setEditing(false);
+    }
+  }
+
+  if (showSummary) {
+    const review = getSleepReview({
+      hours: Number(hours),
+      napMinutes: Number(napMinutes),
+      sleepQuality,
+      sleepWakeups,
+    });
+
+    return (
+      <Panel className="p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <p className="text-xl font-semibold text-white">{hours} h</p>
+            <StatusPill tone={selectedSleepMeta.tone}>{selectedSleepMeta.label}</StatusPill>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:bg-white/5"
+          >
+            Izmeni
+          </button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          <SleepSummaryItem
+            label="Dremka"
+            value={napMinutes ? `${napMinutes} min` : "Nije bilo"}
+          />
+          <SleepSummaryItem
+            label="Odmor"
+            value={getSleepOptionLabel(SLEEP_QUALITY_OPTIONS, sleepQuality)}
+          />
+          <SleepSummaryItem
+            label="Buđenja"
+            value={getSleepOptionLabel(SLEEP_WAKEUP_OPTIONS, sleepWakeups)}
+          />
+        </div>
+
+        <p className="mt-2.5 rounded-xl border border-brand-blue-400/15 bg-brand-blue-500/10 px-3 py-2 text-xs leading-relaxed text-brand-blue-100">
+          {review}
+        </p>
+      </Panel>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <Panel className="p-4">
+    <Panel className="p-3">
         <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-2xl font-semibold text-white">{hours} h</p>
+          <p className="text-xl font-semibold text-white">{hours} h</p>
           <StatusPill tone={selectedSleepMeta.tone}>{selectedSleepMeta.label}</StatusPill>
         </div>
         <input
@@ -678,7 +773,7 @@ function SleepTab({ todayLog, sleepAverage, past7Logs, past7Keys, saving, onSave
           <span>12h</span>
         </div>
 
-        <div className="mt-4 border-t border-white/10 pt-4">
+        <div className="mt-3 border-t border-white/10 pt-3">
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="font-medium text-white">Dremka</span>
             <span className="text-neutral-300">
@@ -701,87 +796,63 @@ function SleepTab({ todayLog, sleepAverage, past7Logs, past7Keys, saving, onSave
           label="Osećaj odmora"
           value={sleepQuality}
           onChange={setSleepQuality}
-          options={[
-            { value: "poor", label: "Loše" },
-            { value: "okay", label: "Solidno" },
-            { value: "good", label: "Dobro" },
-          ]}
+          options={SLEEP_QUALITY_OPTIONS}
         />
 
         <SleepChoiceRow
           label="Buđenja"
           value={sleepWakeups}
           onChange={setSleepWakeups}
-          options={[
-            { value: "none", label: "Nisam" },
-            { value: "once", label: "Jednom" },
-            { value: "multiple", label: "Više puta" },
-          ]}
+          options={SLEEP_WAKEUP_OPTIONS}
         />
 
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() =>
-            onSave({
-              sleepHours: Number(hours),
-              napMinutes: Number(napMinutes),
-              sleepQuality,
-              sleepWakeups,
-            })
-          }
-          className="mt-4 w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
-        >
-          {saving ? "Čuvanje..." : hasEntry ? "Izmeni" : "Upiši"}
-        </button>
-      </Panel>
+        <div className={`mt-3 grid gap-2 ${hasEntry ? "grid-cols-2" : "grid-cols-1"}`}>
+          {hasEntry && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => {
+                resetForm();
+                setEditing(false);
+              }}
+              className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-neutral-300 transition hover:bg-white/5 disabled:opacity-60"
+            >
+              Otkaži
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={saveEntry}
+            className="rounded-xl bg-brand-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
+          >
+            {saving ? "Čuvanje..." : hasEntry ? "Sačuvaj" : "Upiši"}
+          </button>
+        </div>
+    </Panel>
+  );
+}
 
-      <Panel className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-white">Poslednjih 7 dana</p>
-          <StatusPill tone={hasSleepAverage ? getSleepMeta(sleepAverage).tone : "neutral"}>
-            {hasSleepAverage ? `${formatNumber(sleepAverage)} h` : "bez unosa"}
-          </StatusPill>
-        </div>
-        <div className="grid grid-cols-7 gap-1.5">
-          {past7Logs.map((log, index) => {
-            const hasValue =
-              log?.sleepHours !== undefined &&
-              log?.sleepHours !== null &&
-              log?.sleepHours !== "";
-            const value = hasValue ? Number(log.sleepHours) : 0;
-            const meta = getSleepMeta(value);
-            return (
-              <div key={past7Keys[index]} className="space-y-1 text-center">
-                <div className="flex h-20 items-end rounded-full bg-white/[0.04] p-1">
-                  <div
-                    className={`w-full rounded-full ${toneBarClass(meta.tone)}`}
-                    style={{ height: `${hasValue ? Math.max(8, meta.percent) : 8}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-neutral-500">
-                  {hasValue ? value : "-"}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </Panel>
+function SleepSummaryItem({ label, value }) {
+  return (
+    <div className="min-w-0 rounded-lg bg-white/[0.04] px-2 py-1.5">
+      <p className="text-[10px] text-neutral-500">{label}</p>
+      <p className="truncate text-[11px] font-medium text-neutral-200">{value}</p>
     </div>
   );
 }
 
 function SleepChoiceRow({ label, value, onChange, options }) {
   return (
-    <div className="mt-4 border-t border-white/10 pt-4">
-      <p className="mb-2 text-sm font-medium text-white">{label}</p>
+    <div className="mt-3 border-t border-white/10 pt-3">
+      <p className="mb-1.5 text-xs font-medium text-white">{label}</p>
       <div className="grid grid-cols-3 gap-1 rounded-xl bg-neutral-950/55 p-1">
         {options.map((option) => (
           <button
             key={option.value}
             type="button"
             onClick={() => onChange(value === option.value ? "" : option.value)}
-            className={`min-h-9 rounded-lg px-1.5 py-2 text-[11px] font-medium transition ${
+            className={`min-h-8 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition ${
               value === option.value
                 ? "bg-brand-blue-500 text-white"
                 : "text-neutral-400 hover:bg-white/5 hover:text-white"
@@ -1195,13 +1266,4 @@ function toneLabel(tone) {
     red: "oprez",
     neutral: "info",
   }[tone] || "info";
-}
-
-function toneBarClass(tone) {
-  return {
-    green: "bg-brand-green-500",
-    amber: "bg-amber-400",
-    red: "bg-red-500",
-    neutral: "bg-neutral-700",
-  }[tone] || "bg-neutral-700";
 }
