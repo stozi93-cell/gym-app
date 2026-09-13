@@ -55,8 +55,8 @@ export default function AccountMenu({ profile }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 z-[70] w-64 overflow-hidden rounded-xl border border-white/10 bg-neutral-900/98 p-1.5 shadow-[0_22px_55px_rgba(0,0,0,0.58)] backdrop-blur-xl">
-          <div className="flex items-center gap-3 border-b border-white/10 px-2 py-2.5">
+        <div className="absolute right-0 top-11 z-[70] w-60 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-white/10 bg-neutral-900/95 p-1 shadow-[0_22px_55px_rgba(0,0,0,0.58)] backdrop-blur-xl">
+          <div className="flex items-center gap-2.5 border-b border-white/10 px-2 py-2">
             <Avatar
               name={fullName}
               photoURL={profile?.photoURL || ""}
@@ -75,14 +75,14 @@ export default function AccountMenu({ profile }) {
                   to={to}
                   onClick={() => setOpen(false)}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${
+                    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
                       isActive
                         ? "bg-brand-blue-500/10 text-brand-blue-200"
                         : "text-neutral-200 hover:bg-white/5 hover:text-white"
                     }`
                   }
                 >
-                  {icon({ className: "h-4.5 w-4.5 shrink-0" })}
+                  {icon({ className: "h-5 w-5 shrink-0" })}
                   <span>{label}</span>
                 </NavLink>
               </div>
@@ -93,9 +93,9 @@ export default function AccountMenu({ profile }) {
             <button
               type="button"
               onClick={() => signOut(auth)}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-red-300 transition hover:bg-red-500/10"
             >
-              <LogoutIcon className="h-4.5 w-4.5" />
+              <LogoutIcon className="h-5 w-5" />
               <span>Odjava</span>
             </button>
           </div>
