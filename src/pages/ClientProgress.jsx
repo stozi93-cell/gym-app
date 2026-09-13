@@ -616,8 +616,8 @@ export default function ClientProgress() {
 
       {activeTab === "sleep" && (
         <SleepTab
+          key={todayLog.sleepHours ?? "no-entry"}
           todayLog={todayLog}
-          sleepMeta={sleepMeta}
           sleepAverage={sleepAverage}
           past7Logs={past7Logs}
           past7Keys={past7Keys}
@@ -730,12 +730,10 @@ function OverviewTab({
   );
 }
 
-function SleepTab({ todayLog, sleepMeta, sleepAverage, past7Logs, past7Keys, saving, onSave }) {
-  const [hours, setHours] = useState(todayLog.sleepHours || 8);
-
-  useEffect(() => {
-    setHours(todayLog.sleepHours || 8);
-  }, [todayLog.sleepHours]);
+function SleepTab({ todayLog, sleepAverage, past7Logs, past7Keys, saving, onSave }) {
+  const [hours, setHours] = useState(Number(todayLog.sleepHours) || 8);
+  const selectedSleepMeta = getSleepMeta(hours);
+  const hasEntry = Number(todayLog.sleepHours) > 0;
 
   return (
     <div className="space-y-4">
@@ -746,18 +744,10 @@ function SleepTab({ todayLog, sleepMeta, sleepAverage, past7Logs, past7Keys, sav
           subtitle="6h je minimum za oprez, 8-9h je najbolja zona za većinu ljudi."
         />
 
-        <GuidelineMeter
-          label={todayLog.sleepHours ? "Danas" : "Smernica"}
-          value={todayLog.sleepHours ? `${todayLog.sleepHours} h` : "7.5-9 h"}
-          tone={sleepMeta.tone}
-          percent={sleepMeta.percent || 72}
-          description={sleepMeta.description}
-        />
-
         <div className="rounded-2xl border border-white/10 bg-neutral-950/45 px-3 py-3">
           <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-white">Upiši današnji san</p>
-            <StatusPill tone={sleepMeta.tone}>{sleepMeta.label}</StatusPill>
+            <p className="text-sm font-medium text-white">Današnji san</p>
+            <StatusPill tone={selectedSleepMeta.tone}>{selectedSleepMeta.label}</StatusPill>
           </div>
           <input
             type="range"
@@ -766,20 +756,24 @@ function SleepTab({ todayLog, sleepMeta, sleepAverage, past7Logs, past7Keys, sav
             step="0.5"
             value={hours}
             onChange={(event) => setHours(Number(event.target.value))}
-            className="w-full accent-brand-blue-500"
+            aria-label="Broj sati sna"
+            className="sleep-guideline-range w-full"
           />
           <div className="mt-2 flex items-center justify-between text-xs text-neutral-500">
             <span>4h</span>
             <span className="text-base font-semibold text-white">{hours} h</span>
             <span>10h</span>
           </div>
+          <p className="mt-2 text-xs leading-relaxed text-neutral-400">
+            {selectedSleepMeta.description}
+          </p>
           <button
             type="button"
             disabled={saving}
             onClick={() => onSave({ sleepHours: Number(hours) })}
             className="mt-3 w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
           >
-            {saving ? "Čuvanje..." : "Sačuvaj san"}
+            {saving ? "Čuvanje..." : hasEntry ? "Izmeni" : "Upiši"}
           </button>
         </div>
       </Panel>
