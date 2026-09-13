@@ -678,6 +678,7 @@ function SleepTab({ todayLog, saving, onSave }) {
     todayLog.sleepHours !== null &&
     !Number.isNaN(savedHours);
   const [hours, setHours] = useState(hasEntry ? savedHours : 8);
+  const [bedtime, setBedtime] = useState(todayLog.bedtime || "");
   const [napMinutes, setNapMinutes] = useState(Number(todayLog.napMinutes) || 0);
   const [sleepQuality, setSleepQuality] = useState(todayLog.sleepQuality || "");
   const [sleepWakeups, setSleepWakeups] = useState(todayLog.sleepWakeups || "");
@@ -688,6 +689,7 @@ function SleepTab({ todayLog, saving, onSave }) {
 
   function resetForm() {
     setHours(hasEntry ? savedHours : 8);
+    setBedtime(todayLog.bedtime || "");
     setNapMinutes(Number(todayLog.napMinutes) || 0);
     setSleepQuality(todayLog.sleepQuality || "");
     setSleepWakeups(todayLog.sleepWakeups || "");
@@ -696,6 +698,7 @@ function SleepTab({ todayLog, saving, onSave }) {
   async function saveEntry() {
     const saved = await onSave({
       sleepHours: Number(hours),
+      bedtime,
       napMinutes: Number(napMinutes),
       sleepQuality,
       sleepWakeups,
@@ -720,6 +723,9 @@ function SleepTab({ todayLog, saving, onSave }) {
           <div className="flex items-center gap-2">
             <p className="text-xl font-semibold text-white">{hours} h</p>
             <StatusPill tone={selectedSleepMeta.tone}>{selectedSleepMeta.label}</StatusPill>
+            {bedtime && (
+              <span className="text-[11px] text-neutral-400">Legli {bedtime}</span>
+            )}
           </div>
           <button
             type="button"
@@ -772,6 +778,16 @@ function SleepTab({ todayLog, saving, onSave }) {
           <span>0h</span>
           <span>12h</span>
         </div>
+
+        <label className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3 text-xs font-medium text-white">
+          <span>Odlazak na spavanje</span>
+          <input
+            type="time"
+            value={bedtime}
+            onChange={(event) => setBedtime(event.target.value)}
+            className="w-28 rounded-lg border border-white/10 bg-neutral-950/60 px-2 py-1.5 text-xs text-white outline-none focus:border-brand-blue-500"
+          />
+        </label>
 
         <div className="mt-3 border-t border-white/10 pt-3">
           <div className="flex items-center justify-between gap-3 text-sm">
