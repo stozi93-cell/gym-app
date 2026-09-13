@@ -1,7 +1,8 @@
-export function Panel({ children, className = "" }) {
+export function Panel({ children, className = "", ...props }) {
   return (
     <section
       className={`rounded-2xl border border-white/10 bg-neutral-900/80 shadow-premium backdrop-blur-xl ${className}`}
+      {...props}
     >
       {children}
     </section>

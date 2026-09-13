@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import {
+  arrayUnion,
   collection,
   doc,
   onSnapshot,
@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebase";
 import { Panel, StatusPill } from "../components/ui/Primitives";
+import NutritionTracker from "../components/nutrition/NutritionTracker";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TAB_OPTIONS = [
@@ -32,13 +33,6 @@ const SLEEP_WAKEUP_OPTIONS = [
   { value: "none", label: "Nisam" },
   { value: "once", label: "Jednom" },
   { value: "multiple", label: "Više puta" },
-];
-
-const NUTRITION_ITEMS = [
-  { key: "protein", label: "Proteini", hint: "u svakom većem obroku" },
-  { key: "water", label: "Voda", hint: "redovno tokom dana" },
-  { key: "plants", label: "Voće/povrće", hint: "bar 2-3 porcije" },
-  { key: "control", label: "Bez prejedanja", hint: "normalan osećaj sitosti" },
 ];
 
 const MEASUREMENT_FIELDS = [
@@ -292,17 +286,6 @@ function getSleepReview({ hours, napMinutes, sleepQuality, sleepWakeups }) {
   return [primary, secondary].filter(Boolean).join(" ");
 }
 
-function getNutritionScore(log = {}) {
-  return NUTRITION_ITEMS.filter((item) => log[item.key]).length;
-}
-
-function getNutritionMeta(score) {
-  if (score >= 4) return { tone: "green", label: "Odlično", percent: 100 };
-  if (score >= 2) return { tone: "amber", label: "Solidno", percent: 60 };
-  if (score >= 1) return { tone: "amber", label: "Početak", percent: 35 };
-  return { tone: "neutral", label: "Nije upisano", percent: 0 };
-}
-
 function getBmiTone(bmi) {
   if (!bmi) return "neutral";
   if (bmi < 18.5) return "amber";
@@ -340,18 +323,6 @@ function getMilestones({ checkedBookings, last30Visits, weeklyStreak, bestWeek }
       detail: `${Math.min(last30Visits.length, 8)} / 8`,
     },
   ];
-}
-
-function PlateIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <circle cx="12" cy="12" r="8" />
-      <circle cx="12" cy="12" r="4" />
-      <path d="M21 4v16" />
-      <path d="M3 4v6" />
-      <path d="M3 14v6" />
-    </svg>
-  );
 }
 
 function TrainingIcon({ className }) {
@@ -401,15 +372,6 @@ function TrophyIcon({ className }) {
   );
 }
 
-function ArrowIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M5 12h14" />
-      <path d="m13 6 6 6-6 6" />
-    </svg>
-  );
-}
-
 export default function ClientProgress() {
   const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState("sleep");
@@ -417,7 +379,9 @@ export default function ClientProgress() {
   const [memberships, setMemberships] = useState([]);
   const [packages, setPackages] = useState([]);
   const [healthLogs, setHealthLogs] = useState([]);
+  const [trainerMeals, setTrainerMeals] = useState([]);
   const [savingLog, setSavingLog] = useState(false);
+  const [savingFood, setSavingFood] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [status, setStatus] = useState(null);
 
@@ -458,6 +422,23 @@ export default function ClientProgress() {
       }
     );
   }, [user?.uid]);
+
+  useEffect(() => {
+    return onSnapshot(
+      collection(db, "nutritionMealTemplates"),
+      (snapshot) => {
+        setTrainerMeals(
+          snapshot.docs
+            .map((item) => ({ id: item.id, ...item.data() }))
+            .filter((item) => item.active !== false && Array.isArray(item.items))
+        );
+      },
+      (error) => {
+        console.warn("Trainer meals are not available", error);
+        setTrainerMeals([]);
+      }
+    );
+  }, []);
 
   useEffect(() => {
     if (!user?.uid) return undefined;
@@ -528,9 +509,6 @@ export default function ClientProgress() {
     return { heightCm, weightKg, age, sex, bmi, bmr };
   }, [profile]);
 
-  const nutritionScore = getNutritionScore(todayLog);
-  const nutritionMeta = getNutritionMeta(nutritionScore);
-
   function showStatus(type, message) {
     setStatus({ type, message });
     window.setTimeout(() => setStatus(null), 2800);
@@ -593,6 +571,33 @@ export default function ClientProgress() {
     }
   }
 
+  async function createCustomFood(food) {
+    if (!user?.uid) return null;
+
+    const createdFood = {
+      ...food,
+      id: `personal_${globalThis.crypto?.randomUUID?.() || Date.now()}`,
+      catalogStatus: "personal",
+      createdBy: user.uid,
+      createdAt: new Date().toISOString(),
+    };
+
+    setSavingFood(true);
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        nutritionFoods: arrayUnion(createdFood),
+      });
+      showStatus("success", "Namirnica je sačuvana.");
+      return createdFood;
+    } catch (error) {
+      console.error("Custom food save failed", error);
+      showStatus("error", "Namirnica nije sačuvana. Pokušaj ponovo.");
+      return null;
+    } finally {
+      setSavingFood(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-md space-y-4">
       <div className="grid grid-cols-4 gap-1 overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/70 p-1">
@@ -634,12 +639,14 @@ export default function ClientProgress() {
       )}
 
       {activeTab === "nutrition" && (
-        <NutritionTab
+        <NutritionTracker
           todayLog={todayLog}
-          score={nutritionScore}
-          meta={nutritionMeta}
+          personalFoods={Array.isArray(profile?.nutritionFoods) ? profile.nutritionFoods : []}
+          trainerMeals={trainerMeals}
           saving={savingLog}
+          savingFood={savingFood}
           onSave={saveTodayLog}
+          onCreateFood={createCustomFood}
         />
       )}
 
@@ -882,74 +889,6 @@ function SleepChoiceRow({ label, value, onChange, options }) {
   );
 }
 
-function NutritionTab({ todayLog, score, meta, saving, onSave }) {
-  function toggleItem(key) {
-    onSave({ [key]: !todayLog[key] });
-  }
-
-  return (
-    <div className="space-y-4">
-      <Panel className="space-y-4 p-4">
-        <SectionHeader
-          icon={<PlateIcon className="h-5 w-5" />}
-          title="Ishrana"
-          subtitle="Prvi nivo je navika, ne matematika. Kalorije možemo dodati kasnije."
-        />
-
-        <GuidelineMeter
-          label="Danas"
-          value={`${score} / ${NUTRITION_ITEMS.length}`}
-          tone={meta.tone}
-          percent={meta.percent}
-          description="Što više osnovnih navika pogodiš, lakše je kontrolisati energiju, oporavak i napredak."
-        />
-
-        <div className="space-y-2">
-          {NUTRITION_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              disabled={saving}
-              onClick={() => toggleItem(item.key)}
-              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition disabled:opacity-60 ${
-                todayLog[item.key]
-                  ? "border-brand-green-500/25 bg-brand-green-500/10"
-                  : "border-white/10 bg-white/5 hover:bg-white/[0.07]"
-              }`}
-            >
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-                  todayLog[item.key]
-                    ? "border-brand-green-400 bg-brand-green-500 text-white"
-                    : "border-white/15 text-neutral-500"
-                }`}
-              >
-                {todayLog[item.key] ? "✓" : ""}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-white">{item.label}</span>
-                <span className="block text-xs text-neutral-400">{item.hint}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel className="space-y-3 p-4">
-        <SectionHeader
-          icon={<TargetIcon className="h-5 w-5" />}
-          title="Smernice"
-          subtitle="Jednostavno pravilo koje klijent može da zapamti."
-        />
-        <InfoNote>
-          Za većinu članova je bolji početak: proteini u obroku, dovoljno vode, voće ili povrće i normalne porcije. Detaljno brojanje kalorija ostavljamo za one koji stvarno žele.
-        </InfoNote>
-        <LinkButton to="/forum" label="Otvori savete u Forumu" />
-      </Panel>
-    </div>
-  );
-}
-
 function TrainingTab({
   activeMembership,
   weekProgress,
@@ -1151,29 +1090,6 @@ function SectionHeader({ icon, title, subtitle }) {
   );
 }
 
-function GuidelineMeter({ label, value, tone, percent, description }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-neutral-500">
-            {label}
-          </p>
-          <p className="mt-1 text-lg font-semibold text-white">{value}</p>
-        </div>
-        <StatusPill tone={tone}>{toneLabel(tone)}</StatusPill>
-      </div>
-      <div className="mt-3 h-2 rounded-full bg-gradient-to-r from-red-500 via-amber-400 to-brand-green-500">
-        <div
-          className="h-2 rounded-full border-r-2 border-white/80"
-          style={{ width: `${Math.max(4, Math.min(100, percent))}%` }}
-        />
-      </div>
-      <p className="mt-2 text-xs leading-relaxed text-neutral-400">{description}</p>
-    </div>
-  );
-}
-
 function Metric({ label, value, detail = "", tone = "neutral" }) {
   const toneClass = {
     neutral: "text-white",
@@ -1214,18 +1130,6 @@ function InputBox({ label, suffix, value, onChange }) {
         {suffix && <span className="text-xs text-neutral-500">{suffix}</span>}
       </span>
     </label>
-  );
-}
-
-function LinkButton({ to, label }) {
-  return (
-    <Link
-      to={to}
-      className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-white/10"
-    >
-      {label}
-      <ArrowIcon className="h-4 w-4 text-neutral-400" />
-    </Link>
   );
 }
 
@@ -1273,13 +1177,4 @@ function Milestone({ title, detail, complete }) {
       </StatusPill>
     </div>
   );
-}
-
-function toneLabel(tone) {
-  return {
-    green: "dobro",
-    amber: "pažnja",
-    red: "oprez",
-    neutral: "info",
-  }[tone] || "info";
 }
