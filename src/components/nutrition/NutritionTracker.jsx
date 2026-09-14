@@ -15,10 +15,10 @@ import {
 } from "../../data/nutritionCatalog";
 
 const NUTRITION_HABITS = [
-  { key: "protein", label: "Proteini" },
-  { key: "water", label: "Voda" },
-  { key: "plants", label: "Voće/povrće" },
-  { key: "control", label: "Bez prejedanja" },
+  { key: "protein", label: "Proteini uz svaki obrok" },
+  { key: "water", label: "Voda tokom celog dana" },
+  { key: "plants", label: "Voće/povrće u 2 obroka" },
+  { key: "control", label: "Porcije bez prejedanja" },
 ];
 
 const VIEW_OPTIONS = [
@@ -183,8 +183,13 @@ function TodayView({
 
   return (
     <div className="space-y-3">
-      <Panel className="p-3">
-        <div className="grid grid-cols-4 gap-1.5">
+      <Panel className="relative p-3">
+        <InfoButton
+          label="Detaljni dnevni unos"
+          onClick={() => onShowDetails({ type: "day", data: { name: "Danas", meals } })}
+          className="absolute right-3 top-3 h-7 w-7"
+        />
+        <div className="grid grid-cols-4 gap-1.5 pr-9">
           <DailyMetric label="Kalorije" value={round(totals.calories)} unit="kcal" primary />
           <DailyMetric label="Proteini" value={round(totals.protein, 1)} unit="g" />
           <DailyMetric label="UH" value={round(totals.carbs, 1)} unit="g" />
@@ -198,7 +203,7 @@ function TodayView({
               type="button"
               disabled={saving}
               onClick={() => onToggleHabit(habit.key)}
-              className={`flex min-h-8 items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] font-medium transition disabled:opacity-60 ${
+              className={`flex min-h-11 items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] font-medium transition disabled:opacity-60 ${
                 todayLog[habit.key]
                   ? "border-brand-green-500/25 bg-brand-green-500/10 text-brand-green-200"
                   : "border-white/10 bg-white/[0.03] text-neutral-400"
@@ -213,7 +218,7 @@ function TodayView({
               >
                 {todayLog[habit.key] ? "✓" : ""}
               </span>
-              <span className="truncate">{habit.label}</span>
+              <span className="leading-tight">{habit.label}</span>
             </button>
           ))}
         </div>
@@ -764,6 +769,7 @@ function NutritionDetailsModal({ details, onClose }) {
   }, [onClose]);
 
   const isMeal = details.type === "meal";
+  const isDay = details.type === "day";
   const data = details.data;
   const title = data.name || (isMeal ? getMealTypeLabel(data.type) : "Namirnica");
 
@@ -784,7 +790,11 @@ function NutritionDetailsModal({ details, onClose }) {
           <div className="min-w-0">
             <p className="truncate text-base font-semibold text-white">{title}</p>
             <p className="mt-0.5 text-[10px] text-neutral-500">
-              {isMeal ? "Ukupno i sastav obroka" : "Vrednosti na 100 g"}
+              {isDay
+                ? "Ukupan dnevni unos"
+                : isMeal
+                  ? "Ukupno i sastav obroka"
+                  : "Vrednosti na 100 g"}
             </p>
           </div>
           <button
@@ -798,7 +808,13 @@ function NutritionDetailsModal({ details, onClose }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {isMeal ? <MealDetails meal={data} /> : <FoodDetails food={data} />}
+          {isDay ? (
+            <DayDetails meals={data.meals || []} />
+          ) : isMeal ? (
+            <MealDetails meal={data} />
+          ) : (
+            <FoodDetails food={data} />
+          )}
         </div>
       </section>
     </div>,
@@ -854,6 +870,56 @@ function MealDetails({ meal }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function DayDetails({ meals }) {
+  const totals = sumMeals(meals);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+          Ukupne poznate vrednosti
+        </p>
+        <NutrientGrid data={totals} includeGi={false} />
+        <p className="mt-2 text-[10px] leading-relaxed text-neutral-600">
+          Glikemijski indeks se ne sabira i prikazuje se u podacima pojedinačnih namirnica.
+        </p>
+      </div>
+
+      <div className="border-t border-white/10 pt-3">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+          Obroci
+        </p>
+        {meals.length ? (
+          <div className="divide-y divide-white/[0.07] rounded-xl border border-white/10 bg-neutral-950/35 px-3">
+            {meals.map((meal) => {
+              const mealTotals = sumNutrients(meal.items);
+              return (
+                <div key={meal.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-white">
+                      {meal.name || getMealTypeLabel(meal.type)}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-neutral-500">
+                      P {round(mealTotals.protein, 1)}g · UH {round(mealTotals.carbs, 1)}g · M {round(mealTotals.fat, 1)}g
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs font-semibold text-brand-blue-200">
+                    {round(mealTotals.calories)} kcal
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="rounded-xl border border-white/10 bg-neutral-950/35 px-3 py-4 text-center text-xs text-neutral-500">
+            Danas još nema upisanih obroka.
+          </p>
+        )}
       </div>
     </div>
   );
