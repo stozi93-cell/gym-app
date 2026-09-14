@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   collection,
+  doc,
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
+  setDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../firebase";
@@ -12,6 +15,7 @@ import { useAuth } from "../context/AuthContext";
 import { useUnreadCount } from "../chat/useUnreadCount";
 import Avatar from "../components/Avatar";
 import { Panel, StatusPill } from "../components/ui/Primitives";
+import { sumMeals } from "../data/nutritionCatalog";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -35,6 +39,14 @@ function startOfWeek(value) {
   return date;
 }
 
+function getDateKey(value = new Date()) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function daysUntil(value) {
   const date = toDate(value);
   if (!date) return null;
@@ -49,7 +61,7 @@ function formatDate(value) {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  });
+  }).replace(/\.$/, "");
 }
 
 function formatRelativeTraining(value) {
@@ -132,17 +144,6 @@ function getWeekProgress(membership, pkg) {
   };
 }
 
-function getMembershipLife(membership) {
-  if (!membership) return 0;
-
-  const start = startOfDay(toDate(membership.startDate));
-  const end = startOfDay(toDate(membership.endDate));
-  const today = startOfDay(new Date());
-  const total = Math.max(1, end - start);
-  const used = Math.min(Math.max(today - start, 0), total);
-  return used / total;
-}
-
 function getWeekKey(value) {
   return startOfWeek(value).toISOString().slice(0, 10);
 }
@@ -166,24 +167,6 @@ function getWeeklyStreak(checkedBookings) {
   }
 
   return streak;
-}
-
-function getPreferredShift(checkedBookings) {
-  if (!checkedBookings.length) return "Nema dovoljno podataka";
-
-  const counts = checkedBookings.reduce(
-    (result, booking) => {
-      const date = toDate(booking.slotTimestamp);
-      if (!date) return result;
-      if (date.getHours() * 60 + date.getMinutes() < 15 * 60 + 30) result.morning += 1;
-      else result.afternoon += 1;
-      return result;
-    },
-    { morning: 0, afternoon: 0 }
-  );
-
-  if (counts.morning === counts.afternoon) return "Ravnomerno";
-  return counts.morning > counts.afternoon ? "Prepodne" : "Popodne";
 }
 
 function getWeeklyTrend(checkedBookings, allowed) {
@@ -216,6 +199,66 @@ function getWeeklyTrend(checkedBookings, allowed) {
     target,
     max,
   }));
+}
+
+function getSleepTrend(healthLogs) {
+  const logsByDate = Object.fromEntries(healthLogs.map((log) => [log.dateKey, log]));
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const value = Number(logsByDate[getDateKey(date)]?.sleepHours) || 0;
+    return {
+      label: date.toLocaleDateString("sr-Latn-RS", { weekday: "short" }).replace(".", ""),
+      value,
+      max: 12,
+      current: index === 6,
+    };
+  });
+}
+
+function getWeightTrend(healthLogs) {
+  const entries = healthLogs
+    .filter((log) => Number(log.bodyMeasurement?.weightKg) > 0)
+    .sort((a, b) => (a.dateKey || "").localeCompare(b.dateKey || ""))
+    .slice(-6);
+
+  if (!entries.length) return [];
+  const values = entries.map((log) => Number(log.bodyMeasurement.weightKg));
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = Math.max(maximum - minimum, 1);
+
+  return entries.map((log, index) => {
+    const date = new Date(`${log.dateKey}T12:00:00`);
+    return {
+      label: date.toLocaleDateString("sr-Latn-RS", { day: "numeric", month: "numeric" }),
+      value: Number(log.bodyMeasurement.weightKg),
+      chartValue: Number(log.bodyMeasurement.weightKg) - minimum + range * 0.2,
+      max: range * 1.4,
+      current: index === entries.length - 1,
+    };
+  });
+}
+
+function getNextAchievement({ checkedBookings, healthLogs, weeklyStreak, earnedAchievements }) {
+  const visits = checkedBookings.length;
+  const sleepEntries = healthLogs.filter((log) => log.sleepHours !== undefined).length;
+  const nutritionEntries = healthLogs.filter(
+    (log) => Array.isArray(log.nutritionMeals) && log.nutritionMeals.length > 0
+  ).length;
+  const candidates = [
+    { id: "first_visit", title: "Prvi dolazak", current: Math.min(visits, 1), target: 1 },
+    { id: "visits_10", title: "10 dolazaka", current: Math.min(visits, 10), target: 10 },
+    { id: "visits_25", title: "25 dolazaka", current: Math.min(visits, 25), target: 25 },
+    { id: "three_week_streak", title: "3 nedelje u nizu", current: Math.min(weeklyStreak, 3), target: 3 },
+    { id: "seven_sleep_logs", title: "7 zapisa sna", current: Math.min(sleepEntries, 7), target: 7 },
+    { id: "first_nutrition_log", title: "Prvi dnevnik ishrane", current: Math.min(nutritionEntries, 1), target: 1 },
+  ];
+  const earned = new Set(Array.isArray(earnedAchievements) ? earnedAchievements : []);
+
+  return candidates
+    .filter((item) => !earned.has(item.id) && item.current < item.target)
+    .sort((a, b) => b.current / b.target - a.current / a.target)[0] || null;
 }
 
 function CalendarIcon({ className }) {
@@ -262,6 +305,9 @@ export default function ClientDashboard() {
   const [memberships, setMemberships] = useState([]);
   const [packages, setPackages] = useState([]);
   const [posts, setPosts] = useState([]);
+  const [healthLogs, setHealthLogs] = useState([]);
+  const [trendView, setTrendView] = useState("visits");
+  const [savingEffort, setSavingEffort] = useState(false);
 
   useEffect(() => {
     if (!user?.uid) return undefined;
@@ -303,6 +349,16 @@ export default function ClientDashboard() {
     );
   }, []);
 
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    return onSnapshot(
+      query(collection(db, "healthLogs"), where("userId", "==", user.uid)),
+      (snapshot) => {
+        setHealthLogs(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
+      }
+    );
+  }, [user?.uid]);
+
   const packageById = useMemo(
     () => Object.fromEntries(packages.map((item) => [item.id, item])),
     [packages]
@@ -341,27 +397,56 @@ export default function ClientDashboard() {
   const activePackage = packageById[activeMembership?.subscriptionId];
   const weekProgress = getWeekProgress(activeMembership, activePackage);
   const membershipDaysLeft = daysUntil(activeMembership?.endDate);
-  const membershipLife = getMembershipLife(activeMembership);
   const displayName = getFullName(profile);
   const latestPost = posts.find((post) => !post.archived);
   const readAnnouncements = profile?.readAnnouncements || [];
   const unreadAnnouncements = posts.filter(
     (post) => !post.archived && !readAnnouncements.includes(post.id)
   ).length;
-  const last30Cutoff = new Date(Date.now() - 30 * DAY_MS);
-  const last30Visits = checkedBookings.filter(
-    (booking) => toDate(booking.slotTimestamp) >= last30Cutoff
-  );
   const weeklyStreak = getWeeklyStreak(checkedBookings);
-  const preferredShift = getPreferredShift(last30Visits);
   const weeklyTrend = getWeeklyTrend(checkedBookings, weekProgress.allowed);
+  const sleepTrend = getSleepTrend(healthLogs);
+  const weightTrend = getWeightTrend(healthLogs);
+  const todayKey = getDateKey();
+  const todayLog = healthLogs.find((log) => log.dateKey === todayKey) || {};
+  const todayMeals = Array.isArray(todayLog.nutritionMeals) ? todayLog.nutritionMeals : [];
+  const todayNutrition = sumMeals(todayMeals);
+  const todayCheckedIn = checkedBookings.some(
+    (booking) => getDateKey(toDate(booking.slotTimestamp)) === todayKey
+  );
+  const nextAchievement = getNextAchievement({
+    checkedBookings,
+    healthLogs,
+    weeklyStreak,
+    earnedAchievements: profile?.achievements,
+  });
   const needsAttention =
     unread > 0 ||
-    unreadAnnouncements > 0 ||
     !nextBooking ||
     !activeMembership ||
     (activeMembership && membershipDaysLeft <= 7) ||
     (activeMembership && weekProgress.allowed !== "unlimited" && weekProgress.done === 0);
+
+  async function saveTrainingEffort(trainingEffort) {
+    if (!user?.uid) return;
+    setSavingEffort(true);
+    try {
+      await setDoc(
+        doc(db, "healthLogs", `${user.uid}_${todayKey}`),
+        {
+          userId: user.uid,
+          dateKey: todayKey,
+          trainingEffort,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("Training effort save failed", error);
+    } finally {
+      setSavingEffort(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-md space-y-4">
@@ -411,123 +496,148 @@ export default function ClientDashboard() {
         </div>
       </Panel>
 
-      <Panel className="space-y-4 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
-              Napredak
-            </p>
-            <h2 className="mt-1 text-lg font-semibold text-white">
-              {activeMembership
-                ? weekProgress.allowed === "unlimited"
-                  ? `${weekProgress.done} dolazaka`
-                  : `${weekProgress.done} / ${weekProgress.allowed} dolazaka`
-                : "Nema aktivne članarine"}
-            </h2>
-            <p className="mt-1 text-sm text-neutral-400">
-              {activeMembership
-                ? weekProgress.allowed === "unlimited"
-                  ? "Neograničen broj dolazaka."
-                  : weekProgress.remaining
-                    ? `Još ${weekProgress.remaining} do nedeljnog cilja.`
-                    : "Nedeljni cilj je ispunjen."
-                : "Javi se treneru za produženje."}
+      <Panel className="space-y-3 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-white">Danas</p>
+          <Link to="/napredak" className="text-xs font-medium text-brand-blue-300">
+            Otvori napredak
+          </Link>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <TodayItem
+            to="/napredak?tab=sleep"
+            label="San"
+            value={todayLog.sleepHours !== undefined ? `${todayLog.sleepHours} h` : "Upiši"}
+            detail={todayLog.sleepQuality ? "sačuvano" : "oporavak"}
+            tone={Number(todayLog.sleepHours) >= 7.5 ? "green" : todayLog.sleepHours !== undefined ? "amber" : "blue"}
+          />
+          <TodayItem
+            to="/napredak?tab=nutrition"
+            label="Ishrana"
+            value={todayMeals.length ? `${Math.round(todayNutrition.calories)} kcal` : "Upiši"}
+            detail={todayMeals.length ? `${todayMeals.length} obroka` : "dnevnik"}
+            tone={todayMeals.length ? "green" : "blue"}
+          />
+          <TodayItem
+            to="/rezervacije"
+            label="Trening"
+            value={todayCheckedIn ? "Završeno" : activeMembership ? `${weekProgress.done}${weekProgress.allowed === "unlimited" ? "" : ` / ${weekProgress.allowed}`}` : "-"}
+            detail={todayCheckedIn ? "danas" : activeMembership ? "ove nedelje" : "bez članarine"}
+            tone={todayCheckedIn ? "green" : "blue"}
+          />
+        </div>
+
+        {todayCheckedIn && (
+          <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+            <p className="text-xs font-medium text-neutral-300">Kako je bilo danas?</p>
+            <div className="flex gap-1">
+              {[
+                { value: "easy", label: "Lako" },
+                { value: "normal", label: "Dobro" },
+                { value: "hard", label: "Teško" },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  disabled={savingEffort}
+                  onClick={() => saveTrainingEffort(item.value)}
+                  className={`rounded-lg px-2 py-1.5 text-[11px] font-medium transition disabled:opacity-50 ${
+                    todayLog.trainingEffort === item.value
+                      ? "bg-brand-blue-500 text-white"
+                      : "bg-white/5 text-neutral-400 hover:bg-white/10"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </Panel>
+
+      <Panel className="space-y-3 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-white">Trend</p>
+            <p className="text-[11px] text-neutral-500">
+              {trendView === "visits" ? "Poslednje 4 nedelje" : trendView === "sleep" ? "Poslednjih 7 dana" : "Poslednjih 6 merenja"}
             </p>
           </div>
-          <StatusPill
-            tone={
-              !activeMembership
-                ? "red"
-                : weekProgress.allowed === "unlimited" || weekProgress.ratio >= 1
-                  ? "green"
-                  : weekProgress.ratio >= 0.5
-                    ? "amber"
-                    : "red"
-            }
-          >
-            {activeMembership ? weekProgress.label : "Neaktivna"}
-          </StatusPill>
+          <div className="flex rounded-lg bg-neutral-950/70 p-1">
+            {[
+              { value: "visits", label: "Dolasci" },
+              { value: "weight", label: "Težina" },
+              { value: "sleep", label: "San" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setTrendView(option.value)}
+                className={`rounded-md px-2 py-1.5 text-[10px] font-medium transition ${
+                  trendView === option.value
+                    ? "bg-brand-blue-500 text-white"
+                    : "text-neutral-500"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {activeMembership && weekProgress.allowed !== "unlimited" && (
-          <SegmentedProgress
-            value={weekProgress.done}
-            allowed={weekProgress.allowed}
-            ratio={weekProgress.ratio}
-          />
-        )}
-
-        <MiniTrendGraph data={weeklyTrend} />
-
-        <div className="grid grid-cols-3 gap-2">
-          <Insight label="30 dana" value={`${last30Visits.length}`} detail="dolazaka" />
-          <Insight label="Niz" value={`${weeklyStreak}`} detail="nedelja" />
-          <Insight label="Termin" value={preferredShift} detail="najčešće" />
-        </div>
+        <MiniTrendGraph
+          data={trendView === "visits" ? weeklyTrend : trendView === "sleep" ? sleepTrend : weightTrend}
+          unit={trendView === "sleep" ? "h" : trendView === "weight" ? "kg" : ""}
+          emptyText={
+            trendView === "weight"
+              ? "Upiši merenje da bi se pojavio trend težine."
+              : trendView === "sleep"
+                ? "Upiši san da bi se pojavio sedmodnevni trend."
+                : "Graf će se popuniti kako se budu beležili dolasci."
+          }
+        />
 
         <Link
-          to="/napredak"
-          className="flex items-center justify-between gap-3 rounded-xl border border-brand-green-500/20 bg-brand-green-500/10 px-3 py-2.5 text-brand-green-100 transition hover:bg-brand-green-500/15"
+          to="/napredak?tab=achievements"
+          className="flex items-center justify-between gap-3 border-t border-white/10 pt-3"
         >
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold text-white">
-              Otvori detaljan napredak
-            </span>
-            <span className="block truncate text-xs text-brand-green-100/75">
-              Merenja, san, BMI/BMR i milestones
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] text-neutral-500">Sledeće dostignuće</span>
+            <span className="block truncate text-sm font-semibold text-white">
+              {nextAchievement?.title || "Sva dostignuća ostvarena"}
             </span>
           </span>
-          <ArrowIcon className="h-4 w-4 shrink-0" />
+          {nextAchievement && (
+            <span className="shrink-0 text-xs font-medium text-amber-200">
+              {nextAchievement.current} / {nextAchievement.target}
+            </span>
+          )}
+          <ArrowIcon className="h-4 w-4 shrink-0 text-neutral-500" />
         </Link>
       </Panel>
 
-      <Panel className="space-y-4 p-4">
-        <div className="flex items-start justify-between gap-3">
+      <Link to="/profil/me?tab=memberships" className="block">
+        <Panel className="flex items-center justify-between gap-3 p-3.5 transition hover:bg-white/[0.04]">
           <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
+            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">
               Članarina
             </p>
-            <h2 className="mt-1 truncate text-lg font-semibold text-white">
+            <p className="truncate text-sm font-semibold text-white">
               {activeMembership
                 ? activePackage?.name || activeMembership.name || "Aktivna članarina"
                 : "Nema aktivne članarine"}
-            </h2>
-            <p className="mt-1 text-sm text-neutral-400">
-              {activeMembership
-                ? `Važi do ${formatDate(activeMembership.endDate)}`
-                : "Profil i dolasci će se pojaviti kada članarina bude aktivna."}
             </p>
+            {activeMembership && (
+              <p className="text-xs text-neutral-500">Važi do {formatDate(activeMembership.endDate)}</p>
+            )}
           </div>
           <StatusPill
-            tone={
-              !activeMembership
-                ? "red"
-                : membershipDaysLeft <= 7
-                  ? "amber"
-                  : "green"
-            }
+            tone={!activeMembership ? "red" : membershipDaysLeft <= 7 ? "amber" : "green"}
           >
             {activeMembership ? `${membershipDaysLeft} dana` : "Neaktivna"}
           </StatusPill>
-        </div>
-
-        {activeMembership && (
-          <div>
-            <div className="mb-1.5 flex items-center justify-between text-xs text-neutral-400">
-              <span>Trajanje članarine</span>
-              <span>{Math.round(membershipLife * 100)}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-neutral-800">
-              <div
-                className={`h-2 rounded-full transition-all ${
-                  membershipDaysLeft <= 7 ? "bg-amber-400" : "bg-brand-green-500"
-                }`}
-                style={{ width: `${Math.round(membershipLife * 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
-      </Panel>
+        </Panel>
+      </Link>
 
       {needsAttention && (
         <Panel className="space-y-3 p-4">
@@ -579,79 +689,61 @@ export default function ClientDashboard() {
                 to="/chat"
               />
             )}
-            {unreadAnnouncements > 0 && (
-              <AttentionItem
-                tone="amber"
-                title="Nove objave"
-                description={`${unreadAnnouncements} nepročitano`}
-                to="/forum"
-              />
-            )}
           </div>
         </Panel>
       )}
 
-      <Panel className="p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-brand-green-500/25 bg-brand-green-500/10 text-brand-green-300">
-            <ActivityIcon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
-              Najnovije
-            </p>
-            <h2 className="mt-1 line-clamp-2 text-base font-semibold text-white">
-              {latestPost?.title || "Nema novih objava"}
-            </h2>
-            <p className="mt-1 line-clamp-2 text-sm text-neutral-400">
-              {latestPost?.content || "Kada trener objavi nešto novo, pojaviće se ovde."}
-            </p>
-          </div>
-        </div>
-      </Panel>
+      {unreadAnnouncements > 0 && latestPost && (
+        <Link to="/forum" className="block">
+          <Panel className="flex items-center gap-3 p-3.5 transition hover:bg-white/[0.04]">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-brand-green-500/25 bg-brand-green-500/10 text-brand-green-300">
+              <ActivityIcon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-500">Novo na Forumu</p>
+              <p className="truncate text-sm font-semibold text-white">{latestPost.title}</p>
+            </div>
+            <ArrowIcon className="h-4 w-4 shrink-0 text-neutral-500" />
+          </Panel>
+        </Link>
+      )}
     </div>
   );
 }
 
-function SegmentedProgress({ value, allowed, ratio }) {
-  const activeColor =
-    ratio >= 1 ? "bg-brand-green-500" : ratio >= 0.5 ? "bg-amber-400" : "bg-red-500";
+function TodayItem({ to, label, value, detail, tone = "blue" }) {
+  const toneClass = {
+    blue: "text-brand-blue-300",
+    green: "text-brand-green-300",
+    amber: "text-amber-200",
+  }[tone];
 
   return (
-    <div className="flex gap-1">
-      {Array.from({ length: allowed }, (_, index) => (
-        <span
-          key={index}
-          className={`h-2 min-w-0 flex-1 rounded-sm ${
-            index < value ? activeColor : "bg-neutral-700"
-          }`}
-        />
-      ))}
-    </div>
+    <Link
+      to={to}
+      className="min-w-0 rounded-xl border border-white/10 bg-white/5 px-2.5 py-2.5 transition hover:bg-white/[0.08]"
+    >
+      <span className="block text-[10px] font-medium uppercase tracking-[0.08em] text-neutral-500">
+        {label}
+      </span>
+      <span className={`mt-1 block truncate text-sm font-semibold ${toneClass}`}>{value}</span>
+      <span className="block truncate text-[10px] text-neutral-500">{detail}</span>
+    </Link>
   );
 }
 
-function MiniTrendGraph({ data }) {
-  const hasVisits = data.some((item) => item.value > 0);
-  const target = data.find((item) => item.target)?.target;
+function MiniTrendGraph({ data, unit = "", emptyText }) {
+  const hasValues = data.some((item) => item.value > 0);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-neutral-950/45 px-3 py-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-white">Ritam treninga</p>
-          <p className="text-[11px] text-neutral-500">Poslednje 4 nedelje</p>
-        </div>
-        {target && (
-          <span className="shrink-0 rounded-full border border-brand-blue-500/20 bg-brand-blue-500/10 px-2 py-1 text-[11px] font-medium text-brand-blue-200">
-            cilj {target}
-          </span>
-        )}
-      </div>
-
-      <div className="grid h-24 grid-cols-4 items-end gap-2">
+    <div className="rounded-xl border border-white/10 bg-neutral-950/45 px-3 py-3">
+      <div
+        className="grid h-24 items-end gap-2"
+        style={{ gridTemplateColumns: `repeat(${Math.max(data.length, 1)}, minmax(0, 1fr))` }}
+      >
         {data.map((item) => {
-          const height = item.value ? Math.max(16, Math.round((item.value / item.max) * 100)) : 8;
+          const chartValue = item.chartValue ?? item.value;
+          const height = item.value ? Math.max(12, Math.round((chartValue / item.max) * 100)) : 6;
           return (
             <div key={item.label} className="flex h-full min-w-0 flex-col justify-end gap-1">
               <div className="flex flex-1 items-end rounded-full bg-white/[0.03] p-1">
@@ -666,7 +758,7 @@ function MiniTrendGraph({ data }) {
               </div>
               <div className="text-center">
                 <p className={`text-xs font-semibold ${item.current ? "text-brand-green-300" : "text-white"}`}>
-                  {item.value}
+                  {item.value ? `${Number(item.value).toLocaleString("sr-Latn-RS", { maximumFractionDigits: 1 })}${unit}` : "-"}
                 </p>
                 <p className="truncate text-[10px] text-neutral-500">{item.label}</p>
               </div>
@@ -675,23 +767,11 @@ function MiniTrendGraph({ data }) {
         })}
       </div>
 
-      {!hasVisits && (
+      {!hasValues && (
         <p className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-neutral-400">
-          Graf će se popuniti kako se budu beležili dolasci.
+          {emptyText}
         </p>
       )}
-    </div>
-  );
-}
-
-function Insight({ label, value, detail }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-neutral-900/70 px-3 py-3">
-      <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-neutral-500">
-        {label}
-      </p>
-      <p className="mt-1 truncate text-base font-semibold text-white">{value}</p>
-      <p className="truncate text-[11px] text-neutral-400">{detail}</p>
     </div>
   );
 }

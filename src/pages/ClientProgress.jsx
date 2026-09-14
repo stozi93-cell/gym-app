@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   arrayUnion,
   collection,
@@ -19,8 +20,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const TAB_OPTIONS = [
   { value: "sleep", label: "San" },
   { value: "nutrition", label: "Ishrana" },
-  { value: "training", label: "Trening" },
   { value: "body", label: "Mere" },
+  { value: "achievements", label: "Dostignuća" },
 ];
 
 const SLEEP_QUALITY_OPTIONS = [
@@ -42,6 +43,13 @@ const MEASUREMENT_FIELDS = [
   { key: "arm", label: "Ruka" },
   { key: "thigh", label: "Butina" },
   { key: "shoulders", label: "Ramena" },
+];
+
+const BODY_COMPOSITION_FIELDS = [
+  { key: "bodyFatPercent", label: "Telesna mast", suffix: "%" },
+  { key: "bodyWaterPercent", label: "Voda u telu", suffix: "%" },
+  { key: "musclePercent", label: "Mišićna masa", suffix: "%" },
+  { key: "bonePercent", label: "Koštana masa", suffix: "%" },
 ];
 
 function toDate(value) {
@@ -111,48 +119,6 @@ function formatNumber(value, digits = 1) {
   });
 }
 
-function getAllowedCheckIns(membership, pkg) {
-  const value =
-    !membership?.weeklyCheckIns || membership.weeklyCheckIns === "default"
-      ? pkg?.defaultCheckIns || "unlimited"
-      : membership.weeklyCheckIns;
-
-  return value === "unlimited" ? "unlimited" : Number(value);
-}
-
-function getActiveMembership(memberships) {
-  const today = startOfDay(new Date());
-  return memberships
-    .filter((membership) => {
-      const end = toDate(membership.endDate);
-      return membership.active !== false && end && end >= today;
-    })
-    .sort((a, b) => toDate(a.endDate) - toDate(b.endDate))[0];
-}
-
-function getWeekProgress(membership, pkg) {
-  if (!membership) return { done: 0, allowed: 0, ratio: 0, remaining: 0 };
-
-  const start = startOfDay(toDate(membership.startDate));
-  const end = startOfDay(toDate(membership.endDate));
-  const today = startOfDay(new Date());
-  const weekCount = Math.max(
-    membership.checkInsArray?.length || 0,
-    Math.max(1, Math.ceil((end - start) / (7 * DAY_MS)))
-  );
-  const rawWeek = Math.floor((today - start) / (7 * DAY_MS));
-  const weekIndex = Math.min(Math.max(rawWeek, 0), weekCount - 1);
-  const done = membership.checkInsArray?.[weekIndex] || 0;
-  const allowed = getAllowedCheckIns(membership, pkg);
-
-  return {
-    done,
-    allowed,
-    ratio: allowed === "unlimited" ? 1 : Math.min(done / allowed, 1),
-    remaining: allowed === "unlimited" ? 0 : Math.max(allowed - done, 0),
-  };
-}
-
 function getWeeklyStreak(checkedBookings) {
   const activeWeeks = new Set(
     checkedBookings
@@ -180,24 +146,6 @@ function getBestWeek(checkedBookings) {
     counts[key] = (counts[key] || 0) + 1;
   });
   return Math.max(0, ...Object.values(counts));
-}
-
-function getPreferredShift(checkedBookings) {
-  if (!checkedBookings.length) return "Nema dovoljno podataka";
-
-  const counts = checkedBookings.reduce(
-    (result, booking) => {
-      const date = toDate(booking.slotTimestamp);
-      if (!date) return result;
-      if (date.getHours() * 60 + date.getMinutes() < 15 * 60 + 30) result.morning += 1;
-      else result.afternoon += 1;
-      return result;
-    },
-    { morning: 0, afternoon: 0 }
-  );
-
-  if (counts.morning === counts.afternoon) return "Ravnomerno";
-  return counts.morning > counts.afternoon ? "Prepodne" : "Popodne";
 }
 
 function getSleepMeta(hours) {
@@ -294,47 +242,126 @@ function getBmiTone(bmi) {
   return "red";
 }
 
-function getMilestones({ checkedBookings, last30Visits, weeklyStreak, bestWeek }) {
+function getMilestones({ checkedBookings, last30Visits, weeklyStreak, bestWeek, healthLogs, profile }) {
   const total = checkedBookings.length;
-  return [
+  const earned = new Set(Array.isArray(profile?.achievements) ? profile.achievements : []);
+  const sleepEntries = healthLogs.filter((log) => log.sleepHours !== undefined).length;
+  const nutritionEntries = healthLogs.filter(
+    (log) => Array.isArray(log.nutritionMeals) && log.nutritionMeals.length > 0
+  ).length;
+  const hasMeasurement = Boolean(
+    profile?.weightKg || profile?.weight || healthLogs.some((log) => log.bodyMeasurement?.weightKg)
+  );
+
+  const milestones = [
     {
+      id: "first_visit",
       title: "Prvi dolazak",
-      complete: total >= 1,
-      detail: total >= 1 ? "upisano" : "čeka prvi check-in",
+      complete: earned.has("first_visit") || total >= 1,
+      detail: total >= 1 ? "Prvi korak je napravljen" : "Čeka prvi dolazak",
+      current: Math.min(total, 1),
+      target: 1,
+      category: "Trening",
     },
     {
+      id: "visits_10",
       title: "10 dolazaka",
-      complete: total >= 10,
+      complete: earned.has("visits_10") || total >= 10,
       detail: `${Math.min(total, 10)} / 10`,
+      current: Math.min(total, 10),
+      target: 10,
+      category: "Trening",
     },
     {
+      id: "visits_25",
+      title: "25 dolazaka",
+      complete: earned.has("visits_25") || total >= 25,
+      detail: `${Math.min(total, 25)} / 25`,
+      current: Math.min(total, 25),
+      target: 25,
+      category: "Trening",
+    },
+    {
+      id: "four_in_week",
       title: "4 treninga u nedelji",
-      complete: bestWeek >= 4,
+      complete: earned.has("four_in_week") || bestWeek >= 4,
       detail: `${Math.min(bestWeek, 4)} / 4`,
+      current: Math.min(bestWeek, 4),
+      target: 4,
+      category: "Trening",
     },
     {
+      id: "three_week_streak",
       title: "3 nedelje u nizu",
-      complete: weeklyStreak >= 3,
+      complete: earned.has("three_week_streak") || weeklyStreak >= 3,
       detail: `${Math.min(weeklyStreak, 3)} / 3`,
+      current: Math.min(weeklyStreak, 3),
+      target: 3,
+      category: "Kontinuitet",
     },
     {
+      id: "eight_in_30_days",
       title: "8 dolazaka za 30 dana",
-      complete: last30Visits.length >= 8,
+      complete: earned.has("eight_in_30_days") || last30Visits.length >= 8,
       detail: `${Math.min(last30Visits.length, 8)} / 8`,
+      current: Math.min(last30Visits.length, 8),
+      target: 8,
+      category: "Kontinuitet",
+    },
+    {
+      id: "first_sleep_log",
+      title: "Prvi zapis sna",
+      complete: earned.has("first_sleep_log") || sleepEntries >= 1,
+      detail: sleepEntries >= 1 ? "Sačuvano" : "Upiši jednu noć",
+      current: Math.min(sleepEntries, 1),
+      target: 1,
+      category: "Oporavak",
+    },
+    {
+      id: "seven_sleep_logs",
+      title: "7 zapisa sna",
+      complete: earned.has("seven_sleep_logs") || sleepEntries >= 7,
+      detail: `${Math.min(sleepEntries, 7)} / 7`,
+      current: Math.min(sleepEntries, 7),
+      target: 7,
+      category: "Oporavak",
+    },
+    {
+      id: "first_nutrition_log",
+      title: "Prvi dnevnik ishrane",
+      complete: earned.has("first_nutrition_log") || nutritionEntries >= 1,
+      detail: nutritionEntries >= 1 ? "Sačuvano" : "Upiši prvi obrok",
+      current: Math.min(nutritionEntries, 1),
+      target: 1,
+      category: "Ishrana",
+    },
+    {
+      id: "first_measurement",
+      title: "Prvo merenje",
+      complete: earned.has("first_measurement") || hasMeasurement,
+      detail: hasMeasurement ? "Sačuvano" : "Upiši početne mere",
+      current: hasMeasurement ? 1 : 0,
+      target: 1,
+      category: "Mere",
     },
   ];
+
+  return milestones.map((milestone) =>
+    earned.has(milestone.id)
+      ? {
+          ...milestone,
+          complete: true,
+          current: milestone.target,
+          detail: "Ostvareno ranije",
+        }
+      : milestone
+  );
 }
 
-function TrainingIcon({ className }) {
+function ActivityIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M3 12h3" />
-      <path d="M18 12h3" />
-      <path d="M6 9v6" />
-      <path d="M18 9v6" />
-      <path d="M8 12h8" />
-      <path d="M12 5v3" />
-      <path d="M12 16v3" />
+      <path d="M3 12h4l2-7 5 14 2-7h5" />
     </svg>
   );
 }
@@ -346,16 +373,6 @@ function RulerIcon({ className }) {
       <path d="m8 11 2 2" />
       <path d="m11 8 2 2" />
       <path d="m14 5 2 2" />
-    </svg>
-  );
-}
-
-function TargetIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="5" />
-      <circle cx="12" cy="12" r="1.5" />
     </svg>
   );
 }
@@ -374,10 +391,12 @@ function TrophyIcon({ className }) {
 
 export default function ClientProgress() {
   const { user, profile } = useAuth();
-  const [activeTab, setActiveTab] = useState("sleep");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(
+    TAB_OPTIONS.some((tab) => tab.value === requestedTab) ? requestedTab : "sleep"
+  );
   const [bookings, setBookings] = useState([]);
-  const [memberships, setMemberships] = useState([]);
-  const [packages, setPackages] = useState([]);
   const [healthLogs, setHealthLogs] = useState([]);
   const [trainerMeals, setTrainerMeals] = useState([]);
   const [savingLog, setSavingLog] = useState(false);
@@ -393,6 +412,11 @@ export default function ClientProgress() {
     weightKg: "",
     age: "",
     sex: "",
+    bodyFatPercent: "",
+    bodyWaterPercent: "",
+    musclePercent: "",
+    bonePercent: "",
+    scaleCalories: "",
     measurements: {},
   });
 
@@ -402,6 +426,11 @@ export default function ClientProgress() {
       weightKg: profile?.weightKg || profile?.weight || "",
       age: profile?.age || getAge(profile) || "",
       sex: profile?.sex || profile?.gender || "",
+      bodyFatPercent: profile?.bodyFatPercent || "",
+      bodyWaterPercent: profile?.bodyWaterPercent || "",
+      musclePercent: profile?.musclePercent || "",
+      bonePercent: profile?.bonePercent || "",
+      scaleCalories: profile?.scaleCalories || "",
       measurements: {
         waist: profile?.measurements?.waist || "",
         chest: profile?.measurements?.chest || "",
@@ -443,22 +472,6 @@ export default function ClientProgress() {
   useEffect(() => {
     if (!user?.uid) return undefined;
     return onSnapshot(
-      query(collection(db, "clientSubscriptions"), where("userId", "==", user.uid)),
-      (snapshot) => {
-        setMemberships(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
-      }
-    );
-  }, [user?.uid]);
-
-  useEffect(() => {
-    return onSnapshot(collection(db, "subscriptions"), (snapshot) => {
-      setPackages(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!user?.uid) return undefined;
-    return onSnapshot(
       query(collection(db, "healthLogs"), where("userId", "==", user.uid)),
       (snapshot) => {
         setHealthLogs(
@@ -469,15 +482,6 @@ export default function ClientProgress() {
       }
     );
   }, [user?.uid]);
-
-  const packageById = useMemo(
-    () => Object.fromEntries(packages.map((item) => [item.id, item])),
-    [packages]
-  );
-
-  const activeMembership = useMemo(() => getActiveMembership(memberships), [memberships]);
-  const activePackage = packageById[activeMembership?.subscriptionId];
-  const weekProgress = getWeekProgress(activeMembership, activePackage);
 
   const checkedBookings = useMemo(() => {
     return bookings
@@ -491,23 +495,46 @@ export default function ClientProgress() {
   );
   const weeklyStreak = getWeeklyStreak(checkedBookings);
   const bestWeek = getBestWeek(checkedBookings);
-  const preferredShift = getPreferredShift(last30Visits);
   const milestones = getMilestones({
     checkedBookings,
     last30Visits,
     weeklyStreak,
     bestWeek,
+    healthLogs,
+    profile,
   });
+  const newAchievementIds = milestones
+    .filter(
+      (milestone) =>
+        milestone.complete &&
+        !(Array.isArray(profile?.achievements) && profile.achievements.includes(milestone.id))
+    )
+    .map((milestone) => milestone.id);
+  const newAchievementSignature = newAchievementIds.join("|");
+
+  useEffect(() => {
+    if (!user?.uid || !newAchievementSignature) return;
+    updateDoc(doc(db, "users", user.uid), {
+      achievements: arrayUnion(...newAchievementSignature.split("|")),
+    }).catch((error) => {
+      console.warn("Achievement save failed", error);
+    });
+  }, [newAchievementSignature, user?.uid]);
 
   const bodyStats = useMemo(() => {
-    const heightCm = Number(profile?.heightCm || profile?.height || 0) || null;
-    const weightKg = Number(profile?.weightKg || profile?.weight || 0) || null;
-    const age = getAge(profile);
-    const sex = profile?.sex || profile?.gender || "";
+    const heightCm = Number(profileForm.heightCm || 0) || null;
+    const weightKg = Number(profileForm.weightKg || 0) || null;
+    const age = Number(profileForm.age || 0) || null;
+    const sex = profileForm.sex || "";
     const bmi = calculateBmi(heightCm, weightKg);
     const bmr = calculateBmr({ heightCm, weightKg, age, sex });
     return { heightCm, weightKg, age, sex, bmi, bmr };
-  }, [profile]);
+  }, [profileForm]);
+
+  function changeTab(value) {
+    setActiveTab(value);
+    setSearchParams({ tab: value }, { replace: true });
+  }
 
   function showStatus(type, message) {
     setStatus({ type, message });
@@ -551,17 +578,46 @@ export default function ClientProgress() {
           : "",
       ])
     );
+    const bodyComposition = Object.fromEntries(
+      BODY_COMPOSITION_FIELDS.map((field) => [
+        field.key,
+        profileForm[field.key] ? Number(profileForm[field.key]) : "",
+      ])
+    );
+    const weightKg = profileForm.weightKg ? Number(profileForm.weightKg) : "";
+    const scaleCalories = profileForm.scaleCalories
+      ? Number(profileForm.scaleCalories)
+      : "";
 
     setSavingProfile(true);
     try {
-      await updateDoc(doc(db, "users", user.uid), {
-        heightCm: profileForm.heightCm ? Number(profileForm.heightCm) : "",
-        weightKg: profileForm.weightKg ? Number(profileForm.weightKg) : "",
-        age: profileForm.age ? Number(profileForm.age) : "",
-        sex: profileForm.sex || "",
-        measurements,
-        measurementsUpdatedAt: serverTimestamp(),
-      });
+      await Promise.all([
+        updateDoc(doc(db, "users", user.uid), {
+          heightCm: profileForm.heightCm ? Number(profileForm.heightCm) : "",
+          weightKg,
+          age: profileForm.age ? Number(profileForm.age) : "",
+          sex: profileForm.sex || "",
+          ...bodyComposition,
+          scaleCalories,
+          measurements,
+          measurementsUpdatedAt: serverTimestamp(),
+        }),
+        setDoc(
+          doc(db, "healthLogs", `${user.uid}_${todayKey}`),
+          {
+            userId: user.uid,
+            dateKey: todayKey,
+            bodyMeasurement: {
+              weightKg,
+              ...bodyComposition,
+              scaleCalories,
+              measurements,
+            },
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        ),
+      ]);
       showStatus("success", "Podaci su sačuvani.");
     } catch (error) {
       console.error("Profile stats save failed", error);
@@ -605,7 +661,7 @@ export default function ClientProgress() {
           <button
             key={tab.value}
             type="button"
-            onClick={() => setActiveTab(tab.value)}
+            onClick={() => changeTab(tab.value)}
             className={`rounded-xl px-1.5 py-2 text-[11px] font-medium transition ${
               activeTab === tab.value
                 ? "bg-brand-blue-500 text-white shadow-glow"
@@ -650,21 +706,6 @@ export default function ClientProgress() {
         />
       )}
 
-      {activeTab === "training" && (
-        <TrainingTab
-          activeMembership={activeMembership}
-          weekProgress={weekProgress}
-          last30Visits={last30Visits}
-          weeklyStreak={weeklyStreak}
-          bestWeek={bestWeek}
-          preferredShift={preferredShift}
-          milestones={milestones}
-          todayLog={todayLog}
-          saving={savingLog}
-          onSave={saveTodayLog}
-        />
-      )}
-
       {activeTab === "body" && (
         <BodyTab
           profileForm={profileForm}
@@ -673,6 +714,10 @@ export default function ClientProgress() {
           saving={savingProfile}
           onSave={saveProfileStats}
         />
+      )}
+
+      {activeTab === "achievements" && (
+        <AchievementsTab milestones={milestones} />
       )}
     </div>
   );
@@ -889,99 +934,69 @@ function SleepChoiceRow({ label, value, onChange, options }) {
   );
 }
 
-function TrainingTab({
-  activeMembership,
-  weekProgress,
-  last30Visits,
-  weeklyStreak,
-  bestWeek,
-  preferredShift,
-  milestones,
-  todayLog,
-  saving,
-  onSave,
-}) {
+function AchievementsTab({ milestones }) {
+  const completed = milestones.filter((milestone) => milestone.complete);
+  const upcoming = milestones
+    .filter((milestone) => !milestone.complete)
+    .sort(
+      (a, b) =>
+        b.current / Math.max(b.target, 1) - a.current / Math.max(a.target, 1)
+    );
+  const next = upcoming[0];
+  const nextProgress = next
+    ? Math.round((next.current / Math.max(next.target, 1)) * 100)
+    : 100;
+
   return (
     <div className="space-y-4">
-      <Panel className="space-y-4 p-4">
-        <SectionHeader
-          icon={<TrainingIcon className="h-5 w-5" />}
-          title="Trening"
-          subtitle="Ovaj deo se najvećim delom puni automatski iz dolazaka."
-        />
-
-        <div className="grid grid-cols-2 gap-2">
-          <Metric label="30 dana" value={`${last30Visits.length}`} detail="dolazaka" />
-          <Metric label="Niz" value={`${weeklyStreak}`} detail="nedelja" />
-          <Metric label="Najbolja nedelja" value={`${bestWeek}`} detail="dolazaka" />
-          <Metric label="Termin" value={preferredShift} detail="najčešće" />
+      <Panel className="space-y-3 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.08em] text-neutral-400">
+              Ostvareno
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-white">
+              {completed.length} <span className="text-sm text-neutral-500">/ {milestones.length}</span>
+            </p>
+          </div>
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/25 bg-amber-400/10 text-amber-200">
+            <TrophyIcon className="h-6 w-6" />
+          </div>
         </div>
 
-        {activeMembership ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-white">Ova nedelja</p>
-              <p className="text-sm font-semibold text-white">
-                {weekProgress.done} / {weekProgress.allowed === "unlimited" ? "∞" : weekProgress.allowed}
-              </p>
+        {next ? (
+          <div className="border-t border-white/10 pt-3">
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] text-neutral-500">Sledeće dostignuće</p>
+                <p className="truncate text-sm font-semibold text-white">{next.title}</p>
+              </div>
+              <span className="shrink-0 text-xs font-medium text-amber-200">{next.detail}</span>
             </div>
-            {weekProgress.allowed === "unlimited" ? (
-              <p className="text-xs text-neutral-400">Neograničen broj dolazaka.</p>
-            ) : (
-              <SegmentedProgress
-                value={weekProgress.done}
-                allowed={weekProgress.allowed}
-                ratio={weekProgress.ratio}
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-neutral-800">
+              <div
+                className="h-full rounded-full bg-amber-400 transition-all"
+                style={{ width: `${Math.max(nextProgress, 4)}%` }}
               />
-            )}
+            </div>
           </div>
         ) : (
-          <InfoNote>Nema aktivne članarine, pa se trenutni trening cilj ne prikazuje.</InfoNote>
+          <p className="border-t border-white/10 pt-3 text-sm text-brand-green-300">
+            Sva trenutna dostignuća su ostvarena.
+          </p>
         )}
       </Panel>
 
       <Panel className="space-y-3 p-4">
-        <SectionHeader
-          icon={<TargetIcon className="h-5 w-5" />}
-          title="Kako je bilo danas?"
-          subtitle="Opcionalno. Korisno treneru ako klijent želi da prati osećaj."
-        />
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { value: "easy", label: "Lako" },
-            { value: "normal", label: "Normalno" },
-            { value: "hard", label: "Teško" },
-          ].map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              disabled={saving}
-              onClick={() => onSave({ trainingEffort: item.value })}
-              className={`rounded-xl border px-3 py-2 text-sm font-medium transition disabled:opacity-60 ${
-                todayLog.trainingEffort === item.value
-                  ? "border-brand-blue-500 bg-brand-blue-500 text-white"
-                  : "border-white/10 bg-white/5 text-neutral-300"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel className="space-y-4 p-4">
-        <SectionHeader
-          icon={<TrophyIcon className="h-5 w-5" />}
-          title="Milestones"
-          subtitle="Automatski ciljevi iz dolazaka, bez dodatnog unosa."
-        />
+        <p className="text-sm font-semibold text-white">Sva dostignuća</p>
         <div className="space-y-2">
           {milestones.map((milestone) => (
             <Milestone
-              key={milestone.title}
+              key={milestone.id}
               title={milestone.title}
               detail={milestone.detail}
               complete={milestone.complete}
+              category={milestone.category}
             />
           ))}
         </div>
@@ -1014,9 +1029,8 @@ function BodyTab({ profileForm, setProfileForm, bodyStats, saving, onSave }) {
           subtitle="Ovo se unosi retko. Dovoljno je kada se nešto promeni."
         />
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <InputBox label="Visina" suffix="cm" value={profileForm.heightCm} onChange={(value) => updateField("heightCm", value)} />
-          <InputBox label="Težina" suffix="kg" value={profileForm.weightKg} onChange={(value) => updateField("weightKg", value)} />
           <InputBox label="Godine" suffix="" value={profileForm.age} onChange={(value) => updateField("age", value)} />
           <label className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <span className="block text-[10px] font-medium uppercase tracking-[0.08em] text-neutral-500">
@@ -1038,10 +1052,35 @@ function BodyTab({ profileForm, setProfileForm, bodyStats, saving, onSave }) {
           <Metric label="BMI" value={bodyStats.bmi ? formatNumber(bodyStats.bmi) : "-"} tone={getBmiTone(bodyStats.bmi)} />
           <Metric label="BMR" value={bodyStats.bmr ? `${Math.round(bodyStats.bmr)} kcal` : "-"} />
         </div>
+      </Panel>
 
-        <InfoNote>
-          BMI i BMR su smernice. Nisu presuda i imaju smisla tek uz cilj, trening i navike.
-        </InfoNote>
+      <Panel className="space-y-4 p-4">
+        <SectionHeader
+          icon={<ActivityIcon className="h-5 w-5" />}
+          title="Sastav tela"
+          subtitle="Prepiši rezultate sa Sencor SBS 9102BK vage."
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <InputBox label="Težina" suffix="kg" value={profileForm.weightKg} onChange={(value) => updateField("weightKg", value)} />
+          {BODY_COMPOSITION_FIELDS.map((field) => (
+            <InputBox
+              key={field.key}
+              label={field.label}
+              suffix={field.suffix}
+              value={profileForm[field.key]}
+              onChange={(value) => updateField(field.key, value)}
+            />
+          ))}
+          <InputBox
+            label="Kalorije vage"
+            suffix="kcal"
+            value={profileForm.scaleCalories}
+            onChange={(value) => updateField("scaleCalories", value)}
+          />
+        </div>
+        <p className="text-[11px] leading-relaxed text-neutral-500">
+          BMI i BMR se računaju automatski. Ostala polja nisu obavezna.
+        </p>
       </Panel>
 
       <Panel className="space-y-4 p-4">
@@ -1133,33 +1172,7 @@ function InputBox({ label, suffix, value, onChange }) {
   );
 }
 
-function InfoNote({ children }) {
-  return (
-    <p className="rounded-xl border border-brand-blue-500/15 bg-brand-blue-500/10 px-3 py-3 text-xs leading-relaxed text-brand-blue-100">
-      {children}
-    </p>
-  );
-}
-
-function SegmentedProgress({ value, allowed, ratio }) {
-  const activeColor =
-    ratio >= 1 ? "bg-brand-green-500" : ratio >= 0.5 ? "bg-amber-400" : "bg-red-500";
-
-  return (
-    <div className="flex gap-1">
-      {Array.from({ length: allowed }, (_, index) => (
-        <span
-          key={index}
-          className={`h-2 min-w-0 flex-1 rounded-sm ${
-            index < value ? activeColor : "bg-neutral-700"
-          }`}
-        />
-      ))}
-    </div>
-  );
-}
-
-function Milestone({ title, detail, complete }) {
+function Milestone({ title, detail, complete, category }) {
   return (
     <div
       className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-3 ${
@@ -1170,10 +1183,10 @@ function Milestone({ title, detail, complete }) {
     >
       <span className="min-w-0">
         <span className="block truncate text-sm font-medium text-white">{title}</span>
-        <span className="block truncate text-xs text-neutral-400">{detail}</span>
+        <span className="block truncate text-xs text-neutral-400">{category} · {detail}</span>
       </span>
       <StatusPill tone={complete ? "green" : "neutral"}>
-        {complete ? "gotovo" : "u toku"}
+        {complete ? "ostvareno" : "u toku"}
       </StatusPill>
     </div>
   );
