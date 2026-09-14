@@ -500,7 +500,7 @@ export default function ClientDashboard() {
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-semibold text-white">Danas</p>
           <Link to="/napredak" className="text-xs font-medium text-brand-blue-300">
-            Otvori napredak
+            Otvori dnevnik
           </Link>
         </div>
         <div className="grid grid-cols-3 gap-2">
