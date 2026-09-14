@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Panel } from "../ui/Primitives";
 import {
   FOOD_SORT_OPTIONS,
@@ -8,6 +9,7 @@ import {
   emptyFoodForm,
   foodNutrients,
   normalizeFoodForm,
+  scaleNutrients,
   sumMeals,
   sumNutrients,
 } from "../../data/nutritionCatalog";
@@ -37,6 +39,7 @@ export default function NutritionTracker({
   const [activeView, setActiveView] = useState("today");
   const [composerOpen, setComposerOpen] = useState(false);
   const [sessionFoods, setSessionFoods] = useState([]);
+  const [details, setDetails] = useState(null);
   const meals = safeMeals(todayLog.nutritionMeals);
 
   const foods = useMemo(() => {
@@ -117,6 +120,7 @@ export default function NutritionTracker({
           onRemoveMeal={removeMeal}
           onToggleHabit={(key) => onSave({ [key]: !todayLog[key] })}
           onCreateFood={createFood}
+          onShowDetails={setDetails}
         />
       )}
 
@@ -126,6 +130,7 @@ export default function NutritionTracker({
           savingFood={savingFood}
           onCreateFood={createFood}
           onStartMeal={startFoodMeal}
+          onShowDetails={setDetails}
         />
       )}
 
@@ -134,7 +139,12 @@ export default function NutritionTracker({
           meals={trainerMeals}
           saving={saving}
           onAddMeal={addMeal}
+          onShowDetails={setDetails}
         />
+      )}
+
+      {details && (
+        <NutritionDetailsModal details={details} onClose={() => setDetails(null)} />
       )}
     </div>
   );
@@ -153,6 +163,7 @@ function TodayView({
   onRemoveMeal,
   onToggleHabit,
   onCreateFood,
+  onShowDetails,
 }) {
   const totals = sumMeals(meals);
 
@@ -165,6 +176,7 @@ function TodayView({
         onCancel={onCloseComposer}
         onSave={onAddMeal}
         onCreateFood={onCreateFood}
+        onShowDetails={onShowDetails}
       />
     );
   }
@@ -228,6 +240,7 @@ function TodayView({
               meal={meal}
               saving={saving}
               onRemove={() => onRemoveMeal(meal.id)}
+              onShowDetails={() => onShowDetails({ type: "meal", data: meal })}
             />
           ))}
         </div>
@@ -240,7 +253,15 @@ function TodayView({
   );
 }
 
-function MealComposer({ foods, saving, savingFood, onCancel, onSave, onCreateFood }) {
+function MealComposer({
+  foods,
+  saving,
+  savingFood,
+  onCancel,
+  onSave,
+  onCreateFood,
+  onShowDetails,
+}) {
   const pendingFoodId = window.sessionStorage.getItem("nutritionPendingFood");
   const pendingFood = foods.find((food) => food.id === pendingFoodId);
   const [mealType, setMealType] = useState("breakfast");
@@ -338,9 +359,17 @@ function MealComposer({ foods, saving, savingFood, onCancel, onSave, onCreateFoo
         <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
           {selectedItems.map((item) => (
             <div key={item.foodId} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2 py-1.5">
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-white">
+              <button
+                type="button"
+                onClick={() => onShowDetails({ type: "food", data: foodFromMealItem(item) })}
+                className="min-w-0 flex-1 truncate text-left text-xs font-medium text-white"
+              >
                 {item.name}
-              </span>
+              </button>
+              <InfoButton
+                label={`Podaci za ${item.name}`}
+                onClick={() => onShowDetails({ type: "food", data: foodFromMealItem(item) })}
+              />
               <input
                 type="number"
                 min="0"
@@ -383,22 +412,26 @@ function MealComposer({ foods, saving, savingFood, onCancel, onSave, onCreateFoo
 
       <div className="mt-2 max-h-60 divide-y divide-white/[0.06] overflow-y-auto rounded-xl border border-white/10 bg-neutral-950/35">
         {visibleFoods.map((food) => (
-          <button
-            key={food.id}
-            type="button"
-            onClick={() => addFood(food)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-white/5"
-          >
+          <div key={food.id} className="flex w-full items-center gap-2 px-3 py-2">
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-medium text-white">{food.name}</span>
               <span className="block text-[10px] text-neutral-500">
                 {round(food.calories)} kcal · P {round(food.protein, 1)} · UH {round(food.carbs, 1)} · M {round(food.fat, 1)}
               </span>
             </span>
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue-500/15 text-base text-brand-blue-300">
+            <InfoButton
+              label={`Podaci za ${food.name}`}
+              onClick={() => onShowDetails({ type: "food", data: food })}
+            />
+            <button
+              type="button"
+              onClick={() => addFood(food)}
+              aria-label={`Dodaj ${food.name}`}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue-500/15 text-base text-brand-blue-300"
+            >
               +
-            </span>
-          </button>
+            </button>
+          </div>
         ))}
         {!visibleFoods.length && (
           <p className="px-3 py-4 text-center text-xs text-neutral-500">Nema rezultata.</p>
@@ -429,11 +462,10 @@ function MealComposer({ foods, saving, savingFood, onCancel, onSave, onCreateFoo
   );
 }
 
-function FoodCatalogView({ foods, savingFood, onCreateFood, onStartMeal }) {
+function FoodCatalogView({ foods, savingFood, onCreateFood, onStartMeal, onShowDetails }) {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [showCustomFood, setShowCustomFood] = useState(false);
-  const [expandedFoodId, setExpandedFoodId] = useState(null);
 
   const visibleFoods = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("sr-Latn-RS");
@@ -495,63 +527,44 @@ function FoodCatalogView({ foods, savingFood, onCreateFood, onStartMeal }) {
       </Panel>
 
       <div className="space-y-2">
-        {visibleFoods.map((food) => {
-          const expanded = expandedFoodId === food.id;
-          return (
-            <div key={food.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
-              <div className="flex items-start justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setExpandedFoodId(expanded ? null : food.id)}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <span className="block truncate text-sm font-semibold text-white">{food.name}</span>
-                  <span className="mt-1 grid grid-cols-4 gap-1 text-[10px] text-neutral-400">
-                    <span>{round(food.calories)} kcal</span>
-                    <span>P {round(food.protein, 1)}g</span>
-                    <span>UH {round(food.carbs, 1)}g</span>
-                    <span>M {round(food.fat, 1)}g</span>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onStartMeal(food)}
-                  aria-label={`Dodaj ${food.name} u obrok`}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-blue-500/15 text-lg text-brand-blue-300"
-                >
-                  +
-                </button>
+        {visibleFoods.map((food) => (
+          <div key={food.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-white">{food.name}</span>
+                <span className="mt-1 grid grid-cols-4 gap-1 text-[10px] text-neutral-400">
+                  <span>{round(food.calories)} kcal</span>
+                  <span>P {round(food.protein, 1)}g</span>
+                  <span>UH {round(food.carbs, 1)}g</span>
+                  <span>M {round(food.fat, 1)}g</span>
+                </span>
               </div>
-
+              <InfoButton
+                label={`Podaci za ${food.name}`}
+                onClick={() => onShowDetails({ type: "food", data: food })}
+                className="h-8 w-8"
+              />
               <button
                 type="button"
-                onClick={() => setExpandedFoodId(expanded ? null : food.id)}
-                className="mt-2 flex w-full items-center justify-between border-t border-white/[0.07] pt-2 text-[10px] text-neutral-500"
+                onClick={() => onStartMeal(food)}
+                aria-label={`Dodaj ${food.name} u obrok`}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-blue-500/15 text-lg text-brand-blue-300"
               >
-                <span>Vlakna {display(food.fiber, "g")} · Šećeri {display(food.sugar, "g")} · GI {display(food.glycemicIndex)}</span>
-                <ChevronIcon className={`h-3.5 w-3.5 transition ${expanded ? "rotate-180" : ""}`} />
+                +
               </button>
-
-              {expanded && (
-                <div className="mt-2 grid grid-cols-4 gap-1.5">
-                  <NutrientCell label="Natrijum" value={display(food.sodium, "mg")} />
-                  <NutrientCell label="Kalijum" value={display(food.potassium, "mg")} />
-                  <NutrientCell label="Kalcijum" value={display(food.calcium, "mg")} />
-                  <NutrientCell label="Gvožđe" value={display(food.iron, "mg")} />
-                  <p className="col-span-4 mt-1 text-[9px] text-neutral-600">
-                    {food.catalogStatus === "personal" ? "Lični unos" : food.source}
-                  </p>
-                </div>
-              )}
             </div>
-          );
-        })}
+
+            <p className="mt-2 border-t border-white/[0.07] pt-2 text-[10px] text-neutral-500">
+              Vlakna {display(food.fiber, "g")} · Šećeri {display(food.sugar, "g")} · GI {display(food.glycemicIndex)}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function TrainerMealsView({ meals, saving, onAddMeal }) {
+function TrainerMealsView({ meals, saving, onAddMeal, onShowDetails }) {
   if (!meals.length) {
     return (
       <Panel className="px-4 py-7 text-center">
@@ -576,20 +589,27 @@ function TrainerMealsView({ meals, saving, onAddMeal }) {
                   {round(totals.calories)} kcal · P {round(totals.protein, 1)}g · UH {round(totals.carbs, 1)}g · M {round(totals.fat, 1)}g
                 </p>
               </div>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => onAddMeal({
-                  ...template,
-                  id: createId("meal"),
-                  templateId: template.id,
-                  createdAt: new Date().toISOString(),
-                  source: "trainer",
-                })}
-                className="shrink-0 rounded-lg bg-brand-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-              >
-                Dodaj
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <InfoButton
+                  label={`Podaci za ${template.name}`}
+                  onClick={() => onShowDetails({ type: "meal", data: template })}
+                  className="h-8 w-8"
+                />
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => onAddMeal({
+                    ...template,
+                    id: createId("meal"),
+                    templateId: template.id,
+                    createdAt: new Date().toISOString(),
+                    source: "trainer",
+                  })}
+                  className="rounded-lg bg-brand-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  Dodaj
+                </button>
+              </div>
             </div>
           </div>
         );
@@ -659,14 +679,13 @@ function CustomFoodForm({ saving, onSave }) {
   );
 }
 
-function MealRow({ meal, saving, onRemove }) {
-  const [expanded, setExpanded] = useState(false);
+function MealRow({ meal, saving, onRemove, onShowDetails }) {
   const totals = sumNutrients(meal.items);
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5">
       <div className="flex items-center gap-2">
-        <button type="button" onClick={() => setExpanded((current) => !current)} className="min-w-0 flex-1 text-left">
+        <div className="min-w-0 flex-1 text-left">
           <span className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold text-white">{meal.name || getMealTypeLabel(meal.type)}</span>
             <span className="text-xs font-semibold text-brand-blue-300">{round(totals.calories)} kcal</span>
@@ -674,7 +693,12 @@ function MealRow({ meal, saving, onRemove }) {
           <span className="mt-0.5 block text-[10px] text-neutral-500">
             P {round(totals.protein, 1)}g · UH {round(totals.carbs, 1)}g · M {round(totals.fat, 1)}g
           </span>
-        </button>
+        </div>
+        <InfoButton
+          label={`Podaci za ${meal.name || "obrok"}`}
+          onClick={onShowDetails}
+          className="h-8 w-8"
+        />
         <button
           type="button"
           disabled={saving}
@@ -684,25 +708,7 @@ function MealRow({ meal, saving, onRemove }) {
         >
           <TrashIcon className="h-4 w-4" />
         </button>
-        <button
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-          aria-label={expanded ? "Sakrij stavke" : "Prikaži stavke"}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-500"
-        >
-          <ChevronIcon className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`} />
-        </button>
       </div>
-      {expanded && (
-        <div className="mt-2 divide-y divide-white/[0.06] border-t border-white/[0.07] pt-1">
-          {meal.items.map((item) => (
-            <div key={`${meal.id}-${item.foodId}`} className="flex items-center justify-between gap-3 py-1.5 text-[11px]">
-              <span className="min-w-0 truncate text-neutral-300">{item.name}</span>
-              <span className="shrink-0 text-neutral-500">{item.grams} g</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -720,9 +726,153 @@ function DailyMetric({ label, value, unit, primary = false }) {
 
 function NutrientCell({ label, value }) {
   return (
-    <div className="min-w-0 rounded-lg bg-white/[0.035] px-1.5 py-1.5 text-center">
-      <p className="truncate text-[9px] text-neutral-600">{label}</p>
-      <p className="truncate text-[10px] font-medium text-neutral-300">{value}</p>
+    <div className="min-w-0 rounded-lg border border-white/[0.06] bg-white/[0.035] px-2 py-2">
+      <p className="truncate text-[9px] text-neutral-500">{label}</p>
+      <p className="mt-0.5 truncate text-xs font-medium text-neutral-200">{value}</p>
+    </div>
+  );
+}
+
+function InfoButton({ label, onClick, className = "h-7 w-7" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`flex shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-neutral-400 transition hover:border-brand-blue-500/30 hover:text-brand-blue-200 ${className}`}
+    >
+      <InfoIcon className="h-4 w-4" />
+    </button>
+  );
+}
+
+function NutritionDetailsModal({ details, onClose }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  const isMeal = details.type === "meal";
+  const data = details.data;
+  const title = data.name || (isMeal ? getMealTypeLabel(data.type) : "Namirnica");
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 sm:items-center sm:p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Nutritivni podaci: ${title}`}
+        onClick={(event) => event.stopPropagation()}
+        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-neutral-900 shadow-[0_-18px_50px_rgba(0,0,0,0.6)] sm:rounded-2xl"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold text-white">{title}</p>
+            <p className="mt-0.5 text-[10px] text-neutral-500">
+              {isMeal ? "Ukupno i sastav obroka" : "Vrednosti na 100 g"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Zatvori podatke"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-xl text-neutral-400 hover:bg-white/5 hover:text-white"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          {isMeal ? <MealDetails meal={data} /> : <FoodDetails food={data} />}
+        </div>
+      </section>
+    </div>,
+    document.body
+  );
+}
+
+function FoodDetails({ food }) {
+  return (
+    <div className="space-y-3">
+      <NutrientGrid data={food} />
+      <p className="text-[10px] leading-relaxed text-neutral-500">
+        {food.catalogStatus === "personal"
+          ? "Lični unos prema podacima koje je uneo korisnik."
+          : food.source || "Prosečna nutritivna vrednost."}
+      </p>
+    </div>
+  );
+}
+
+function MealDetails({ meal }) {
+  const totals = sumNutrients(meal.items);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+          Ukupne poznate vrednosti
+        </p>
+        <NutrientGrid data={totals} includeGi={false} />
+        <p className="mt-2 text-[10px] leading-relaxed text-neutral-600">
+          Glikemijski indeks se ne sabira. Prikazan je zasebno uz svaku namirnicu.
+        </p>
+      </div>
+
+      <div className="space-y-3 border-t border-white/10 pt-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+          Sastav obroka
+        </p>
+        {meal.items.map((item, index) => {
+          const nutrients = item.nutrients || item;
+          const scaled = {
+            ...scaleNutrients(nutrients, item.grams),
+            glycemicIndex: nutrients.glycemicIndex ?? null,
+          };
+          return (
+            <div key={`${item.foodId || item.name}-${index}`} className="rounded-xl border border-white/10 bg-neutral-950/35 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="min-w-0 truncate text-sm font-medium text-white">{item.name}</p>
+                <span className="shrink-0 text-xs text-neutral-400">{item.grams} g</span>
+              </div>
+              <NutrientGrid data={scaled} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NutrientGrid({ data, includeGi = true }) {
+  const fields = includeGi
+    ? NUTRIENT_FIELDS
+    : NUTRIENT_FIELDS.filter((field) => field.key !== "glycemicIndex");
+
+  return (
+    <div className="grid grid-cols-3 gap-1.5">
+      {fields.map((field) => (
+        <NutrientCell
+          key={field.key}
+          label={field.label}
+          value={display(data[field.key], field.unit)}
+        />
+      ))}
     </div>
   );
 }
@@ -733,6 +883,15 @@ function createMealItem(food) {
     name: food.name,
     grams: 100,
     nutrients: foodNutrients(food),
+  };
+}
+
+function foodFromMealItem(item) {
+  return {
+    id: item.foodId,
+    name: item.name,
+    ...(item.nutrients || {}),
+    source: "Vrednosti sačuvane uz obrok",
   };
 }
 
@@ -770,10 +929,12 @@ function SearchIcon({ className }) {
   );
 }
 
-function ChevronIcon({ className }) {
+function InfoIcon({ className }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="m6 9 6 6 6-6" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 8h.01" />
     </svg>
   );
 }
