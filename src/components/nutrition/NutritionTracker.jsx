@@ -128,7 +128,9 @@ export default function NutritionTracker({
         />
       )}
 
-      {activeView === "history" && <NutritionHistoryView logs={historyLogs} />}
+      {activeView === "history" && (
+        <NutritionHistoryView logs={historyLogs} onShowDetails={setDetails} />
+      )}
 
       {activeView === "foods" && (
         <FoodCatalogView
@@ -264,7 +266,7 @@ function TodayView({
   );
 }
 
-function NutritionHistoryView({ logs }) {
+function NutritionHistoryView({ logs, onShowDetails }) {
   const [selectedDateKey, setSelectedDateKey] = useState(null);
   const history = useMemo(() => buildNutritionHistory(logs), [logs]);
   const selectedDay = history.weeks
@@ -276,13 +278,31 @@ function NutritionHistoryView({ logs }) {
       <Panel className="p-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white">Mesečni prosek</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-white">Mesečni prosek</p>
+              <InfoButton
+                label="Kako se računa mesečni prosek"
+                onClick={() => onShowDetails({
+                  type: "history-average",
+                  data: {
+                    name: "Mesečni prosek",
+                    kind: "month",
+                    average: history.average,
+                    recordedDays: history.recordedDays,
+                    elapsedDays: history.visibleDays,
+                    startDate: history.startDate,
+                    endDate: history.endDate,
+                  },
+                })}
+                className="h-8 w-8"
+              />
+            </div>
             <p className="mt-0.5 text-[11px] text-neutral-500">
               {shortHistoryDate(history.startDate)} – {shortHistoryDate(history.endDate)}
             </p>
           </div>
           <span className="shrink-0 text-xs text-neutral-400">
-            {history.recordedDays} / {history.visibleDays} dana
+            {history.recordedDays} upisanih dana
           </span>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-1.5 border-t border-white/10 pt-3">
@@ -318,9 +338,27 @@ function NutritionHistoryView({ logs }) {
             <div key={week.key} className="py-3 first:pt-1">
               <div className="mb-2 flex items-center justify-between gap-2 px-1">
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white">
-                    {week.index === 0 ? "Ova nedelja" : week.index === 1 ? "Prošla nedelja" : `Pre ${week.index} nedelje`}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-white">
+                      {week.index === 0 ? "Ova nedelja" : week.index === 1 ? "Prošla nedelja" : `Pre ${week.index} nedelje`}
+                    </p>
+                    <InfoButton
+                      label={`Prosek za nedelju od ${shortHistoryDate(week.days[0].date)}`}
+                      onClick={() => onShowDetails({
+                        type: "history-average",
+                        data: {
+                          name: week.index === 0 ? "Ova nedelja" : week.index === 1 ? "Prošla nedelja" : `Pre ${week.index} nedelje`,
+                          kind: "week",
+                          average: week.average,
+                          recordedDays: week.recordedDays,
+                          elapsedDays: week.days.filter((day) => !day.future).length,
+                          startDate: week.days[0].date,
+                          endDate: lastDay.date,
+                        },
+                      })}
+                      className="h-8 w-8"
+                    />
+                  </div>
                   <p className="text-[10px] text-neutral-500">
                     {shortHistoryDate(week.days[0].date)} – {shortHistoryDate(lastDay.date)}
                   </p>
@@ -1067,6 +1105,7 @@ function NutritionDetailsModal({ details, onClose }) {
 
   const isMeal = details.type === "meal";
   const isDay = details.type === "day";
+  const isHistoryAverage = details.type === "history-average";
   const data = details.data;
   const title = data.name || (isMeal ? getMealTypeLabel(data.type) : "Namirnica");
 
@@ -1089,6 +1128,8 @@ function NutritionDetailsModal({ details, onClose }) {
             <p className="mt-0.5 text-[10px] text-neutral-500">
               {isDay
                 ? "Ukupan dnevni unos"
+                : isHistoryAverage
+                  ? "Prosek po danu sa upisanim obrocima"
                 : isMeal
                   ? `${data.eatenAt ? `${data.eatenAt} · ` : ""}Ukupno i sastav obroka`
                   : "Vrednosti na 100 g"}
@@ -1105,7 +1146,9 @@ function NutritionDetailsModal({ details, onClose }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {isDay ? (
+          {isHistoryAverage ? (
+            <HistoryAverageDetails data={data} />
+          ) : isDay ? (
             <DayDetails meals={data.meals || []} />
           ) : isMeal ? (
             <MealDetails meal={data} />
@@ -1116,6 +1159,37 @@ function NutritionDetailsModal({ details, onClose }) {
       </section>
     </div>,
     document.body
+  );
+}
+
+function HistoryAverageDetails({ data }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-neutral-400">
+        {shortHistoryDate(data.startDate)} – {shortHistoryDate(data.endDate)}
+        {" · "}{data.recordedDays} upisanih dana
+      </p>
+      <div className="grid grid-cols-4 gap-1.5">
+        <DailyMetric label="Kalorije" value={data.average ? round(data.average.calories) : "-"} unit="kcal" primary />
+        <DailyMetric label="Proteini" value={data.average ? round(data.average.protein, 1) : "-"} unit="g" />
+        <DailyMetric label="UH" value={data.average ? round(data.average.carbs, 1) : "-"} unit="g" />
+        <DailyMetric label="Masti" value={data.average ? round(data.average.fat, 1) : "-"} unit="g" />
+      </div>
+      <p className="text-xs leading-relaxed text-neutral-400">
+        {data.average
+          ? "Prosek se računa samo iz dana sa upisanim obrocima. Prazni dani se ne računaju kao 0 kcal."
+          : "U ovom periodu nema upisanih obroka, pa prosek još ne postoji."}
+      </p>
+      <p className="text-xs leading-relaxed text-neutral-500">
+        {data.kind === "month"
+          ? data.elapsedDays < 28
+            ? `Prikazane su četiri kalendarske nedelje. Tekuća nedelja traje samo do danas, pa ovaj period trenutno ima ${data.elapsedDays} proteklih dana, a ne punih 28.`
+            : "Prikazane su četiri pune kalendarske nedelje, ukupno 28 dana."
+          : data.elapsedDays < 7
+            ? `Ova nedelja je u toku; zasad su prošla ${data.elapsedDays} dana.`
+            : "Prikazana je cela nedelja, od ponedeljka do nedelje."}
+      </p>
+    </div>
   );
 }
 

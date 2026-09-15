@@ -23,6 +23,10 @@ test("groups four Monday-first weeks and averages only days with meals", () => {
   ]);
   assert.equal(history.visibleDays, 24);
   assert.equal(history.recordedDays, 3);
+  assert.equal(history.weeks[0].recordedDays, 1);
+  assert.equal(history.weeks[0].average.calories, 200);
+  assert.equal(history.weeks[1].average.calories, 400);
+  assert.equal(history.weeks[2].average, null);
   assert.equal(history.weeks[0].days[6].future, true);
   assert.equal(history.weeks[0].days[6].recorded, false);
   assert.ok(Math.abs(history.average.calories - 800 / 3) < 0.001);
@@ -46,4 +50,11 @@ test("handles weeks crossing a calendar year", () => {
 
   assert.equal(history.weeks[0].key, "2025-12-29");
   assert.equal(history.endDate.getDate(), 1);
+});
+
+test("four complete calendar weeks contain 28 elapsed days on Sunday", () => {
+  const history = buildNutritionHistory([], new Date(2026, 8, 20, 12));
+
+  assert.equal(history.visibleDays, 28);
+  assert.equal(history.weeks[0].days[6].future, false);
 });
