@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Panel } from "../ui/Primitives";
+import { buildNutritionHistory } from "../../data/nutritionHistory.js";
 import {
   FOOD_SORT_OPTIONS,
   MEAL_TYPES,
@@ -24,12 +25,14 @@ const NUTRITION_HABITS = [
 
 const VIEW_OPTIONS = [
   { value: "today", label: "Danas" },
+  { value: "history", label: "Istorija" },
   { value: "foods", label: "Namirnice" },
   { value: "trainer", label: "Obroci trenera" },
 ];
 
 export default function NutritionTracker({
   todayLog,
+  historyLogs = [],
   personalFoods = [],
   trainerMeals = [],
   saving,
@@ -87,7 +90,7 @@ export default function NutritionTracker({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-neutral-950/55 p-1">
+      <div className="grid grid-cols-4 gap-1 rounded-xl border border-white/10 bg-neutral-950/55 p-1">
         {VIEW_OPTIONS.map((view) => (
           <button
             key={view.value}
@@ -96,7 +99,7 @@ export default function NutritionTracker({
               setActiveView(view.value);
               if (view.value !== "today") setComposerOpen(false);
             }}
-            className={`min-h-9 rounded-lg px-1.5 py-2 text-[11px] font-medium transition ${
+            className={`min-h-11 rounded-lg px-1 py-2 text-[10px] font-medium leading-tight transition ${
               activeView === view.value
                 ? "bg-white/10 text-white"
                 : "text-neutral-400 hover:bg-white/5 hover:text-white"
@@ -124,6 +127,8 @@ export default function NutritionTracker({
           onShowDetails={setDetails}
         />
       )}
+
+      {activeView === "history" && <NutritionHistoryView logs={historyLogs} />}
 
       {activeView === "foods" && (
         <FoodCatalogView
@@ -256,6 +261,187 @@ function TodayView({
         </Panel>
       )}
     </div>
+  );
+}
+
+function NutritionHistoryView({ logs }) {
+  const [selectedDateKey, setSelectedDateKey] = useState(null);
+  const history = useMemo(() => buildNutritionHistory(logs), [logs]);
+  const selectedDay = history.weeks
+    .flatMap((week) => week.days)
+    .find((day) => day.key === selectedDateKey && day.recorded);
+
+  return (
+    <div className="space-y-3">
+      <Panel className="p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white">Mesečni prosek</p>
+            <p className="mt-0.5 text-[11px] text-neutral-500">
+              {shortHistoryDate(history.startDate)} – {shortHistoryDate(history.endDate)}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs text-neutral-400">
+            {history.recordedDays} / {history.visibleDays} dana
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-1.5 border-t border-white/10 pt-3">
+          <DailyMetric
+            label="Kalorije"
+            value={history.average ? round(history.average.calories) : "-"}
+            unit="kcal"
+            primary
+          />
+          <DailyMetric
+            label="Proteini"
+            value={history.average ? round(history.average.protein, 1) : "-"}
+            unit="g"
+          />
+          <DailyMetric
+            label="UH"
+            value={history.average ? round(history.average.carbs, 1) : "-"}
+            unit="g"
+          />
+          <DailyMetric
+            label="Masti"
+            value={history.average ? round(history.average.fat, 1) : "-"}
+            unit="g"
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-neutral-500">Prosek po danu sa upisanim obrocima.</p>
+      </Panel>
+
+      <div className="divide-y divide-white/10">
+        {history.weeks.map((week) => {
+          const lastDay = week.days.filter((day) => !day.future).slice(-1)[0];
+          return (
+            <div key={week.key} className="py-3 first:pt-1">
+              <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white">
+                    {week.index === 0 ? "Ova nedelja" : week.index === 1 ? "Prošla nedelja" : `Pre ${week.index} nedelje`}
+                  </p>
+                  <p className="text-[10px] text-neutral-500">
+                    {shortHistoryDate(week.days[0].date)} – {shortHistoryDate(lastDay.date)}
+                  </p>
+                </div>
+                <span className="shrink-0 text-[11px] text-neutral-400">
+                  {week.recordedDays} upisanih dana
+                </span>
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {week.days.map((day) => (
+                  <button
+                    key={day.key}
+                    type="button"
+                    disabled={!day.recorded}
+                    onClick={() => setSelectedDateKey(day.key)}
+                    aria-label={`${day.date.toLocaleDateString("sr-Latn-RS", { day: "numeric", month: "long" })}: ${day.recorded ? `${round(day.totals.calories)} kcal` : "nema upisanih obroka"}`}
+                    className={`flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border text-center transition ${
+                      day.recorded
+                        ? "border-brand-green-500/30 bg-brand-green-500/10 text-white hover:bg-brand-green-500/15"
+                        : "border-white/[0.06] bg-white/[0.025] text-neutral-600"
+                    } ${day.future ? "opacity-30" : ""}`}
+                  >
+                    <span className="w-full truncate px-0.5 text-[9px] uppercase">
+                      {day.date.toLocaleDateString("sr-Latn-RS", { weekday: "short" }).replace(".", "")}
+                    </span>
+                    <span className="text-xs font-semibold">{day.date.getDate()}</span>
+                    <span className={`h-1.5 w-1.5 rounded-full ${day.recorded ? "bg-brand-green-500" : "bg-transparent"}`} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedDay && (
+        <NutritionHistoryDayModal day={selectedDay} onClose={() => setSelectedDateKey(null)} />
+      )}
+    </div>
+  );
+}
+
+function shortHistoryDate(date) {
+  return date.toLocaleDateString("sr-Latn-RS", { day: "numeric", month: "short" }).replace(/\.$/, "");
+}
+
+function NutritionHistoryDayModal({ day, onClose }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Obroci za ${day.date.toLocaleDateString("sr-Latn-RS")}`}
+        onClick={(event) => event.stopPropagation()}
+        className="flex max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-white/10 bg-neutral-900 shadow-2xl"
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold text-white">
+              {day.date.toLocaleDateString("sr-Latn-RS", { weekday: "long", day: "numeric", month: "long" })}
+            </p>
+            <p className="text-[11px] text-neutral-500">{day.meals.length} obroka</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Zatvori istoriju obroka"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-xl text-neutral-300"
+          >
+            ×
+          </button>
+        </div>
+        <div className="min-h-0 space-y-3 overflow-y-auto px-4 py-3">
+          <div className="grid grid-cols-4 gap-1.5">
+            <DailyMetric label="Kalorije" value={round(day.totals.calories)} unit="kcal" primary />
+            <DailyMetric label="Proteini" value={round(day.totals.protein, 1)} unit="g" />
+            <DailyMetric label="UH" value={round(day.totals.carbs, 1)} unit="g" />
+            <DailyMetric label="Masti" value={round(day.totals.fat, 1)} unit="g" />
+          </div>
+          {sortMealsByTime(day.meals).map((meal, index) => {
+            const totals = sumNutrients(meal.items);
+            return (
+              <div key={meal.id || index} className="border-t border-white/10 pt-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">
+                      {meal.name || getMealTypeLabel(meal.type)}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-neutral-500">
+                      {meal.items.map((item) => `${item.name || "Namirnica"} ${item.grams || 0} g`).join(" · ")}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs text-neutral-300">{meal.eatenAt || ""}</span>
+                </div>
+                <p className="mt-1.5 text-[11px] text-brand-blue-300">
+                  {round(totals.calories)} kcal · P {round(totals.protein, 1)}g · UH {round(totals.carbs, 1)}g · M {round(totals.fat, 1)}g
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>,
+    document.body
   );
 }
 

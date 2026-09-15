@@ -698,6 +698,7 @@ export default function ClientProgress() {
       {activeTab === "nutrition" && (
         <NutritionTracker
           todayLog={todayLog}
+          historyLogs={healthLogs}
           personalFoods={Array.isArray(profile?.nutritionFoods) ? profile.nutritionFoods : []}
           trainerMeals={trainerMeals}
           saving={savingLog}
