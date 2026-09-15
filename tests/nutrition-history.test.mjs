@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildNutritionHistory } from "../src/data/nutritionHistory.js";
+import { getActiveMembership } from "../src/data/clientMembership.js";
 
 function meal(calories, protein = 0) {
   return {
@@ -58,4 +59,53 @@ test("four complete calendar weeks contain 28 elapsed days on Sunday", () => {
 
   assert.equal(history.visibleDays, 28);
   assert.equal(history.weeks[0].days[6].future, false);
+});
+
+test("requires a currently active subscription and prefers the newest overlapping one", () => {
+  const now = new Date(2026, 8, 16, 12);
+  const memberships = [
+    { id: "ended", startDate: new Date(2026, 7, 1), endDate: new Date(2026, 8, 15) },
+    { id: "future", startDate: new Date(2026, 8, 17), endDate: new Date(2026, 9, 17) },
+    { id: "inactive", active: false, startDate: new Date(2026, 8, 1), endDate: new Date(2026, 8, 30) },
+    { id: "older", startDate: new Date(2026, 8, 1), endDate: new Date(2026, 8, 30) },
+    { id: "newer", startDate: new Date(2026, 8, 9), endDate: new Date(2026, 9, 9) },
+  ];
+
+  assert.equal(getActiveMembership(memberships, now)?.id, "newer");
+  assert.equal(getActiveMembership(memberships.slice(0, 3), now), null);
+});
+
+test("nutrition weeks follow subscription start and show the full current-week range", () => {
+  const membership = {
+    startDate: new Date(2026, 8, 2),
+    endDate: new Date(2026, 8, 30),
+  };
+  const history = buildNutritionHistory([
+    { dateKey: "2026-09-01", nutritionMeals: [meal(900)] },
+    { dateKey: "2026-09-02", nutritionMeals: [meal(100)] },
+    { dateKey: "2026-09-16", nutritionMeals: [meal(200)] },
+  ], new Date(2026, 8, 16, 12), membership);
+
+  assert.deepEqual(history.weeks.map((week) => week.key), [
+    "2026-09-16", "2026-09-09", "2026-09-02",
+  ]);
+  assert.deepEqual(history.weeks.map((week) => week.subscriptionWeek), [3, 2, 1]);
+  assert.equal(history.weeks[0].days.at(-1).key, "2026-09-22");
+  assert.equal(history.weeks[0].days.at(-1).future, true);
+  assert.equal(history.startDate.getDate(), 2);
+  assert.equal(history.endDate.getDate(), 29);
+  assert.equal(history.periodDays, 28);
+  assert.equal(history.recordedDays, 2);
+  assert.equal(history.average.calories, 150);
+});
+
+test("short subscriptions stop the week and monthly range at their end date", () => {
+  const history = buildNutritionHistory([], new Date(2026, 8, 16, 12), {
+    startDate: new Date(2026, 8, 2),
+    endDate: new Date(2026, 8, 18),
+  });
+
+  assert.equal(history.weeks[0].days.at(-1).key, "2026-09-18");
+  assert.equal(history.endDate.getDate(), 18);
+  assert.equal(history.periodDays, 17);
 });

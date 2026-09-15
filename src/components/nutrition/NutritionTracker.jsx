@@ -33,6 +33,7 @@ const VIEW_OPTIONS = [
 export default function NutritionTracker({
   todayLog,
   historyLogs = [],
+  membership,
   personalFoods = [],
   trainerMeals = [],
   saving,
@@ -129,7 +130,7 @@ export default function NutritionTracker({
       )}
 
       {activeView === "history" && (
-        <NutritionHistoryView logs={historyLogs} onShowDetails={setDetails} />
+        <NutritionHistoryView logs={historyLogs} membership={membership} onShowDetails={setDetails} />
       )}
 
       {activeView === "foods" && (
@@ -266,9 +267,9 @@ function TodayView({
   );
 }
 
-function NutritionHistoryView({ logs, onShowDetails }) {
+function NutritionHistoryView({ logs, membership, onShowDetails }) {
   const [selectedDateKey, setSelectedDateKey] = useState(null);
-  const history = useMemo(() => buildNutritionHistory(logs), [logs]);
+  const history = useMemo(() => buildNutritionHistory(logs, new Date(), membership), [logs, membership]);
   const selectedDay = history.weeks
     .flatMap((week) => week.days)
     .find((day) => day.key === selectedDateKey && day.recorded);
@@ -289,6 +290,7 @@ function NutritionHistoryView({ logs, onShowDetails }) {
                     kind: "month",
                     average: history.average,
                     recordedDays: history.recordedDays,
+                    periodDays: history.periodDays,
                     startDate: history.startDate,
                     endDate: history.endDate,
                   },
@@ -301,7 +303,7 @@ function NutritionHistoryView({ logs, onShowDetails }) {
             </p>
           </div>
           <span className="shrink-0 text-xs text-neutral-400">
-            28 dana
+            {history.periodDays} dana
           </span>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-1.5 border-t border-white/10 pt-3">
@@ -332,25 +334,27 @@ function NutritionHistoryView({ logs, onShowDetails }) {
 
       <div className="divide-y divide-white/10">
         {history.weeks.map((week) => {
-          const lastDay = week.days.filter((day) => !day.future).slice(-1)[0];
+          const lastDay = week.days.at(-1);
+          const weekLabel = historyWeekLabel(week);
           return (
             <div key={week.key} className="py-3 first:pt-1">
               <div className="mb-2 flex items-center justify-between gap-2 px-1">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-xs font-semibold text-white">
-                      {week.index === 0 ? "Ova nedelja" : week.index === 1 ? "Prošla nedelja" : `Pre ${week.index} nedelje`}
+                      {weekLabel}
                     </p>
                     <InfoButton
                       label={`Prosek za nedelju od ${shortHistoryDate(week.days[0].date)}`}
                       onClick={() => onShowDetails({
                         type: "history-average",
                         data: {
-                          name: week.index === 0 ? "Ova nedelja" : week.index === 1 ? "Prošla nedelja" : `Pre ${week.index} nedelje`,
+                          name: weekLabel,
                           kind: "week",
                           average: week.average,
                           recordedDays: week.recordedDays,
                           elapsedDays: week.days.filter((day) => !day.future).length,
+                          totalDays: week.days.length,
                           startDate: week.days[0].date,
                           endDate: lastDay.date,
                         },
@@ -398,6 +402,14 @@ function NutritionHistoryView({ logs, onShowDetails }) {
       )}
     </div>
   );
+}
+
+function historyWeekLabel(week) {
+  if (week.subscriptionWeek) {
+    const roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+    return `${roman[week.subscriptionWeek - 1] || week.subscriptionWeek} nedelja`;
+  }
+  return week.index === 0 ? "Ova nedelja" : week.index === 1 ? "Prošla nedelja" : `Pre ${week.index} nedelje`;
 }
 
 function shortHistoryDate(date) {
@@ -1181,10 +1193,10 @@ function HistoryAverageDetails({ data }) {
       </p>
       <p className="text-xs leading-relaxed text-neutral-500">
         {data.kind === "month"
-          ? "Prikazane su četiri kalendarske nedelje, ukupno 28 dana."
-          : data.elapsedDays < 7
+          ? `Period obuhvata ${data.periodDays} dana, po nedeljama aktivne članarine.`
+          : data.elapsedDays < data.totalDays
             ? `Ova nedelja je u toku; zasad su prošla ${data.elapsedDays} dana.`
-            : "Prikazana je cela nedelja, od ponedeljka do nedelje."}
+            : "Prikazana je cela nedelja članarine."}
       </p>
     </div>
   );

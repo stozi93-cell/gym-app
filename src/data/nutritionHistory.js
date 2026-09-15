@@ -1,4 +1,5 @@
 import { sumMeals } from "./nutritionCatalog.js";
+import { addDays, differenceInCalendarDays } from "date-fns";
 
 const NUTRIENT_KEYS = ["calories", "protein", "carbs", "fat"];
 
@@ -26,18 +27,39 @@ function averageTotals(days) {
   );
 }
 
-export function buildNutritionHistory(logs = [], now = new Date()) {
+export function buildNutritionHistory(logs = [], now = new Date(), membership = null) {
   const today = startOfDay(now);
   const currentMonday = startOfDay(today);
   currentMonday.setDate(currentMonday.getDate() - ((currentMonday.getDay() + 6) % 7));
   const logsByDate = new Map(logs.map((log) => [log.dateKey, log]));
+  const membershipStart = membership?.startDate
+    ? startOfDay(membership.startDate.toDate?.() || membership.startDate)
+    : null;
+  const membershipEnd = membership?.endDate
+    ? startOfDay(membership.endDate.toDate?.() || membership.endDate)
+    : null;
+  const currentMembershipWeek = membershipStart
+    ? Math.floor(differenceInCalendarDays(today, membershipStart) / 7)
+    : null;
 
-  const weeks = Array.from({ length: 4 }, (_, weekIndex) => {
-    const monday = startOfDay(currentMonday);
-    monday.setDate(monday.getDate() - weekIndex * 7);
-    const days = Array.from({ length: 7 }, (_, dayIndex) => {
-      const date = startOfDay(monday);
-      date.setDate(date.getDate() + dayIndex);
+  const weekSpecs = membershipStart && membershipEnd && currentMembershipWeek >= 0
+    ? Array.from({ length: Math.min(4, currentMembershipWeek + 1) }, (_, index) => {
+      const weekNumber = currentMembershipWeek - index;
+      const start = addDays(membershipStart, weekNumber * 7);
+      return {
+        start,
+        length: Math.max(0, Math.min(7, differenceInCalendarDays(membershipEnd, start) + 1)),
+        index,
+        subscriptionWeek: weekNumber + 1,
+      };
+    }).filter((week) => week.length > 0)
+    : Array.from({ length: 4 }, (_, index) => ({
+      start: addDays(currentMonday, -index * 7), length: 7, index,
+    }));
+
+  const weeks = weekSpecs.map(({ start, length, index, subscriptionWeek }) => {
+    const days = Array.from({ length }, (_, dayIndex) => {
+      const date = addDays(start, dayIndex);
       const key = dateKey(date);
       const savedMeals = logsByDate.get(key)?.nutritionMeals;
       const meals = (Array.isArray(savedMeals) ? savedMeals : []).filter(
@@ -55,8 +77,9 @@ export function buildNutritionHistory(logs = [], now = new Date()) {
     });
 
     return {
-      key: dateKey(monday),
-      index: weekIndex,
+      key: dateKey(start),
+      index,
+      subscriptionWeek,
       days,
       recordedDays: days.filter((day) => day.recorded).length,
       average: averageTotals(days),
@@ -64,12 +87,18 @@ export function buildNutritionHistory(logs = [], now = new Date()) {
   });
 
   const visibleDays = weeks.flatMap((week) => week.days).filter((day) => !day.future);
+  const startDate = weeks.at(-1).days[0].date;
+  const fullPeriodEnd = addDays(startDate, 27);
+  const endDate = membershipEnd && membershipEnd < fullPeriodEnd
+    ? membershipEnd
+    : fullPeriodEnd;
   return {
     weeks,
     recordedDays: visibleDays.filter((day) => day.recorded).length,
     visibleDays: visibleDays.length,
     average: averageTotals(visibleDays),
-    startDate: weeks[3].days[0].date,
-    endDate: weeks[0].days[6].date,
+    startDate,
+    endDate,
+    periodDays: differenceInCalendarDays(endDate, startDate) + 1,
   };
 }

@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../firebase";
+import { getActiveMembership } from "../data/clientMembership.js";
 import { Panel, StatusPill } from "../components/ui/Primitives";
 import NutritionTracker from "../components/nutrition/NutritionTracker";
 
@@ -400,13 +401,19 @@ export default function ClientProgress() {
   const [bookings, setBookings] = useState([]);
   const [healthLogs, setHealthLogs] = useState([]);
   const [trainerMeals, setTrainerMeals] = useState([]);
+  const [membershipState, setMembershipState] = useState({ userId: null, loaded: false, items: [], error: false });
   const [savingLog, setSavingLog] = useState(false);
   const [savingFood, setSavingFood] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [status, setStatus] = useState(null);
+  const [todayKey, setTodayKey] = useState(() => getDateKey());
 
-  const todayKey = getDateKey();
   const todayLog = healthLogs.find((log) => log.dateKey === todayKey) || {};
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setTodayKey(getDateKey()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const [profileForm, setProfileForm] = useState({
     heightCm: "",
@@ -442,6 +449,33 @@ export default function ClientProgress() {
       },
     });
   }, [profile]);
+
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    return onSnapshot(
+      query(collection(db, "clientSubscriptions"), where("userId", "==", user.uid)),
+      (snapshot) => {
+        setMembershipState({
+          userId: user.uid,
+          loaded: true,
+          items: snapshot.docs.map((item) => ({ id: item.id, ...item.data() })),
+          error: false,
+        });
+      },
+      (error) => {
+        console.error("Subscription check failed", error);
+        setMembershipState({ userId: user.uid, loaded: true, items: [], error: true });
+      }
+    );
+  }, [user?.uid]);
+
+  const membershipReady = membershipState.userId === user?.uid && membershipState.loaded;
+  const activeMembership = useMemo(
+    () => membershipReady && !membershipState.error
+      ? getActiveMembership(membershipState.items, new Date(`${todayKey}T12:00:00`))
+      : null,
+    [membershipReady, membershipState, todayKey]
+  );
 
   useEffect(() => {
     if (!user?.uid) return undefined;
@@ -514,13 +548,13 @@ export default function ClientProgress() {
   const newAchievementSignature = newAchievementIds.join("|");
 
   useEffect(() => {
-    if (!user?.uid || !newAchievementSignature) return;
+    if (!user?.uid || !activeMembership || !newAchievementSignature) return;
     updateDoc(doc(db, "users", user.uid), {
       achievements: arrayUnion(...newAchievementSignature.split("|")),
     }).catch((error) => {
       console.warn("Achievement save failed", error);
     });
-  }, [newAchievementSignature, user?.uid]);
+  }, [activeMembership, newAchievementSignature, user?.uid]);
 
   const bodyStats = useMemo(() => {
     const heightCm = Number(profileForm.heightCm || 0) || null;
@@ -543,7 +577,7 @@ export default function ClientProgress() {
   }
 
   async function saveTodayLog(updates) {
-    if (!user?.uid) return false;
+    if (!user?.uid || !activeMembership) return false;
 
     setSavingLog(true);
     try {
@@ -569,7 +603,7 @@ export default function ClientProgress() {
   }
 
   async function saveProfileStats() {
-    if (!user?.uid) return;
+    if (!user?.uid || !activeMembership) return;
 
     const measurements = Object.fromEntries(
       MEASUREMENT_FIELDS.map((field) => [
@@ -629,7 +663,7 @@ export default function ClientProgress() {
   }
 
   async function createCustomFood(food) {
-    if (!user?.uid) return null;
+    if (!user?.uid || !activeMembership) return null;
 
     const createdFood = {
       ...food,
@@ -653,6 +687,18 @@ export default function ClientProgress() {
     } finally {
       setSavingFood(false);
     }
+  }
+
+  if (!membershipReady) {
+    return <Panel className="mx-auto max-w-md p-4 text-sm text-neutral-400">Proveravamo članarinu...</Panel>;
+  }
+
+  if (membershipState.error) {
+    return <Panel className="mx-auto max-w-md p-4 text-sm text-neutral-400">Članarina trenutno nije dostupna. Proverite vezu i pokušajte ponovo.</Panel>;
+  }
+
+  if (!activeMembership) {
+    return <Panel className="mx-auto max-w-md p-4 text-sm text-neutral-400">Nemate aktivnu članarinu. Dnevnik će biti dostupan kada trener aktivira članarinu.</Panel>;
   }
 
   return (
@@ -699,6 +745,7 @@ export default function ClientProgress() {
         <NutritionTracker
           todayLog={todayLog}
           historyLogs={healthLogs}
+          membership={activeMembership}
           personalFoods={Array.isArray(profile?.nutritionFoods) ? profile.nutritionFoods : []}
           trainerMeals={trainerMeals}
           saving={savingLog}
