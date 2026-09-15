@@ -775,7 +775,7 @@ function NutritionDetailsModal({ details, onClose }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
       onClick={onClose}
       role="presentation"
     >
@@ -784,7 +784,7 @@ function NutritionDetailsModal({ details, onClose }) {
         aria-modal="true"
         aria-label={`Nutritivni podaci: ${title}`}
         onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-neutral-900 shadow-[0_-18px_50px_rgba(0,0,0,0.6)] sm:rounded-2xl"
+        className="flex max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-white/10 bg-neutral-900 shadow-2xl"
       >
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
           <div className="min-w-0">

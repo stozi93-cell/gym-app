@@ -315,7 +315,7 @@ export default function Forum() {
 
                   {open && createPortal(
                     <div
-                      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/90 sm:items-center sm:p-4"
+                      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
                       onClick={closePost}
                       role="presentation"
                     >
@@ -324,7 +324,7 @@ export default function Forum() {
                         aria-modal="true"
                         aria-label={post.title}
                         onClick={(event) => event.stopPropagation()}
-                        className="flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-t-lg border border-white/15 bg-neutral-900 shadow-2xl sm:rounded-lg"
+                        className="flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-white/15 bg-neutral-900 shadow-2xl"
                       >
                         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                           <div className="flex min-w-0 items-center gap-2">
