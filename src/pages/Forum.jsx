@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   collection,
   addDoc,
@@ -33,7 +34,7 @@ export default function Forum() {
 
   const [posts, setPosts] = useState([]);
   const [users, setUsers] = useState([]);
-  const [expandedId, setExpandedId] = useState(null);
+  const [selectedPostId, setSelectedPostId] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -123,11 +124,32 @@ export default function Forum() {
     }
   }
 
-  function toggleExpand(postId) {
-    const next = expandedId === postId ? null : postId;
-    setExpandedId(next);
-    if (next) markRead(postId);
+  function openPost(postId) {
+    setSelectedPostId(postId);
+    markRead(postId);
   }
+
+  function closePost() {
+    setSelectedPostId(null);
+    setEditingId(null);
+  }
+
+  useEffect(() => {
+    if (!selectedPostId) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function closeOnEscape(event) {
+      if (event.key === "Escape") {
+        setSelectedPostId(null);
+        setEditingId(null);
+      }
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [selectedPostId]);
 
   function isUnread(post) {
     return !readAnnouncements.includes(post.id);
@@ -192,12 +214,14 @@ export default function Forum() {
 
   async function archivePost(post) {
     await updateDoc(doc(db, "forumPosts", post.id), { archived: true });
+    closePost();
     loadData();
   }
 
   async function deletePost(post) {
     if (!window.confirm("Trajno obrisati ovu objavu?")) return;
     await deleteDoc(doc(db, "forumPosts", post.id));
+    closePost();
     loadData();
   }
 
@@ -256,7 +280,7 @@ export default function Forum() {
 
           <div className="space-y-3">
             {posts.map((post) => {
-              const open = expandedId === post.id;
+              const open = selectedPostId === post.id;
               const unread = isUnread(post);
               const stats = isAdmin ? readStats(post) : null;
 
@@ -268,7 +292,8 @@ export default function Forum() {
                   }`}
                 >
                   <button
-                    onClick={() => toggleExpand(post.id)}
+                    type="button"
+                    onClick={() => openPost(post.id)}
                     className="flex w-full items-center justify-between px-4 py-3 text-left"
                   >
                     <span className="flex min-w-0 items-center gap-2 font-medium text-white">
@@ -284,14 +309,38 @@ export default function Forum() {
                       {unread && (
                         <span className="h-2 w-2 rounded-full bg-brand-blue-400" />
                       )}
-                      <span className="text-sm text-neutral-400">
-                        {open ? "▲" : "▼"}
-                      </span>
+                      <span aria-hidden="true" className="text-lg text-neutral-400">›</span>
                     </div>
                   </button>
 
-                  {open && (
-                    <div className="space-y-3 border-t border-white/10 px-4 pb-4 pt-3 text-sm text-neutral-300">
+                  {open && createPortal(
+                    <div
+                      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/90 sm:items-center sm:p-4"
+                      onClick={closePost}
+                      role="presentation"
+                    >
+                      <section
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={post.title}
+                        onClick={(event) => event.stopPropagation()}
+                        className="flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-t-lg border border-white/15 bg-neutral-900 shadow-2xl sm:rounded-lg"
+                      >
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {post.pinned && <PinIcon className="h-4 w-4 shrink-0 text-amber-200" />}
+                            <h2 className="min-w-0 break-words text-base font-semibold text-white">{post.title}</h2>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={closePost}
+                            aria-label="Zatvori objavu"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-xl text-neutral-300"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="min-h-0 space-y-3 overflow-y-auto px-4 py-4 text-sm text-neutral-300">
                       {editingId === post.id ? (
                         <>
                           <input
@@ -396,7 +445,10 @@ export default function Forum() {
                           )}
                         </>
                       )}
-                    </div>
+                        </div>
+                      </section>
+                    </div>,
+                    document.body
                   )}
                 </div>
               );

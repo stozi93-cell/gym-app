@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import {
   arrayUnion,
@@ -731,6 +732,7 @@ function SleepTab({ todayLog, saving, onSave }) {
     !Number.isNaN(savedHours);
   const [hours, setHours] = useState(hasEntry ? savedHours : 8);
   const [bedtime, setBedtime] = useState(todayLog.bedtime || "");
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [napMinutes, setNapMinutes] = useState(Number(todayLog.napMinutes) || 0);
   const [sleepQuality, setSleepQuality] = useState(todayLog.sleepQuality || "");
   const [sleepWakeups, setSleepWakeups] = useState(todayLog.sleepWakeups || "");
@@ -831,15 +833,27 @@ function SleepTab({ todayLog, saving, onSave }) {
           <span>12h</span>
         </div>
 
-        <label className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3 text-xs font-medium text-white">
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3 text-xs font-medium text-white">
           <span>Odlazak na spavanje</span>
-          <input
-            type="time"
+          <button
+            type="button"
+            onClick={() => setTimePickerOpen(true)}
+            className="min-h-10 min-w-28 whitespace-nowrap rounded-lg border border-white/10 bg-neutral-950/60 px-3 py-1.5 text-center text-sm text-white"
+          >
+            {bedtime || "Izaberi vreme"}
+          </button>
+        </div>
+
+        {timePickerOpen && (
+          <BedtimeModal
             value={bedtime}
-            onChange={(event) => setBedtime(event.target.value)}
-            className="w-28 rounded-lg border border-white/10 bg-neutral-950/60 px-2 py-1.5 text-xs text-white outline-none focus:border-brand-blue-500"
+            onConfirm={(value) => {
+              setBedtime(value);
+              setTimePickerOpen(false);
+            }}
+            onClose={() => setTimePickerOpen(false)}
           />
-        </label>
+        )}
 
         <div className="mt-3 border-t border-white/10 pt-3">
           <div className="flex items-center justify-between gap-3 text-sm">
@@ -898,6 +912,59 @@ function SleepTab({ todayLog, saving, onSave }) {
           </button>
         </div>
     </Panel>
+  );
+}
+
+function BedtimeModal({ value, onConfirm, onClose }) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 px-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bedtime-modal-title"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-xs rounded-lg border border-white/15 bg-neutral-900 p-4 shadow-2xl"
+      >
+        <h2 id="bedtime-modal-title" className="text-base font-semibold text-white">
+          Odlazak na spavanje
+        </h2>
+        <input
+          type="time"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          aria-label="Vreme odlaska na spavanje"
+          className="mt-4 min-h-12 w-full rounded-lg border border-white/15 bg-neutral-950 px-3 text-lg text-white outline-none focus:border-brand-blue-500"
+        />
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button type="button" onClick={onClose} className="min-h-11 rounded-lg border border-white/10 text-sm text-neutral-300">
+            Otkaži
+          </button>
+          <button type="button" disabled={!draft} onClick={() => onConfirm(draft)} className="min-h-11 rounded-lg bg-brand-blue-500 text-sm font-semibold text-white disabled:opacity-40">
+            Potvrdi vreme
+          </button>
+        </div>
+      </section>
+    </div>,
+    document.body
   );
 }
 
