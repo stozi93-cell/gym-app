@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   normalizeFoodForm,
   scaleNutrients,
+  sortMealsByTime,
   sumMeals,
   sumNutrients,
 } from "../src/data/nutritionCatalog.js";
@@ -51,4 +52,19 @@ test("calculates missing calories from macros and constrains GI", () => {
   assert.equal(food.name, "Test namirnica");
   assert.equal(food.calories, 165);
   assert.equal(food.glycemicIndex, 100);
+});
+
+test("shows late-recorded meals by stated time without changing older entries", () => {
+  const meals = [
+    { id: "old", items: [] },
+    { id: "dinner", eatenAt: "19:30", items: [] },
+    { id: "breakfast", eatenAt: "08:00", items: [] },
+  ];
+
+  assert.deepEqual(sortMealsByTime(meals).map((meal) => meal.id), [
+    "breakfast",
+    "dinner",
+    "old",
+  ]);
+  assert.equal(meals[0].id, "old");
 });

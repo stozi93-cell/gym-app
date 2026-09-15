@@ -177,3 +177,20 @@ export function sumMeals(meals = []) {
     }
   );
 }
+
+export function sortMealsByTime(meals = []) {
+  function validTime(value) {
+    if (typeof value !== "string" || !/^\d{2}:\d{2}$/.test(value)) return null;
+    const [hours, minutes] = value.split(":").map(Number);
+    return hours < 24 && minutes < 60 ? value : null;
+  }
+
+  return [...meals].sort((a, b) => {
+    const aTime = validTime(a.eatenAt);
+    const bTime = validTime(b.eatenAt);
+    if (!aTime && !bTime) return 0;
+    if (!aTime) return 1;
+    if (!bTime) return -1;
+    return aTime.localeCompare(bTime);
+  });
+}

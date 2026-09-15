@@ -10,6 +10,7 @@ import {
   foodNutrients,
   normalizeFoodForm,
   scaleNutrients,
+  sortMealsByTime,
   sumMeals,
   sumNutrients,
 } from "../../data/nutritionCatalog";
@@ -239,7 +240,7 @@ function TodayView({
 
       {meals.length ? (
         <div className="space-y-2">
-          {meals.map((meal) => (
+          {sortMealsByTime(meals).map((meal) => (
             <MealRow
               key={meal.id}
               meal={meal}
@@ -270,6 +271,8 @@ function MealComposer({
   const pendingFoodId = window.sessionStorage.getItem("nutritionPendingFood");
   const pendingFood = foods.find((food) => food.id === pendingFoodId);
   const [mealType, setMealType] = useState("breakfast");
+  const [eatenAt, setEatenAt] = useState("");
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState(() =>
     pendingFood ? [createMealItem(pendingFood)] : []
   );
@@ -319,11 +322,12 @@ function MealComposer({
 
   function submitMeal() {
     const items = selectedItems.filter((item) => item.grams > 0);
-    if (!items.length) return;
+    if (!items.length || !eatenAt) return;
     onSave({
       id: createId("meal"),
       type: mealType,
       name: getMealTypeLabel(mealType),
+      eatenAt,
       items,
       createdAt: new Date().toISOString(),
       source: "client",
@@ -359,6 +363,28 @@ function MealComposer({
           </button>
         ))}
       </div>
+
+      <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+        <span className="text-xs font-medium text-neutral-300">Vreme obroka</span>
+        <button
+          type="button"
+          onClick={() => setTimePickerOpen(true)}
+          className="min-h-10 min-w-28 whitespace-nowrap rounded-lg border border-white/10 bg-neutral-950/60 px-3 py-1.5 text-center text-sm text-white"
+        >
+          {eatenAt || "Izaberi vreme"}
+        </button>
+      </div>
+
+      {timePickerOpen && (
+        <MealTimeModal
+          value={eatenAt}
+          onClose={() => setTimePickerOpen(false)}
+          onConfirm={(value) => {
+            setEatenAt(value);
+            setTimePickerOpen(false);
+          }}
+        />
+      )}
 
       {selectedItems.length > 0 && (
         <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
@@ -457,7 +483,7 @@ function MealComposer({
 
       <button
         type="button"
-        disabled={saving || !selectedItems.some((item) => item.grams > 0)}
+        disabled={saving || !eatenAt || !selectedItems.some((item) => item.grams > 0)}
         onClick={submitMeal}
         className="mt-3 w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:opacity-40"
       >
@@ -570,6 +596,27 @@ function FoodCatalogView({ foods, savingFood, onCreateFood, onStartMeal, onShowD
 }
 
 function TrainerMealsView({ meals, saving, onAddMeal, onShowDetails }) {
+  const [pendingTemplate, setPendingTemplate] = useState(null);
+  const [timeError, setTimeError] = useState("");
+
+  async function addTemplateMeal(eatenAt) {
+    if (!pendingTemplate) return;
+    const saved = await onAddMeal({
+      ...pendingTemplate,
+      id: createId("meal"),
+      templateId: pendingTemplate.id,
+      eatenAt,
+      createdAt: new Date().toISOString(),
+      source: "trainer",
+    });
+    if (saved) {
+      setPendingTemplate(null);
+      setTimeError("");
+    } else {
+      setTimeError("Obrok nije sačuvan. Pokušaj ponovo.");
+    }
+  }
+
   if (!meals.length) {
     return (
       <Panel className="px-4 py-7 text-center">
@@ -583,6 +630,19 @@ function TrainerMealsView({ meals, saving, onAddMeal, onShowDetails }) {
 
   return (
     <div className="space-y-2">
+      {pendingTemplate && (
+        <MealTimeModal
+          key={pendingTemplate.id}
+          value=""
+          saving={saving}
+          error={timeError}
+          onClose={() => {
+            setPendingTemplate(null);
+            setTimeError("");
+          }}
+          onConfirm={addTemplateMeal}
+        />
+      )}
       {meals.map((template) => {
         const totals = sumNutrients(template.items);
         return (
@@ -603,13 +663,7 @@ function TrainerMealsView({ meals, saving, onAddMeal, onShowDetails }) {
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={() => onAddMeal({
-                    ...template,
-                    id: createId("meal"),
-                    templateId: template.id,
-                    createdAt: new Date().toISOString(),
-                    source: "trainer",
-                  })}
+                  onClick={() => setPendingTemplate(template)}
                   className="rounded-lg bg-brand-blue-500 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   Dodaj
@@ -691,12 +745,13 @@ function MealRow({ meal, saving, onRemove, onShowDetails }) {
     <div className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5">
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1 text-left">
-          <span className="flex items-center gap-2">
+          <span className="flex items-center justify-between gap-2">
             <span className="truncate text-sm font-semibold text-white">{meal.name || getMealTypeLabel(meal.type)}</span>
-            <span className="text-xs font-semibold text-brand-blue-300">{round(totals.calories)} kcal</span>
+            {meal.eatenAt && <span className="shrink-0 text-xs font-medium text-neutral-300">{meal.eatenAt}</span>}
           </span>
           <span className="mt-0.5 block text-[10px] text-neutral-500">
-            P {round(totals.protein, 1)}g · UH {round(totals.carbs, 1)}g · M {round(totals.fat, 1)}g
+            <span className="font-semibold text-brand-blue-300">{round(totals.calories)} kcal</span>
+            {" · "}P {round(totals.protein, 1)}g · UH {round(totals.carbs, 1)}g · M {round(totals.fat, 1)}g
           </span>
         </div>
         <InfoButton
@@ -752,6 +807,62 @@ function InfoButton({ label, onClick, className = "h-7 w-7" }) {
   );
 }
 
+function MealTimeModal({ value, saving = false, error = "", onClose, onConfirm }) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function closeOnEscape(event) {
+      if (event.key === "Escape" && !saving) onClose();
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose, saving]);
+
+  function close() {
+    if (!saving) onClose();
+  }
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 px-4"
+      onClick={close}
+      role="presentation"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="meal-time-title"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-xs rounded-lg border border-white/15 bg-neutral-900 p-4 shadow-2xl"
+      >
+        <h2 id="meal-time-title" className="text-base font-semibold text-white">Vreme obroka</h2>
+        <input
+          type="time"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          aria-label="Vreme kada je obrok pojeden"
+          className="mt-4 min-h-12 w-full rounded-lg border border-white/15 bg-neutral-950 px-3 text-lg text-white outline-none focus:border-brand-blue-500"
+        />
+        {error && <p role="alert" className="mt-3 text-xs text-red-300">{error}</p>}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button type="button" disabled={saving} onClick={close} className="min-h-11 rounded-lg border border-white/10 text-sm text-neutral-300 disabled:opacity-40">
+            Otkaži
+          </button>
+          <button type="button" disabled={!draft || saving} onClick={() => onConfirm(draft)} className="min-h-11 rounded-lg bg-brand-blue-500 text-sm font-semibold text-white disabled:opacity-40">
+            {saving ? "Čuvanje..." : "Potvrdi vreme"}
+          </button>
+        </div>
+      </section>
+    </div>,
+    document.body
+  );
+}
+
 function NutritionDetailsModal({ details, onClose }) {
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -793,7 +904,7 @@ function NutritionDetailsModal({ details, onClose }) {
               {isDay
                 ? "Ukupan dnevni unos"
                 : isMeal
-                  ? "Ukupno i sastav obroka"
+                  ? `${data.eatenAt ? `${data.eatenAt} · ` : ""}Ukupno i sastav obroka`
                   : "Vrednosti na 100 g"}
             </p>
           </div>
