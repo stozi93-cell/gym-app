@@ -70,6 +70,6 @@ export function buildNutritionHistory(logs = [], now = new Date()) {
     visibleDays: visibleDays.length,
     average: averageTotals(visibleDays),
     startDate: weeks[3].days[0].date,
-    endDate: today,
+    endDate: weeks[0].days[6].date,
   };
 }

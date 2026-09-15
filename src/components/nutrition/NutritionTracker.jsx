@@ -289,7 +289,6 @@ function NutritionHistoryView({ logs, onShowDetails }) {
                     kind: "month",
                     average: history.average,
                     recordedDays: history.recordedDays,
-                    elapsedDays: history.visibleDays,
                     startDate: history.startDate,
                     endDate: history.endDate,
                   },
@@ -302,7 +301,7 @@ function NutritionHistoryView({ logs, onShowDetails }) {
             </p>
           </div>
           <span className="shrink-0 text-xs text-neutral-400">
-            {history.recordedDays} upisanih dana
+            28 dana
           </span>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-1.5 border-t border-white/10 pt-3">
@@ -1182,9 +1181,7 @@ function HistoryAverageDetails({ data }) {
       </p>
       <p className="text-xs leading-relaxed text-neutral-500">
         {data.kind === "month"
-          ? data.elapsedDays < 28
-            ? `Prikazane su četiri kalendarske nedelje. Tekuća nedelja traje samo do danas, pa ovaj period trenutno ima ${data.elapsedDays} proteklih dana, a ne punih 28.`
-            : "Prikazane su četiri pune kalendarske nedelje, ukupno 28 dana."
+          ? "Prikazane su četiri kalendarske nedelje, ukupno 28 dana."
           : data.elapsedDays < 7
             ? `Ova nedelja je u toku; zasad su prošla ${data.elapsedDays} dana.`
             : "Prikazana je cela nedelja, od ponedeljka do nedelje."}
