@@ -22,6 +22,7 @@ import AdminTrainingStudio from "./pages/AdminTrainingStudio";
 import AdminTrainingClient from "./pages/AdminTrainingClient";
 import Settings from "./pages/Settings";
 import ClientInfo from "./pages/ClientInfo";
+import ExerciseLibrary from "./pages/ExerciseLibrary";
 
 import Splash from "./components/Splash";
 import AppShell from "./components/AppShell";
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="/pravila-teretane" element={<ClientInfo type="rules" />} />
           <Route path="/uputstvo" element={<ClientInfo type="instructions" />} />
           <Route path="/cenovnik" element={<ClientInfo type="pricing" />} />
+          <Route path="/vezbe" element={<ExerciseLibrary />} />
 
           {/* CLIENT */}
           {role === "client" && (

@@ -148,6 +148,14 @@ function JournalIcon({ className }) {
   );
 }
 
+function DumbbellIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M7 7v10M17 7v10M4 9v6M20 9v6M7 12h10" />
+    </svg>
+  );
+}
+
 function MoreIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -214,7 +222,7 @@ export default function BottomNav({ role }) {
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const iconClass = "h-6 w-6";
-  const secondaryRoutes = ["/treninzi", "/paketi", "/naplate", "/forum"];
+  const secondaryRoutes = ["/treninzi", "/vezbe", "/paketi", "/naplate", "/forum"];
   const secondaryActive = secondaryRoutes.some((route) =>
     location.pathname.startsWith(route)
   );
@@ -248,6 +256,7 @@ export default function BottomNav({ role }) {
               {moreOpen && (
                 <div className="absolute bottom-16 right-0 w-40 overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/95 p-1 shadow-premium backdrop-blur-xl">
                   <MoreMenuItem to="/treninzi" label="Treninzi" icon={<TrainingIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
+                  <MoreMenuItem to="/vezbe" label="Vežbe" icon={<DumbbellIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
                   <MoreMenuItem to="/paketi" label="Paketi" icon={<RepeatIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
                   <MoreMenuItem to="/naplate" label="Naplate" icon={<CreditCardIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />
                   <MoreMenuItem to="/forum" label="Forum" icon={<MegaphoneIcon className="h-5 w-5" />} onNavigate={() => setMoreOpen(false)} />

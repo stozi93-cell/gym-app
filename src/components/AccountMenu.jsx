@@ -7,6 +7,7 @@ import Avatar from "./Avatar";
 const MENU_ITEMS = [
   { to: "/profil/me", label: "Profil", icon: UserIcon },
   { to: "/podesavanja", label: "Podešavanja", icon: SettingsIcon },
+  { to: "/vezbe", label: "Vežbe", icon: ExerciseIcon },
   { to: "/pravila-teretane", label: "Pravila teretane", icon: RulesIcon },
   { to: "/uputstvo", label: "Uputstvo za aplikaciju", icon: HelpIcon },
   { to: "/cenovnik", label: "Cenovnik", icon: PriceIcon },
@@ -70,7 +71,7 @@ export default function AccountMenu({ profile }) {
 
           <div className="py-1">
             {MENU_ITEMS.map(({ to, label, icon }, index) => (
-              <div key={to} className={index === 2 ? "mt-1 border-t border-white/10 pt-1" : ""}>
+              <div key={to} className={index === 3 ? "mt-1 border-t border-white/10 pt-1" : ""}>
                 <NavLink
                   to={to}
                   onClick={() => setOpen(false)}
@@ -128,6 +129,14 @@ function RulesIcon({ className }) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M6 3h12v18H6z" />
       <path d="M9 8h6M9 12h6M9 16h4" />
+    </svg>
+  );
+}
+
+function ExerciseIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M7 7v10M17 7v10M4 9v6M20 9v6M7 12h10" />
     </svg>
   );
 }
