@@ -319,7 +319,7 @@ export default function AdminBilling() {
           </div>
         </div>
 
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="grid grid-cols-4 gap-1">
           <PresetButton onClick={() => applyOverviewPreset("today")}>Danas</PresetButton>
           <PresetButton onClick={() => applyOverviewPreset("week")}>Ova nedelja</PresetButton>
           <PresetButton onClick={() => applyOverviewPreset("month")}>Ovaj mesec</PresetButton>
@@ -358,13 +358,13 @@ export default function AdminBilling() {
           className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-4 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
         />
 
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="grid grid-cols-5 gap-1">
           {STATUS_FILTERS.map((option) => (
             <button
               key={option.value}
               type="button"
               onClick={() => setFilterStatus(option.value)}
-              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+              className={`min-w-0 rounded-lg border px-1 py-1.5 text-[9px] font-medium leading-tight transition sm:text-[11px] ${
                 filterStatus === option.value
                   ? "border-brand-blue-500 bg-brand-blue-500 text-white shadow-glow"
                   : "border-white/10 bg-white/5 text-neutral-300 hover:bg-white/10"
@@ -471,7 +471,7 @@ function InvoiceCard({ invoice, onPayment, onCancel, onEdit, disabled }) {
 
 function PresetButton({ children, onClick }) {
   return (
-    <button onClick={onClick} className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-medium text-white transition hover:bg-white/10">
+    <button onClick={onClick} className="min-w-0 rounded-lg border border-white/10 bg-white/5 px-1 py-2 text-[9px] font-medium leading-tight text-white transition hover:bg-white/10 sm:text-[11px]">
       {children}
     </button>
   );

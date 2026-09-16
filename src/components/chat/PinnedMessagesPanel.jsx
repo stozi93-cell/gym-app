@@ -1,4 +1,5 @@
 import { formatDayLabel, formatMessageTime } from "../../chat/messageDisplay";
+import ScrollArea from "../ui/ScrollArea";
 
 export function PinIcon({ className }) {
   return (
@@ -58,7 +59,7 @@ export function PinnedMessagesPanel({ messages, onSelect, onUnpin }) {
         <PinIcon className="h-4 w-4" />
         Pinovane poruke
       </div>
-      <div className="max-h-40 space-y-2 overflow-y-auto">
+      <ScrollArea className="max-h-40 space-y-2 pr-1">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -87,7 +88,7 @@ export function PinnedMessagesPanel({ messages, onSelect, onUnpin }) {
             </button>
           </div>
         ))}
-      </div>
+      </ScrollArea>
     </div>
   );
 }

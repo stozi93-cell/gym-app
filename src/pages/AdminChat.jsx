@@ -14,6 +14,7 @@ import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import ChatComposer from "../components/chat/ChatComposer";
 import MessageBubble from "../components/chat/MessageBubble";
+import ScrollArea from "../components/ui/ScrollArea";
 import {
   PinnedMessagesButton,
   PinnedMessagesPanel,
@@ -316,7 +317,12 @@ export default function AdminChat() {
         />
       )}
 
-      <div ref={messagesRef} onScroll={handleMessagesScroll} className="flex-1 space-y-3 overflow-y-auto px-4 py-4 scrollbar-none">
+      <ScrollArea
+        viewportRef={messagesRef}
+        onScroll={handleMessagesScroll}
+        containerClassName="min-h-0 flex-1"
+        className="h-full space-y-3 px-4 py-4 scrollbar-none"
+      >
         {messages.map((message, index) => {
           const mine = message.senderId === user?.uid || message.senderId === "admin";
           const showDay =
@@ -348,7 +354,7 @@ export default function AdminChat() {
           );
         })}
         <div ref={bottomRef} />
-      </div>
+      </ScrollArea>
 
       {showJumpToBottom && (
         <button

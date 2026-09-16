@@ -13,6 +13,7 @@ import { saveFcmToken } from "../utils/saveFcmToken";
 import { listenForDeliveredMessages } from "../chat/messageTracking";
 import AppUpdatePrompt from "./AppUpdatePrompt";
 import NotificationPermissionPrompt from "./NotificationPermissionPrompt";
+import ScrollArea from "./ui/ScrollArea";
 
 export default function AppShell({ children }) {
   const { user, profile } = useAuth();
@@ -81,8 +82,13 @@ export default function AppShell({ children }) {
       )}
 
       {/* MAIN CONTENT */}
-      <main className={`min-h-0 flex-1 overflow-y-auto px-4 py-4 ${isChatPage ? "pb-4" : "pb-24"}`}>
-        {children}
+      <main className="min-h-0 flex-1">
+        <ScrollArea
+          containerClassName="h-full"
+          className={`h-full px-4 py-4 ${isChatPage ? "pb-4" : "pb-24"}`}
+        >
+          {children}
+        </ScrollArea>
       </main>
 
       {/* BOTTOM NAV */}

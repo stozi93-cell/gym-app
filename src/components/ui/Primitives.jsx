@@ -12,8 +12,8 @@ export function Panel({ children, className = "", ...props }) {
 export function SegmentedControl({ options, value, onChange, className = "" }) {
   return (
     <div
-      className={`grid overflow-x-auto gap-1 rounded-xl border border-white/10 bg-neutral-950/60 p-1 ${className}`}
-      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(max-content, 1fr))` }}
+      className={`grid gap-1 rounded-xl border border-white/10 bg-neutral-950/60 p-1 ${className}`}
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -23,7 +23,7 @@ export function SegmentedControl({ options, value, onChange, className = "" }) {
             key={option.value}
             type="button"
             onClick={() => onChange(option.value)}
-            className={`whitespace-nowrap rounded-lg px-2.5 py-2 text-[11px] font-medium transition sm:text-xs ${
+            className={`min-w-0 rounded-lg px-1.5 py-2 text-[10px] font-medium leading-tight transition sm:px-2.5 sm:text-xs ${
               active
                 ? "bg-brand-blue-500 text-white shadow-glow"
                 : "text-neutral-300 hover:bg-white/5 hover:text-white"

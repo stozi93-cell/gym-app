@@ -5,6 +5,7 @@ import {
 } from "firebase/auth";
 import { auth } from "../firebase";
 import { Logo } from "../components/Logo";
+import ScrollArea from "../components/ui/ScrollArea";
 import { Link } from "react-router-dom";
 
 import InputField from "../components/InputField";
@@ -81,8 +82,10 @@ export default function Login() {
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-background-dark px-4">
-      <div className="flex w-full max-w-md -mt-6 flex-col items-center">
+    <div className="fixed inset-0 bg-background-dark">
+      <ScrollArea containerClassName="h-full" className="h-full px-4">
+      <div className="flex min-h-full items-center justify-center py-6">
+      <div className="flex w-full max-w-md flex-col items-center">
         <Logo variant="full" className="mb-6 h-28 w-80 max-w-full select-none sm:h-32 sm:w-96" />
 
         <div className="w-full rounded-2xl border border-white/10 bg-neutral-900/80 p-6 shadow-premium backdrop-blur-xl">
@@ -184,6 +187,8 @@ export default function Login() {
           )}
         </div>
       </div>
+      </div>
+      </ScrollArea>
     </div>
   );
 }

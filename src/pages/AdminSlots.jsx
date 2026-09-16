@@ -17,6 +17,7 @@ import { Link } from "react-router-dom";
 import { db } from "../firebase";
 import Avatar from "../components/Avatar";
 import { Panel, StatusPill } from "../components/ui/Primitives";
+import ScrollArea from "../components/ui/ScrollArea";
 import DayPicker, {
   buildDayPickerDays,
   dateFromDayKey,
@@ -733,7 +734,7 @@ const nextSlots = [...mergedTemplateSlots, ...manualSlots].sort(
               </p>
             )}
 
-            <div className="max-h-72 space-y-1 overflow-y-auto">
+            <ScrollArea className="max-h-72 space-y-1 pr-1">
               {matchingUsers.map((user) => {
                 const hasActiveSub = user.hasActiveSub !== false;
 
@@ -769,7 +770,7 @@ const nextSlots = [...mergedTemplateSlots, ...manualSlots].sort(
                   Nema pronađenih klijenata.
                 </p>
               )}
-            </div>
+            </ScrollArea>
           </div>
         </div>
       )}

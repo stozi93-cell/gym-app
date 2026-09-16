@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import InputField from "../components/InputField";
 import { Logo } from "../components/Logo";
+import ScrollArea from "../components/ui/ScrollArea";
 import StatusBanner from "../components/StatusBanner";
 import TextareaField from "../components/TextareaField";
 import { auth, db } from "../firebase";
@@ -152,7 +153,9 @@ export default function Register() {
   const progress = (step / 4) * 100;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center overflow-y-auto bg-background-dark px-4 py-6">
+    <div className="fixed inset-0 bg-background-dark">
+      <ScrollArea containerClassName="h-full" className="h-full px-4">
+      <div className="flex min-h-full items-center justify-center py-6">
       <div className="flex w-full max-w-md flex-col items-center">
         <Logo
           variant="full"
@@ -299,6 +302,8 @@ export default function Register() {
           </div>
         </div>
       </div>
+      </div>
+      </ScrollArea>
     </div>
   );
 }

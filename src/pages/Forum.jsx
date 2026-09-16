@@ -16,6 +16,7 @@ import {
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { Panel, StatusPill } from "../components/ui/Primitives";
+import ScrollArea from "../components/ui/ScrollArea";
 
 const MAX_VISIBLE_POSTS = 6;
 
@@ -340,7 +341,7 @@ export default function Forum() {
                             ×
                           </button>
                         </div>
-                        <div className="min-h-0 space-y-3 overflow-y-auto px-4 py-4 text-sm text-neutral-300">
+                        <ScrollArea containerClassName="min-h-0 flex-1" className="h-full space-y-3 px-4 py-4 text-sm text-neutral-300">
                       {editingId === post.id ? (
                         <>
                           <input
@@ -445,7 +446,7 @@ export default function Forum() {
                           )}
                         </>
                       )}
-                        </div>
+                        </ScrollArea>
                       </section>
                     </div>,
                     document.body

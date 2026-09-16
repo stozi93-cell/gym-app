@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { isAllowedChatAttachment } from "../../chat/messageTracking";
+import ScrollArea from "../ui/ScrollArea";
 
 function AttachIcon({ className }) {
   return (
@@ -100,7 +101,7 @@ export default function ChatComposer({
       )}
 
       {selectedFiles.length > 0 && (
-        <div className="mb-2 max-h-28 space-y-1 overflow-y-auto rounded-2xl border border-white/10 bg-neutral-900/90 px-2 py-2 text-xs text-neutral-200">
+        <ScrollArea containerClassName="mb-2" className="max-h-28 space-y-1 rounded-2xl border border-white/10 bg-neutral-900/90 px-2 py-2 text-xs text-neutral-200">
           <div className="flex items-center justify-between gap-2 px-1">
             <span className="text-neutral-400">
               {selectedFiles.length === 1 ? "1 fajl" : `${selectedFiles.length} fajlova`}
@@ -127,7 +128,7 @@ export default function ChatComposer({
               </button>
             </div>
           ))}
-        </div>
+        </ScrollArea>
       )}
 
       <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-neutral-900/80 px-2 py-1">

@@ -1136,8 +1136,8 @@ function BodyTab({ profileForm, setProfileForm, bodyStats, saving, onSave }) {
   }
 
   return (
-    <div className="space-y-4">
-      <Panel className="space-y-4 p-4">
+    <div className="space-y-3">
+      <Panel className="space-y-3 p-3">
         <SectionHeader
           icon={<RulerIcon className="h-5 w-5" />}
           title="Osnovni podaci"
@@ -1167,9 +1167,10 @@ function BodyTab({ profileForm, setProfileForm, bodyStats, saving, onSave }) {
           <Metric label="BMI" value={bodyStats.bmi ? formatNumber(bodyStats.bmi) : "-"} tone={getBmiTone(bodyStats.bmi)} />
           <Metric label="BMR" value={bodyStats.bmr ? `${Math.round(bodyStats.bmr)} kcal` : "-"} />
         </div>
+        <BodySaveButton saving={saving} onSave={onSave} label="Sačuvaj osnovne podatke" />
       </Panel>
 
-      <Panel className="space-y-4 p-4">
+      <Panel className="space-y-3 p-3">
         <SectionHeader
           icon={<ActivityIcon className="h-5 w-5" />}
           title="Sastav tela"
@@ -1196,9 +1197,10 @@ function BodyTab({ profileForm, setProfileForm, bodyStats, saving, onSave }) {
         <p className="text-[11px] leading-relaxed text-neutral-500">
           BMI i BMR se računaju automatski. Ostala polja nisu obavezna.
         </p>
+        <BodySaveButton saving={saving} onSave={onSave} label="Sačuvaj sastav tela" />
       </Panel>
 
-      <Panel className="space-y-4 p-4">
+      <Panel className="space-y-3 p-3">
         <SectionHeader
           icon={<RulerIcon className="h-5 w-5" />}
           title="Mere tela"
@@ -1215,28 +1217,36 @@ function BodyTab({ profileForm, setProfileForm, bodyStats, saving, onSave }) {
             />
           ))}
         </div>
-        <button
-          type="button"
-          disabled={saving}
-          onClick={onSave}
-          className="w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
-        >
-          {saving ? "Čuvanje..." : "Sačuvaj podatke"}
-        </button>
+        <BodySaveButton saving={saving} onSave={onSave} label="Sačuvaj mere" />
       </Panel>
+    </div>
+  );
+}
+
+function BodySaveButton({ saving, onSave, label }) {
+  return (
+    <div className="flex justify-end border-t border-white/[0.06] pt-3">
+      <button
+        type="button"
+        disabled={saving}
+        onClick={onSave}
+        className="rounded-xl bg-brand-blue-500 px-3 py-2 text-xs font-semibold text-white shadow-glow disabled:opacity-60"
+      >
+        {saving ? "Čuvanje..." : label}
+      </button>
     </div>
   );
 }
 
 function SectionHeader({ icon, title, subtitle }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-brand-blue-500/25 bg-brand-blue-500/10 text-brand-blue-300">
+    <div className="flex items-start gap-2.5">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-brand-blue-500/25 bg-brand-blue-500/10 text-brand-blue-300">
         {icon}
       </div>
       <div className="min-w-0">
-        <h2 className="text-base font-semibold text-white">{title}</h2>
-        <p className="mt-0.5 text-xs leading-relaxed text-neutral-400">
+        <h2 className="text-sm font-semibold text-white">{title}</h2>
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400">
           {subtitle}
         </p>
       </div>

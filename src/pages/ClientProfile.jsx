@@ -14,6 +14,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import Avatar from "../components/Avatar";
 import PhotoCropModal from "../components/PhotoCropModal";
 import { Panel, SegmentedControl, StatusPill } from "../components/ui/Primitives";
+import ScrollArea from "../components/ui/ScrollArea";
 import { db, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
@@ -761,7 +762,7 @@ function CheckInHistory({ visits }) {
       </button>
 
       {open && visits.length > 0 && (
-        <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+        <ScrollArea containerClassName="mt-3" className="max-h-64 space-y-2 pr-1">
           {visits.map((visit) => (
             <li
               key={visit.id}
@@ -778,7 +779,7 @@ function CheckInHistory({ visits }) {
               </span>
             </li>
           ))}
-        </ul>
+        </ScrollArea>
       )}
 
       {open && visits.length === 0 && (

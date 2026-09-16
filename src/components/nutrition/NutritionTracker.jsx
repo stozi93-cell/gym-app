@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Panel } from "../ui/Primitives";
+import ScrollArea from "../ui/ScrollArea";
 import { buildNutritionHistory } from "../../data/nutritionHistory.js";
 import {
   FOOD_SORT_OPTIONS,
@@ -459,7 +460,7 @@ function NutritionHistoryDayModal({ day, onClose }) {
             ×
           </button>
         </div>
-        <div className="min-h-0 space-y-3 overflow-y-auto px-4 py-3">
+        <ScrollArea containerClassName="min-h-0 flex-1" className="h-full space-y-3 px-4 py-3">
           <div className="grid grid-cols-4 gap-1.5">
             <DailyMetric label="Kalorije" value={round(day.totals.calories)} unit="kcal" primary />
             <DailyMetric label="Proteini" value={round(day.totals.protein, 1)} unit="g" />
@@ -487,7 +488,7 @@ function NutritionHistoryDayModal({ day, onClose }) {
               </div>
             );
           })}
-        </div>
+        </ScrollArea>
       </section>
     </div>,
     document.body
@@ -676,7 +677,7 @@ function MealComposer({
         />
       </label>
 
-      <div className="mt-2 max-h-60 divide-y divide-white/[0.06] overflow-y-auto rounded-xl border border-white/10 bg-neutral-950/35">
+      <ScrollArea containerClassName="mt-2" className="max-h-60 divide-y divide-white/[0.06] rounded-xl border border-white/10 bg-neutral-950/35">
         {visibleFoods.map((food) => (
           <div key={food.id} className="flex w-full items-center gap-2 px-3 py-2">
             <span className="min-w-0 flex-1">
@@ -702,7 +703,7 @@ function MealComposer({
         {!visibleFoods.length && (
           <p className="px-3 py-4 text-center text-xs text-neutral-500">Nema rezultata.</p>
         )}
-      </div>
+      </ScrollArea>
 
       <button
         type="button"
@@ -1156,7 +1157,7 @@ function NutritionDetailsModal({ details, onClose }) {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        <ScrollArea containerClassName="min-h-0 flex-1" className="h-full px-4 py-3">
           {isHistoryAverage ? (
             <HistoryAverageDetails data={data} />
           ) : isDay ? (
@@ -1166,7 +1167,7 @@ function NutritionDetailsModal({ details, onClose }) {
           ) : (
             <FoodDetails food={data} />
           )}
-        </div>
+        </ScrollArea>
       </section>
     </div>,
     document.body
