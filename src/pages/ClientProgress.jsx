@@ -903,7 +903,7 @@ function SleepTab({ todayLog, saving, onSave }) {
           />
         )}
 
-        <div className="mt-2 border-t border-white/10 pt-2">
+        <div className="mt-3 border-t border-white/10 pt-3">
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="font-medium text-white">Dremka</span>
             <span className="text-neutral-300">
@@ -918,7 +918,7 @@ function SleepTab({ todayLog, saving, onSave }) {
             value={napMinutes}
             onChange={(event) => setNapMinutes(Number(event.target.value))}
             aria-label="Trajanje dremke u minutima"
-            className="mt-1 w-full accent-brand-blue-500"
+            className="mt-2 w-full accent-brand-blue-500"
           />
         </div>
 
@@ -936,7 +936,7 @@ function SleepTab({ todayLog, saving, onSave }) {
           options={SLEEP_WAKEUP_OPTIONS}
         />
 
-        <div className={`mt-2 grid gap-2 ${hasEntry ? "grid-cols-2" : "grid-cols-1"}`}>
+        <div className={`mt-3 grid gap-2 ${hasEntry ? "grid-cols-2" : "grid-cols-1"}`}>
           {hasEntry && (
             <button
               type="button"
@@ -945,7 +945,7 @@ function SleepTab({ todayLog, saving, onSave }) {
                 resetForm();
                 setEditing(false);
               }}
-              className="rounded-xl border border-white/10 px-4 py-1.5 text-sm font-semibold text-neutral-300 transition hover:bg-white/5 disabled:opacity-60"
+              className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-neutral-300 transition hover:bg-white/5 disabled:opacity-60"
             >
               Otkaži
             </button>
@@ -954,7 +954,7 @@ function SleepTab({ todayLog, saving, onSave }) {
             type="button"
             disabled={saving}
             onClick={saveEntry}
-            className="rounded-xl bg-brand-blue-500 px-4 py-1.5 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
+            className="rounded-xl bg-brand-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
           >
             {saving ? "Čuvanje..." : hasEntry ? "Sačuvaj" : "Upiši"}
           </button>
@@ -1027,15 +1027,15 @@ function SleepSummaryItem({ label, value }) {
 
 function SleepChoiceRow({ label, value, onChange, options }) {
   return (
-    <div className="mt-2 border-t border-white/10 pt-2">
-      <p className="mb-1 text-xs font-medium text-white">{label}</p>
+    <div className="mt-3 border-t border-white/10 pt-3">
+      <p className="mb-1.5 text-xs font-medium text-white">{label}</p>
       <div className="grid grid-cols-3 gap-1 rounded-xl bg-neutral-950/55 p-1">
         {options.map((option) => (
           <button
             key={option.value}
             type="button"
             onClick={() => onChange(value === option.value ? "" : option.value)}
-            className={`min-h-7 rounded-lg px-1.5 py-1 text-[11px] font-medium transition ${
+            className={`min-h-8 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition ${
               value === option.value
                 ? "bg-brand-blue-500 text-white"
                 : "text-neutral-400 hover:bg-white/5 hover:text-white"
