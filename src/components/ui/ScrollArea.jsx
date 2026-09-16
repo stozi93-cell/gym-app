@@ -91,7 +91,7 @@ export default function ScrollArea({
           className={`pointer-events-none absolute z-20 ${
             orientation === "horizontal"
               ? "inset-y-0 right-0 w-12 bg-gradient-to-l from-black/95 via-black/60 to-transparent"
-              : "inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/95 via-black/65 to-transparent"
+              : "inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black via-black/85 to-transparent"
           }`}
         />
       )}
