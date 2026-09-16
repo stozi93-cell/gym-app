@@ -430,6 +430,7 @@ export default function ClientChat() {
         onScroll={handleMessagesScroll}
         containerClassName="min-h-0 flex-1"
         className="h-full space-y-3 px-4 py-3"
+        endShadowClassName="inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
       >
         {messages.map((message, index) => {
           const mine = message.senderId === user.uid;

@@ -12,6 +12,7 @@ export default function ScrollArea({
   orientation = "vertical",
   viewportRef,
   onScroll,
+  endShadowClassName = "",
   ...props
 }) {
   const localRef = useRef(null);
@@ -88,11 +89,11 @@ export default function ScrollArea({
       {edges.end && (
         <div
           aria-hidden="true"
-          className={`pointer-events-none absolute z-20 ${
+          className={`pointer-events-none absolute z-20 ${endShadowClassName || (
             orientation === "horizontal"
               ? "inset-y-0 right-0 w-12 bg-gradient-to-l from-black/95 via-black/60 to-transparent"
               : "inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black via-black/85 to-transparent"
-          }`}
+          )}`}
         />
       )}
     </div>
