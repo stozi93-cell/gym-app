@@ -936,7 +936,7 @@ function SleepTab({ todayLog, saving, onSave }) {
           options={SLEEP_WAKEUP_OPTIONS}
         />
 
-        <div className={`mt-3 grid gap-2 ${hasEntry ? "grid-cols-2" : "grid-cols-1"}`}>
+        <div className="mt-4 flex justify-end gap-2 border-t border-white/10 pt-3">
           {hasEntry && (
             <button
               type="button"
@@ -945,7 +945,7 @@ function SleepTab({ todayLog, saving, onSave }) {
                 resetForm();
                 setEditing(false);
               }}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-neutral-300 transition hover:bg-white/5 disabled:opacity-60"
+              className="min-w-24 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-neutral-300 transition hover:bg-white/5 disabled:opacity-60"
             >
               Otkaži
             </button>
@@ -954,7 +954,7 @@ function SleepTab({ todayLog, saving, onSave }) {
             type="button"
             disabled={saving}
             onClick={saveEntry}
-            className="rounded-xl bg-brand-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-glow disabled:opacity-60"
+            className="min-w-24 rounded-lg bg-brand-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-glow disabled:opacity-60"
           >
             {saving ? "Čuvanje..." : hasEntry ? "Sačuvaj" : "Upiši"}
           </button>
