@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { EmptyState, Panel, StatusPill } from "../components/ui/Primitives";
@@ -439,14 +439,40 @@ function ExerciseCard({ exercise, canBuild, onOpen, onAdd }) {
 
 function ExerciseMedia({ exercise, compact = false }) {
   const [position, setPosition] = useState(0);
+  const swipeStart = useRef(null);
   const positions = ["Početak", "Sredina", "Kraj"];
 
   function movePosition(direction) {
     setPosition((current) => Math.max(0, Math.min(positions.length - 1, current + direction)));
   }
 
+  function startSwipe(event) {
+    if (compact || event.target.closest("button")) return;
+    swipeStart.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  function finishSwipe(event) {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+
+    const distanceX = event.clientX - start.x;
+    const distanceY = event.clientY - start.y;
+    if (Math.abs(distanceX) < 36 || Math.abs(distanceX) <= Math.abs(distanceY) * 1.15) return;
+    movePosition(distanceX < 0 ? 1 : -1);
+  }
+
   return (
-    <div className={`relative overflow-hidden border-b border-white/[0.06] bg-[#090d15] ${compact ? "h-28" : "h-48"}`}>
+    <div
+      className={`relative overflow-hidden border-b border-white/[0.06] bg-[#090d15] ${compact ? "h-28" : "h-48 touch-pan-y select-none"}`}
+      onPointerDown={startSwipe}
+      onPointerUp={finishSwipe}
+      onPointerCancel={() => { swipeStart.current = null; }}
+    >
       <div className="absolute inset-y-0 left-0 w-1 bg-brand-blue-500" />
       <ExercisePose pose={exercise.pose} phase={position} className="absolute inset-0 h-full w-full text-neutral-300 transition-transform duration-200" />
       <div className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/55 px-1.5 py-1 text-[9px] font-medium uppercase text-neutral-300 backdrop-blur-sm">
@@ -856,12 +882,16 @@ function ExerciseDetails({ exercise, canBuild, added, onAdd, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4" onClick={onClose} role="presentation">
-      <section role="dialog" aria-modal="true" aria-labelledby="exercise-title" onClick={(event) => event.stopPropagation()} className="flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-900 shadow-2xl">
+      <section role="dialog" aria-modal="true" aria-labelledby="exercise-title" onClick={(event) => event.stopPropagation()} className="flex h-[calc(100dvh-2rem)] max-h-[46rem] w-full max-w-md flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-900 shadow-2xl">
         <div className="relative shrink-0">
           <ExerciseMedia exercise={exercise} />
           <button type="button" onClick={onClose} aria-label="Zatvori" className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/65 text-xl text-white backdrop-blur-sm">×</button>
         </div>
-        <ScrollArea containerClassName="min-h-0 flex-1" className="h-full px-4 pb-10 pt-3">
+        <ScrollArea
+          containerClassName="min-h-0 flex-1 overflow-hidden"
+          className="h-full px-4 pb-6 pt-3"
+          endShadowClassName="inset-x-0 bottom-0 h-10 bg-gradient-to-t from-neutral-900 via-neutral-900/80 to-transparent"
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 id="exercise-title" className="text-lg font-semibold text-white">{exercise.name}</h2>
@@ -888,7 +918,7 @@ function ExerciseDetails({ exercise, canBuild, added, onAdd, onClose }) {
           </DetailSection>
         </ScrollArea>
         {canBuild && (
-          <div className="shrink-0 border-t border-white/10 p-3">
+          <div className="relative z-30 shrink-0 border-t border-white/10 bg-neutral-900 p-3">
             <button type="button" disabled={added} onClick={onAdd} className="w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:bg-white/5 disabled:text-neutral-500 disabled:shadow-none">
               {added ? "Već je u nacrtu" : "Dodaj u trening"}
             </button>
