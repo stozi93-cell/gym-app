@@ -12,6 +12,44 @@ import {
 
 const TRAINING_STORAGE_KEY = "remotion-training-templates-v1";
 const PROGRAM_STORAGE_KEY = "remotion-program-templates-v1";
+const SCHEDULE_STORAGE_KEY = "remotion-training-schedule-v1";
+
+const DEMO_TRAININGS = [
+  {
+    id: "trainer-example-full-body",
+    name: "Celo telo · primer",
+    focus: "Opšta priprema",
+    source: "trainer",
+    demo: true,
+    exercises: [
+      { exerciseId: "back-squat", sets: 3, reps: "8", restSeconds: 90 },
+      { exerciseId: "bench-press", sets: 3, reps: "8-10", restSeconds: 90 },
+      { exerciseId: "seated-row", sets: 3, reps: "10-12", restSeconds: 75 },
+    ],
+  },
+  {
+    id: "trainer-example-core",
+    name: "Stabilnost trupa · primer",
+    focus: "Mobilnost",
+    source: "trainer",
+    demo: true,
+    exercises: [
+      { exerciseId: "dead-bug", sets: 3, reps: "8/strana", restSeconds: 45 },
+      { exerciseId: "plank", sets: 3, reps: "30 s", restSeconds: 45 },
+      { exerciseId: "face-pull", sets: 3, reps: "12-15", restSeconds: 60 },
+    ],
+  },
+];
+
+const DEMO_PROGRAMS = [{
+  id: "trainer-example-program",
+  name: "Povratak treningu · primer",
+  goal: "Povratak treningu",
+  weeks: 4,
+  trainingIds: DEMO_TRAININGS.map((item) => item.id),
+  source: "trainer",
+  demo: true,
+}];
 
 const COACH_TABS = [
   { value: "exercises", label: "Vežbe" },
@@ -54,6 +92,7 @@ export default function ExerciseLibrary() {
   const { profile, user } = useAuth();
   const coachMode = profile?.role === "admin";
   const [activeTab, setActiveTab] = useState("exercises");
+  const [trainingView, setTrainingView] = useState("today");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [equipment, setEquipment] = useState("all");
@@ -63,7 +102,16 @@ export default function ExerciseLibrary() {
   const storageOwner = user?.uid || "anonymous";
   const [trainingTemplates, setTrainingTemplates] = useStoredTemplates(`${TRAINING_STORAGE_KEY}:${storageOwner}`);
   const [programTemplates, setProgramTemplates] = useStoredTemplates(`${PROGRAM_STORAGE_KEY}:${storageOwner}`);
+  const [scheduledTrainings, setScheduledTrainings] = useStoredTemplates(`${SCHEDULE_STORAGE_KEY}:${storageOwner}`);
   const [status, setStatus] = useState("");
+  const visibleTrainingTemplates = useMemo(
+    () => [...DEMO_TRAININGS, ...trainingTemplates],
+    [trainingTemplates]
+  );
+  const visibleProgramTemplates = useMemo(
+    () => [...DEMO_PROGRAMS, ...programTemplates],
+    [programTemplates]
+  );
 
   const filteredExercises = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase("sr-Latn-RS");
@@ -129,6 +177,7 @@ export default function ExerciseLibrary() {
       id: createId("training"),
       name,
       createdAt: new Date().toISOString(),
+      source: coachMode ? "trainer" : "client",
     };
     setTrainingTemplates((current) => [template, ...current]);
     setTrainingDraft(emptyTrainingDraft());
@@ -157,6 +206,7 @@ export default function ExerciseLibrary() {
       name,
       weeks: Number(programDraft.weeks),
       createdAt: new Date().toISOString(),
+      source: coachMode ? "trainer" : "client",
     }, ...current]);
     setProgramDraft(emptyProgramDraft());
     showStatus("Program je sačuvan kao lokalni nacrt.");
@@ -164,8 +214,7 @@ export default function ExerciseLibrary() {
 
   return (
     <div className="mx-auto max-w-md space-y-3">
-      {coachMode && (
-        <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-neutral-950/70 p-1">
+      <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-neutral-950/70 p-1">
           {COACH_TABS.map((tab) => (
             <button
               key={tab.value}
@@ -180,8 +229,7 @@ export default function ExerciseLibrary() {
               {tab.label}
             </button>
           ))}
-        </div>
-      )}
+      </div>
 
       {status && (
         <div className="rounded-xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-3 py-2 text-xs text-brand-blue-100">
@@ -189,9 +237,9 @@ export default function ExerciseLibrary() {
         </div>
       )}
 
-      {(!coachMode || activeTab === "exercises") && (
+      {activeTab === "exercises" && (
         <ExerciseBrowser
-          coachMode={coachMode}
+          canBuild
           search={search}
           setSearch={setSearch}
           category={category}
@@ -202,15 +250,24 @@ export default function ExerciseLibrary() {
           draftCount={trainingDraft.exercises.length}
           onOpen={setSelectedExercise}
           onAdd={addExercise}
-          onOpenDraft={() => setActiveTab("trainings")}
+          onOpenDraft={() => {
+            setTrainingView("create");
+            setActiveTab("trainings");
+          }}
         />
       )}
 
-      {coachMode && activeTab === "trainings" && (
+      {activeTab === "trainings" && (
         <TrainingTemplates
+          view={trainingView}
+          setView={setTrainingView}
           draft={trainingDraft}
           setDraft={setTrainingDraft}
-          templates={trainingTemplates}
+          templates={visibleTrainingTemplates}
+          schedule={scheduledTrainings}
+          onSchedule={(trainingId, dateKey) => setScheduledTrainings((current) => [{ id: createId("scheduled"), trainingId, dateKey, completed: false }, ...current])}
+          onToggleScheduled={(id) => setScheduledTrainings((current) => current.map((item) => item.id === id ? { ...item, completed: !item.completed } : item))}
+          onRemoveScheduled={(id) => setScheduledTrainings((current) => current.filter((item) => item.id !== id))}
           onUpdateExercise={updateDraftExercise}
           onMoveExercise={moveDraftExercise}
           onRemoveExercise={(index) => setTrainingDraft((current) => ({
@@ -228,22 +285,28 @@ export default function ExerciseLibrary() {
         />
       )}
 
-      {coachMode && activeTab === "programs" && (
+      {activeTab === "programs" && (
         <ProgramTemplates
           draft={programDraft}
           setDraft={setProgramDraft}
-          trainings={trainingTemplates}
-          programs={programTemplates}
+          trainings={visibleTrainingTemplates}
+          programs={visibleProgramTemplates}
           onToggleTraining={toggleProgramTraining}
           onSave={saveProgramTemplate}
           onDelete={(id) => setProgramTemplates((current) => current.filter((item) => item.id !== id))}
+          onDuplicate={(program) => setProgramDraft({
+            name: `${program.name} - kopija`,
+            goal: program.goal,
+            weeks: program.weeks,
+            trainingIds: [...program.trainingIds],
+          })}
         />
       )}
 
       {selectedExercise && (
         <ExerciseDetails
           exercise={selectedExercise}
-          coachMode={coachMode}
+          canBuild
           added={trainingDraft.exercises.some((item) => item.exerciseId === selectedExercise.id)}
           onAdd={() => addExercise(selectedExercise)}
           onClose={() => setSelectedExercise(null)}
@@ -254,7 +317,7 @@ export default function ExerciseLibrary() {
 }
 
 function ExerciseBrowser({
-  coachMode,
+  canBuild,
   search,
   setSearch,
   category,
@@ -312,7 +375,7 @@ function ExerciseBrowser({
         </div>
       </Panel>
 
-      {coachMode && (
+      {canBuild && (
         <button
           type="button"
           onClick={onOpenDraft}
@@ -331,7 +394,7 @@ function ExerciseBrowser({
           <ExerciseCard
             key={exercise.id}
             exercise={exercise}
-            coachMode={coachMode}
+            canBuild={canBuild}
             onOpen={() => onOpen(exercise)}
             onAdd={() => onAdd(exercise)}
           />
@@ -345,7 +408,7 @@ function ExerciseBrowser({
   );
 }
 
-function ExerciseCard({ exercise, coachMode, onOpen, onAdd }) {
+function ExerciseCard({ exercise, canBuild, onOpen, onAdd }) {
   return (
     <Panel className="overflow-hidden">
       <button type="button" onClick={onOpen} className="block w-full text-left">
@@ -359,7 +422,7 @@ function ExerciseCard({ exercise, coachMode, onOpen, onAdd }) {
           </span>
         </span>
       </button>
-      {coachMode && (
+      {canBuild && (
         <button
           type="button"
           onClick={onAdd}
@@ -375,23 +438,43 @@ function ExerciseCard({ exercise, coachMode, onOpen, onAdd }) {
 }
 
 function ExerciseMedia({ exercise, compact = false }) {
+  const [position, setPosition] = useState(0);
+  const positions = ["Početak", "Sredina", "Kraj"];
+
+  function movePosition(direction) {
+    setPosition((current) => Math.max(0, Math.min(positions.length - 1, current + direction)));
+  }
+
   return (
     <div className={`relative overflow-hidden border-b border-white/[0.06] bg-[#090d15] ${compact ? "h-28" : "h-48"}`}>
       <div className="absolute inset-y-0 left-0 w-1 bg-brand-blue-500" />
-      <ExercisePose pose={exercise.pose} className="absolute inset-0 h-full w-full text-neutral-300" />
+      <ExercisePose pose={exercise.pose} phase={position} className="absolute inset-0 h-full w-full text-neutral-300 transition-transform duration-200" />
       <div className="absolute left-2 top-2 rounded-md border border-white/10 bg-black/55 px-1.5 py-1 text-[9px] font-medium uppercase text-neutral-300 backdrop-blur-sm">
-        3D prikaz
+        {compact ? "3D prikaz" : positions[position]}
       </div>
-      <div className="absolute bottom-2 right-2 flex gap-1">
-        <span className="h-1.5 w-1.5 rounded-full bg-brand-blue-500" />
-        <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
-        <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
+      {!compact && (
+        <>
+          <button type="button" disabled={position === 0} onClick={() => movePosition(-1)} aria-label="Prethodna pozicija" className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/55 text-lg text-white backdrop-blur-sm disabled:opacity-20">‹</button>
+          <button type="button" disabled={position === positions.length - 1} onClick={() => movePosition(1)} aria-label="Sledeća pozicija" className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/55 text-lg text-white backdrop-blur-sm disabled:opacity-20">›</button>
+        </>
+      )}
+      <div className="absolute bottom-2 right-2 flex gap-1.5">
+        {positions.map((label, index) => (
+          <button
+            key={label}
+            type="button"
+            disabled={compact}
+            onClick={() => setPosition(index)}
+            aria-label={label}
+            className={`h-2 w-2 rounded-full transition ${index === position ? "bg-brand-blue-500" : "bg-white/20"}`}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
-function ExercisePose({ pose, className }) {
+function ExercisePose({ pose, phase = 0, className }) {
   const poses = {
     squat: { head: [52, 26], body: "M52 36 48 59", arms: "M50 41 34 45M50 41 66 45", legs: "M48 59 35 73 29 91M48 59 62 72 68 91" },
     hinge: { head: [69, 32], body: "M63 41 42 59", arms: "M58 46 57 70M62 44 65 69", legs: "M42 59 35 82 34 94M42 59 54 78 58 94" },
@@ -405,20 +488,50 @@ function ExercisePose({ pose, className }) {
     floor: { head: [23, 66], body: "M32 66 53 70", arms: "M38 67 49 48 55 30M40 68 61 56 75 47", legs: "M53 70 67 53 72 36M53 70 74 77 88 80" },
   };
   const current = poses[pose] || poses.row;
+  const transforms = ["translate(-2 1) rotate(-3 50 55)", "translate(0 0)", "translate(2 1) rotate(3 50 55)"];
   return (
     <svg viewBox="0 0 100 110" fill="none" className={className} aria-hidden="true">
       <path d="M8 98H92" stroke="currentColor" strokeOpacity="0.12" />
-      <circle cx={current.head[0]} cy={current.head[1]} r="7" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="3" />
-      <path d={current.body} stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-      <path d={current.arms} stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-      <path d={current.legs} stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+      <g transform={transforms[phase]} className="transition-transform duration-200">
+        <circle cx={current.head[0]} cy={current.head[1]} r="7" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="3" />
+        <path d={current.body} stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+        <path d={current.arms} stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+        <path d={current.legs} stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+      </g>
       <circle cx="84" cy="18" r="12" fill="#2f6bff" fillOpacity="0.12" />
       <circle cx="84" cy="18" r="4" fill="#22c55e" fillOpacity="0.8" />
     </svg>
   );
 }
 
-function TrainingTemplates({
+function TrainingTemplates(props) {
+  const { view, setView } = props;
+  const views = [
+    { value: "today", label: "Danas" },
+    { value: "week", label: "Ova nedelja" },
+    { value: "create", label: "Kreiranje" },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-neutral-950/60 p-1">
+        {views.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => setView(item.value)}
+            className={`rounded-lg px-2 py-2 text-[11px] font-medium transition ${view === item.value ? "bg-white/10 text-white" : "text-neutral-400"}`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {view === "create" ? <TrainingBuilder {...props} /> : <ScheduleView {...props} />}
+    </div>
+  );
+}
+
+function TrainingBuilder({
   draft,
   setDraft,
   templates,
@@ -512,7 +625,107 @@ function TrainingTemplates({
   );
 }
 
-function ProgramTemplates({ draft, setDraft, trainings, programs, onToggleTraining, onSave, onDelete }) {
+function dateKey(value = new Date()) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfCurrentWeek() {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  return date;
+}
+
+function ScheduleView({ view, templates, schedule, onSchedule, onToggleScheduled, onRemoveScheduled }) {
+  const today = dateKey();
+  const weekStart = startOfCurrentWeek();
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(date.getDate() + index);
+    return { date, key: dateKey(date) };
+  });
+  const [trainingId, setTrainingId] = useState(templates[0]?.id || "");
+  const [selectedDate, setSelectedDate] = useState(today);
+  const effectiveTrainingId = templates.some((item) => item.id === trainingId)
+    ? trainingId
+    : templates[0]?.id || "";
+
+  const visibleSchedule = schedule
+    .filter((item) => view === "today"
+      ? item.dateKey === today
+      : weekDays.some((day) => day.key === item.dateKey))
+    .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+  function addScheduledTraining() {
+    const targetDate = view === "today" ? today : selectedDate;
+    if (!effectiveTrainingId || !targetDate) return;
+    onSchedule(effectiveTrainingId, targetDate);
+  }
+
+  return (
+    <div className="space-y-3">
+      <Panel className="space-y-3 p-3">
+        <div>
+          <p className="text-sm font-semibold text-white">{view === "today" ? "Plan za danas" : "Plan za ovu nedelju"}</p>
+          <p className="text-[11px] text-neutral-500">Dodaj sačuvani trening u lični raspored.</p>
+        </div>
+        {view === "week" && (
+          <div className="grid grid-cols-7 gap-1">
+            {weekDays.map((day) => {
+              const count = schedule.filter((item) => item.dateKey === day.key).length;
+              return (
+                <button
+                  key={day.key}
+                  type="button"
+                  onClick={() => setSelectedDate(day.key)}
+                  className={`rounded-lg py-1.5 text-center ${selectedDate === day.key ? "bg-brand-blue-500 text-white" : "bg-white/[0.04] text-neutral-400"}`}
+                >
+                  <span className="block text-[8px] uppercase">{day.date.toLocaleDateString("sr-Latn-RS", { weekday: "short" }).replace(".", "")}</span>
+                  <span className="block text-[11px] font-semibold">{day.date.getDate()}</span>
+                  <span className={`mx-auto mt-0.5 block h-1 w-1 rounded-full ${count ? "bg-brand-green-500" : "bg-transparent"}`} />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <select value={effectiveTrainingId} onChange={(event) => setTrainingId(event.target.value)} className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-neutral-950/60 px-2 text-xs text-white outline-none">
+            {templates.map((template) => <option key={template.id} value={template.id} className="bg-neutral-900">{template.name}</option>)}
+          </select>
+          <button type="button" disabled={!effectiveTrainingId} onClick={addScheduledTraining} className="rounded-xl bg-brand-blue-500 px-3 text-xs font-semibold text-white disabled:opacity-40">Dodaj</button>
+        </div>
+      </Panel>
+
+      <div className="space-y-2">
+        {visibleSchedule.map((item) => {
+          const training = templates.find((template) => template.id === item.trainingId);
+          if (!training) return null;
+          const scheduledDate = new Date(`${item.dateKey}T12:00:00`);
+          return (
+            <Panel key={item.id} className={`flex items-center gap-3 p-3 ${item.completed ? "opacity-60" : ""}`}>
+              <button type="button" onClick={() => onToggleScheduled(item.id)} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm ${item.completed ? "border-brand-green-500 bg-brand-green-500 text-white" : "border-white/15 text-transparent"}`} aria-label={item.completed ? "Označi kao nezavršeno" : "Označi kao završeno"}>✓</button>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className={`truncate text-sm font-semibold text-white ${item.completed ? "line-through" : ""}`}>{training.name}</p>
+                  <TemplateSourceBadge source={training.source} demo={training.demo} />
+                </div>
+                <p className="mt-0.5 text-[10px] text-neutral-500">{scheduledDate.toLocaleDateString("sr-Latn-RS", { weekday: "long", day: "numeric", month: "short" })} · {training.exercises.length} vežbi</p>
+              </div>
+              <button type="button" onClick={() => onRemoveScheduled(item.id)} className="h-8 w-8 rounded-lg text-lg text-neutral-500" aria-label="Ukloni iz rasporeda">×</button>
+            </Panel>
+          );
+        })}
+        {visibleSchedule.length === 0 && <EmptyState title={view === "today" ? "Danas nema planiranog treninga" : "Ove nedelje nema planiranih treninga"} />}
+      </div>
+    </div>
+  );
+}
+
+function ProgramTemplates({ draft, setDraft, trainings, programs, onToggleTraining, onSave, onDelete, onDuplicate }) {
   return (
     <div className="space-y-3">
       <Panel className="space-y-3 p-3">
@@ -576,6 +789,7 @@ function ProgramTemplates({ draft, setDraft, trainings, programs, onToggleTraini
         empty="Još nema sačuvanih programa."
         items={programs}
         renderMeta={(item) => `${item.weeks} nedelja · ${item.trainingIds.length} treninga`}
+        onDuplicate={onDuplicate}
         onDelete={onDelete}
       />
     </div>
@@ -592,15 +806,27 @@ function TemplateList({ title, empty, items, renderMeta, onDuplicate, onDelete }
       {items.map((item) => (
         <Panel key={item.id} className="flex items-center gap-3 p-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-white">{item.name}</p>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="truncate text-sm font-semibold text-white">{item.name}</p>
+              <TemplateSourceBadge source={item.source} demo={item.demo} />
+            </div>
             <p className="mt-0.5 text-[11px] text-neutral-500">{renderMeta(item)}</p>
           </div>
           {onDuplicate && <button type="button" onClick={() => onDuplicate(item)} className="h-9 rounded-lg border border-white/10 px-2 text-[10px] text-neutral-300">Kopiraj</button>}
-          <button type="button" onClick={() => onDelete(item.id)} className="h-9 w-9 rounded-lg border border-red-400/20 text-sm text-red-300" aria-label={`Obriši ${item.name}`}>×</button>
+          {!item.demo && <button type="button" onClick={() => onDelete(item.id)} className="h-9 w-9 rounded-lg border border-red-400/20 text-sm text-red-300" aria-label={`Obriši ${item.name}`}>×</button>}
         </Panel>
       ))}
       {items.length === 0 && <EmptyState title={empty} />}
     </div>
+  );
+}
+
+function TemplateSourceBadge({ source, demo = false }) {
+  const trainer = source === "trainer";
+  return (
+    <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] font-medium uppercase ${trainer ? "border-brand-green-500/25 bg-brand-green-500/10 text-brand-green-300" : "border-brand-blue-500/25 bg-brand-blue-500/10 text-brand-blue-300"}`}>
+      {trainer ? (demo ? "Trener · primer" : "Trener") : "Moje"}
+    </span>
   );
 }
 
@@ -616,7 +842,7 @@ function SmallEditor({ label, value, onChange, type = "text", suffix = "" }) {
   );
 }
 
-function ExerciseDetails({ exercise, coachMode, added, onAdd, onClose }) {
+function ExerciseDetails({ exercise, canBuild, added, onAdd, onClose }) {
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -635,7 +861,7 @@ function ExerciseDetails({ exercise, coachMode, added, onAdd, onClose }) {
           <ExerciseMedia exercise={exercise} />
           <button type="button" onClick={onClose} aria-label="Zatvori" className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/65 text-xl text-white backdrop-blur-sm">×</button>
         </div>
-        <ScrollArea containerClassName="min-h-0 flex-1" className="h-full px-4 py-3">
+        <ScrollArea containerClassName="min-h-0 flex-1" className="h-full px-4 pb-10 pt-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 id="exercise-title" className="text-lg font-semibold text-white">{exercise.name}</h2>
@@ -661,7 +887,7 @@ function ExerciseDetails({ exercise, coachMode, added, onAdd, onClose }) {
             <ul className="space-y-1.5">{exercise.mistakes.map((mistake) => <li key={mistake} className="flex gap-2 text-xs text-neutral-400"><span className="text-red-300">•</span>{mistake}</li>)}</ul>
           </DetailSection>
         </ScrollArea>
-        {coachMode && (
+        {canBuild && (
           <div className="shrink-0 border-t border-white/10 p-3">
             <button type="button" disabled={added} onClick={onAdd} className="w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:bg-white/5 disabled:text-neutral-500 disabled:shadow-none">
               {added ? "Već je u nacrtu" : "Dodaj u trening"}

@@ -62,8 +62,8 @@ export default function ScrollArea({
   }
 
   const overflowClass = orientation === "horizontal"
-    ? "overflow-x-auto overflow-y-hidden"
-    : "overflow-y-auto overflow-x-hidden";
+    ? "touch-pan-x overflow-x-auto overflow-y-hidden overscroll-contain"
+    : "touch-pan-y overflow-y-auto overflow-x-hidden overscroll-contain";
 
   return (
     <div className={`relative min-h-0 min-w-0 ${containerClassName}`}>
