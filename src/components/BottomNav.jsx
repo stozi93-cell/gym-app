@@ -17,17 +17,6 @@ function CalendarIcon({ className }) {
   );
 }
 
-function HomeIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M3 11.5 12 4l9 7.5" />
-      <path d="M5 10.5V20h14v-9.5" />
-      <path d="M9.5 20v-5h5v5" />
-    </svg>
-  );
-}
-
 function RepeatIcon({ className }) {
   return (
     <svg
@@ -233,10 +222,10 @@ export default function BottomNav({ role }) {
 
         {role === "client" && (
           <>
-            <NavItem to="/" label="Početna" icon={<HomeIcon className={iconClass} />} />
             <NavItem to="/rezervacije" label="Termini" icon={<CalendarIcon className={iconClass} />} />
             <NavItem to="/napredak" label="Dnevnik" icon={<JournalIcon className={iconClass} />} />
             <NavItem to="/vezbe" label="Vežbe" icon={<DumbbellIcon className={iconClass} />} />
+            <NavItem to="/forum" label="Forum" icon={<MegaphoneIcon className={iconClass} />} />
             <NavItem
               to="/chat"
               label="Poruke"
@@ -248,7 +237,6 @@ export default function BottomNav({ role }) {
 
         {role === "admin" && (
           <>
-            <NavItem to="/" label="Početna" icon={<HomeIcon className={iconClass} />} />
             <NavItem to="/raspored" label="Raspored" icon={<CalendarIcon className={iconClass} />} />
             <NavItem to="/klijenti" label="Klijenti" icon={<UsersIcon className={iconClass} />} />
             <NavItem to="/poruke" label="Poruke" icon={<ChatIcon className={iconClass} />} badge={unread} />

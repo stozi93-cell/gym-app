@@ -16,13 +16,6 @@ export default function AccountMenu({ profile }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
   const fullName = `${profile?.name || ""} ${profile?.surname || ""}`.trim();
-  const menuItems = profile?.role === "client"
-    ? [
-        ...MENU_ITEMS.slice(0, 2),
-        { to: "/forum", label: "Forum", icon: ForumIcon },
-        ...MENU_ITEMS.slice(2),
-      ]
-    : MENU_ITEMS;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -76,7 +69,7 @@ export default function AccountMenu({ profile }) {
           </div>
 
           <div className="py-1">
-            {menuItems.map(({ to, label, icon, divider }) => (
+            {MENU_ITEMS.map(({ to, label, icon, divider }) => (
               <div key={to} className={divider ? "mt-1 border-t border-white/10 pt-1" : ""}>
                 <NavLink
                   to={to}
@@ -135,15 +128,6 @@ function RulesIcon({ className }) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M6 3h12v18H6z" />
       <path d="M9 8h6M9 12h6M9 16h4" />
-    </svg>
-  );
-}
-
-function ForumIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M4 5h16v11H8l-4 3V5Z" />
-      <path d="M8 9h8M8 12h5" />
     </svg>
   );
 }
