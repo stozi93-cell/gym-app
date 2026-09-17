@@ -7,8 +7,7 @@ import Avatar from "./Avatar";
 const MENU_ITEMS = [
   { to: "/profil/me", label: "Profil", icon: UserIcon },
   { to: "/podesavanja", label: "Podešavanja", icon: SettingsIcon },
-  { to: "/vezbe", label: "Vežbe", icon: ExerciseIcon },
-  { to: "/pravila-teretane", label: "Pravila teretane", icon: RulesIcon },
+  { to: "/pravila-teretane", label: "Pravila teretane", icon: RulesIcon, divider: true },
   { to: "/uputstvo", label: "Uputstvo za aplikaciju", icon: HelpIcon },
   { to: "/cenovnik", label: "Cenovnik", icon: PriceIcon },
 ];
@@ -17,6 +16,13 @@ export default function AccountMenu({ profile }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
   const fullName = `${profile?.name || ""} ${profile?.surname || ""}`.trim();
+  const menuItems = profile?.role === "client"
+    ? [
+        ...MENU_ITEMS.slice(0, 2),
+        { to: "/forum", label: "Forum", icon: ForumIcon },
+        ...MENU_ITEMS.slice(2),
+      ]
+    : MENU_ITEMS;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -70,8 +76,8 @@ export default function AccountMenu({ profile }) {
           </div>
 
           <div className="py-1">
-            {MENU_ITEMS.map(({ to, label, icon }, index) => (
-              <div key={to} className={index === 3 ? "mt-1 border-t border-white/10 pt-1" : ""}>
+            {menuItems.map(({ to, label, icon, divider }) => (
+              <div key={to} className={divider ? "mt-1 border-t border-white/10 pt-1" : ""}>
                 <NavLink
                   to={to}
                   onClick={() => setOpen(false)}
@@ -133,10 +139,11 @@ function RulesIcon({ className }) {
   );
 }
 
-function ExerciseIcon({ className }) {
+function ForumIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M7 7v10M17 7v10M4 9v6M20 9v6M7 12h10" />
+      <path d="M4 5h16v11H8l-4 3V5Z" />
+      <path d="M8 9h8M8 12h5" />
     </svg>
   );
 }

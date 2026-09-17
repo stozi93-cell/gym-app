@@ -236,7 +236,7 @@ export default function BottomNav({ role }) {
             <NavItem to="/" label="Početna" icon={<HomeIcon className={iconClass} />} />
             <NavItem to="/rezervacije" label="Termini" icon={<CalendarIcon className={iconClass} />} />
             <NavItem to="/napredak" label="Dnevnik" icon={<JournalIcon className={iconClass} />} />
-            <NavItem to="/forum" label="Forum" icon={<MegaphoneIcon className={iconClass} />} />
+            <NavItem to="/vezbe" label="Vežbe" icon={<DumbbellIcon className={iconClass} />} />
             <NavItem
               to="/chat"
               label="Poruke"
