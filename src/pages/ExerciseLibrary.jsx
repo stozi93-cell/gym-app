@@ -110,6 +110,12 @@ function exerciseBlockId(item, blocks) {
   return blocks.some((block) => block.id === item.blockId) ? item.blockId : blocks[0].id;
 }
 
+function blockCountLabel(count) {
+  if (count === 1) return "1 blok";
+  if (count >= 2 && count <= 4) return `${count} bloka`;
+  return `${count} blokova`;
+}
+
 export default function ExerciseLibrary() {
   const { profile, user } = useAuth();
   const coachMode = profile?.role === "admin";
@@ -378,7 +384,7 @@ export default function ExerciseLibrary() {
       )}
 
       {selectedTraining && (
-        <TrainingDetails training={selectedTraining} onClose={() => setSelectedTraining(null)} />
+        <TrainingDetails training={selectedTraining} onOpenExercise={setSelectedExercise} onClose={() => setSelectedTraining(null)} />
       )}
 
       {selectedProgram && (
@@ -787,10 +793,12 @@ function TrainingLibrary({ templates, programDraft, setProgramDraft, onTogglePro
           }
           return (
             <Panel key={training.id} className="overflow-hidden">
-              <button type="button" onClick={() => onOpen(training)} className="flex w-full items-center gap-3 p-3 text-left">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-blue-500/10 text-xs font-semibold text-brand-blue-300">{training.exercises.length}</span>
-                <TemplateSummary item={training} meta={`${training.exercises.length} vežbi · ${training.focus}`} />
-                <span className="text-lg text-neutral-600">›</span>
+              <button type="button" onClick={() => onOpen(training)} className="block w-full text-left">
+                <TrainingPreview training={training} />
+                <span className="flex items-center gap-3 p-3">
+                  <TemplateSummary item={training} meta={`${training.exercises.length} vežbi · ${blockCountLabel(normalizedTrainingBlocks(training).length)} · ${training.focus}`} />
+                  <span className="text-lg text-neutral-600">›</span>
+                </span>
               </button>
               <div className="flex justify-end gap-2 border-t border-white/[0.06] px-2 py-1.5">
                 <button type="button" onClick={() => onEditCopy(training)} className="rounded-lg px-2 py-1.5 text-[10px] text-neutral-300">Kopiraj i uredi</button>
@@ -801,6 +809,35 @@ function TrainingLibrary({ templates, programDraft, setProgramDraft, onTogglePro
         })}
       </div>
       {templates.length === 0 && <EmptyState title="Još nema sačuvanih treninga" />}
+    </div>
+  );
+}
+
+function TrainingPreview({ training }) {
+  const exercises = training.exercises
+    .slice(0, 3)
+    .map((item) => getExerciseById(item.exerciseId))
+    .filter(Boolean);
+  const hiddenCount = Math.max(0, training.exercises.length - exercises.length);
+
+  return (
+    <div className="relative h-28 overflow-hidden border-b border-white/[0.06] bg-[#090d15]">
+      <div className="absolute inset-y-0 left-0 z-10 w-1 bg-brand-blue-500" />
+      <div className="grid h-full" style={{ gridTemplateColumns: `repeat(${Math.max(1, exercises.length)}, minmax(0, 1fr))` }}>
+        {exercises.map((exercise, index) => (
+          <div key={exercise.id} className="relative min-w-0 overflow-hidden border-r border-white/[0.05] last:border-r-0">
+            <ExercisePose pose={exercise.pose} phase={index % 3} className="absolute inset-0 h-full w-full scale-110 text-neutral-500" />
+            <span className="absolute left-2 top-2 flex h-5 w-5 items-center justify-center rounded-md border border-white/10 bg-black/50 text-[9px] font-semibold text-neutral-300">{index + 1}</span>
+          </div>
+        ))}
+        {exercises.length === 0 && <div className="flex items-center justify-center text-xs text-neutral-600">Prazan trening</div>}
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/85 to-transparent" />
+      <div className="absolute bottom-2 left-3 flex gap-1.5">
+        <span className="rounded-md border border-white/10 bg-black/55 px-2 py-1 text-[9px] text-neutral-300">{training.exercises.length} vežbi</span>
+        <span className="rounded-md border border-white/10 bg-black/55 px-2 py-1 text-[9px] text-neutral-300">{blockCountLabel(normalizedTrainingBlocks(training).length)}</span>
+      </div>
+      {hiddenCount > 0 && <span className="absolute bottom-2 right-3 rounded-md bg-brand-blue-500 px-2 py-1 text-[9px] font-semibold text-white">+{hiddenCount}</span>}
     </div>
   );
 }
@@ -1008,7 +1045,7 @@ function DetailsModal({ title, subtitle, onClose, children }) {
   );
 }
 
-function TrainingDetails({ training, onClose }) {
+function TrainingDetails({ training, onOpenExercise, onClose }) {
   const blocks = normalizedTrainingBlocks(training);
   return (
     <DetailsModal title={training.name} subtitle={`${training.exercises.length} vežbi · ${training.focus}`} onClose={onClose}>
@@ -1024,7 +1061,16 @@ function TrainingDetails({ training, onClose }) {
                 const exercise = getExerciseById(item.exerciseId);
                 if (!exercise) return null;
                 const weight = item.weight !== "" && item.weight !== undefined ? ` · ${item.weight}kg` : "";
-                return <div key={`${item.exerciseId}-${index}`} className="flex items-center gap-3 rounded-lg bg-white/[0.035] p-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-blue-500/10 text-xs font-semibold text-brand-blue-300">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{exercise.name}</p><p className="mt-0.5 text-[10px] text-neutral-500">{item.sets} serije · {item.reps} ponavljanja{weight} · {item.restSeconds}s odmor</p></div></div>;
+                return (
+                  <button key={`${item.exerciseId}-${index}`} type="button" onClick={() => onOpenExercise(exercise)} className="flex w-full items-center gap-3 rounded-lg bg-white/[0.035] p-2 text-left transition hover:bg-white/[0.06]">
+                    <span className="relative h-12 w-14 shrink-0 overflow-hidden rounded-lg border border-white/[0.06] bg-[#090d15]">
+                      <ExercisePose pose={exercise.pose} phase={index % 3} className="absolute inset-0 h-full w-full scale-125 text-neutral-500" />
+                      <span className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded bg-black/55 text-[8px] font-semibold text-neutral-300">{index + 1}</span>
+                    </span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-white">{exercise.name}</span><span className="mt-0.5 block text-[10px] text-neutral-500">{item.sets} serije · {item.reps} ponavljanja{weight} · {item.restSeconds}s odmor</span></span>
+                    <span className="text-lg text-neutral-600">›</span>
+                  </button>
+                );
               })}
             </div>
             {blockIndex < blocks.length - 1 && <div className="border-t border-amber-400/15 bg-amber-400/[0.05] px-3 py-2 text-[10px] text-amber-200/75">Pauza {block.pauseSeconds}s</div>}
@@ -1070,7 +1116,7 @@ function ExerciseDetails({ exercise, canBuild, added, onAdd, onRemove, onClose }
   }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-4" onClick={onClose} role="presentation">
       <section role="dialog" aria-modal="true" aria-labelledby="exercise-title" onClick={(event) => event.stopPropagation()} className="flex h-[calc(100dvh-2rem)] max-h-[46rem] w-full max-w-md flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-900 shadow-2xl">
         <div className="relative shrink-0">
           <ExerciseMedia exercise={exercise} />
