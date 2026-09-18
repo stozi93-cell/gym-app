@@ -13,7 +13,7 @@ import {
 const TRAINING_STORAGE_KEY = "remotion-training-templates-v1";
 const PROGRAM_STORAGE_KEY = "remotion-program-templates-v1";
 const SCHEDULE_STORAGE_KEY = "remotion-training-schedule-v1";
-const WEEK_DAYS = ["Ponedeljak", "Utorak", "Sreda", "Četvrtak", "Petak", "Subota", "Nedelja"];
+const PROGRAM_DAYS = ["Dan 1", "Dan 2", "Dan 3", "Dan 4", "Dan 5", "Dan 6", "Dan 7"];
 
 const DEMO_TRAININGS = [
   {
@@ -110,14 +110,14 @@ function emptyProgramDraft() {
     trainingIds: [],
     weekPlans: Array.from({ length: weeks }, (_, weekIndex) => ({
       weekIndex,
-      days: WEEK_DAYS.map((_, dayIndex) => ({ dayIndex, trainingId: null })),
+      days: PROGRAM_DAYS.map((_, dayIndex) => ({ dayIndex, trainingId: null })),
     })),
   };
 }
 
 function normalizedWeekDays(storedDays) {
   const stored = Array.isArray(storedDays) ? storedDays : [];
-  return WEEK_DAYS.map((_, dayIndex) => {
+  return PROGRAM_DAYS.map((_, dayIndex) => {
     const entry = stored.find((item) => Number(item.dayIndex) === dayIndex);
     return { dayIndex, trainingId: entry?.trainingId || null };
   });
@@ -861,7 +861,7 @@ function ProgramDraftEditor({ expanded, setExpanded, draft, setDraft, trainings,
   const effectiveWeek = Math.min(activeWeek, weekPlans.length - 1);
   const activePlan = weekPlans[effectiveWeek];
   const trainingDays = activePlan.days.filter((day) => day.trainingId).length;
-  const restDays = WEEK_DAYS.length - trainingDays;
+  const restDays = PROGRAM_DAYS.length - trainingDays;
 
   function updateDay(dayIndex, trainingId) {
     setDraft((current) => ({
@@ -943,7 +943,7 @@ function ProgramDraftEditor({ expanded, setExpanded, draft, setDraft, trainings,
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-brand-green-500/[0.08] px-3 py-2"><p className="text-lg font-semibold text-brand-green-300">{trainingDays}</p><p className="text-[9px] uppercase text-neutral-500">treninga nedeljno</p></div>
+            <div className="rounded-xl bg-brand-green-500/[0.08] px-3 py-2"><p className="text-lg font-semibold text-brand-green-300">{trainingDays}</p><p className="text-[9px] uppercase text-neutral-500">treninga u 7 dana</p></div>
             <div className="rounded-xl bg-white/[0.035] px-3 py-2"><p className="text-lg font-semibold text-neutral-200">{restDays}</p><p className="text-[9px] uppercase text-neutral-500">dana odmora</p></div>
           </div>
 
@@ -952,7 +952,7 @@ function ProgramDraftEditor({ expanded, setExpanded, draft, setDraft, trainings,
             <div className="space-y-1.5">
               {activePlan.days.map((day) => (
                 <label key={day.dayIndex} className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${day.trainingId ? "border-brand-green-500/20 bg-brand-green-500/[0.06]" : "border-white/[0.07] bg-neutral-950/35"}`}>
-                  <span className="w-20 shrink-0 text-[11px] font-medium text-neutral-300">{WEEK_DAYS[day.dayIndex]}</span>
+                  <span className="w-20 shrink-0 text-[11px] font-medium text-neutral-300">{PROGRAM_DAYS[day.dayIndex]}</span>
                   <select value={day.trainingId || ""} onChange={(event) => updateDay(day.dayIndex, event.target.value)} className={`h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-neutral-950/70 px-2 text-[10px] outline-none ${day.trainingId ? "text-white" : "text-neutral-500"}`}>
                     <option value="" className="bg-neutral-900">Odmor</option>
                     {trainings.map((training) => <option key={training.id} value={training.id} className="bg-neutral-900">{training.name}</option>)}
@@ -1018,7 +1018,7 @@ function ProgramLibrary({ programs, onOpen, onDelete, onEditCopy }) {
               <button type="button" onClick={() => onOpen(program)} className="block w-full text-left">
                 <ProgramPreview program={program} />
                 <span className="flex items-center gap-3 p-3">
-                  <TemplateSummary item={program} meta={stats.totalTrainings ? `${stats.averagePerWeek}x nedeljno · ${program.weeks} nedelja · ${program.goal}` : `${program.weeks} nedelja · raspored nije definisan`} />
+                  <TemplateSummary item={program} meta={stats.totalTrainings ? `${stats.averagePerWeek}x / 7 dana · ${program.weeks} nedelja · ${program.goal}` : `${program.weeks} nedelja · raspored nije definisan`} />
                   <span className="text-lg text-neutral-600">›</span>
                 </span>
               </button>
@@ -1290,8 +1290,8 @@ function ProgramDetails({ program, trainings, onOpenTraining, onClose }) {
           <div className="divide-y divide-white/[0.05]">
             {activePlan.days.map((day) => {
               const training = trainings.find((item) => item.id === day.trainingId);
-              if (!training) return <div key={day.dayIndex} className="flex items-center gap-3 px-3 py-2"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{WEEK_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 text-xs text-neutral-600">Odmor</span></div>;
-              return <button key={day.dayIndex} type="button" onClick={() => onOpenTraining(training)} className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/[0.04]"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{WEEK_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-white">{training.name}</span><span className="h-1.5 w-1.5 rounded-full bg-brand-green-400" /><span className="text-sm text-neutral-600">›</span></button>;
+              if (!training) return <div key={day.dayIndex} className="flex items-center gap-3 px-3 py-2"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{PROGRAM_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 text-xs text-neutral-600">Odmor</span></div>;
+              return <button key={day.dayIndex} type="button" onClick={() => onOpenTraining(training)} className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/[0.04]"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{PROGRAM_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-white">{training.name}</span><span className="h-1.5 w-1.5 rounded-full bg-brand-green-400" /><span className="text-sm text-neutral-600">›</span></button>;
             })}
           </div>
         ) : <p className="px-3 py-4 text-center text-xs text-neutral-500">Raspored nije definisan.</p>}
