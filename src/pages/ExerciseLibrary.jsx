@@ -102,20 +102,37 @@ function emptyTrainingDraft() {
 }
 
 function emptyProgramDraft() {
+  const weeks = 4;
   return {
     name: "",
     goal: "Opšta kondicija",
-    weeks: 4,
+    weeks,
     trainingIds: [],
-    weeklyPlan: WEEK_DAYS.map((_, dayIndex) => ({ dayIndex, trainingId: null })),
+    weekPlans: Array.from({ length: weeks }, (_, weekIndex) => ({
+      weekIndex,
+      days: WEEK_DAYS.map((_, dayIndex) => ({ dayIndex, trainingId: null })),
+    })),
   };
 }
 
-function normalizedWeeklyPlan(program) {
-  const stored = Array.isArray(program.weeklyPlan) ? program.weeklyPlan : [];
+function normalizedWeekDays(storedDays) {
+  const stored = Array.isArray(storedDays) ? storedDays : [];
   return WEEK_DAYS.map((_, dayIndex) => {
     const entry = stored.find((item) => Number(item.dayIndex) === dayIndex);
     return { dayIndex, trainingId: entry?.trainingId || null };
+  });
+}
+
+function normalizedProgramWeeks(program) {
+  const totalWeeks = Math.max(1, Math.min(52, Number(program.weeks) || 1));
+  const storedWeeks = Array.isArray(program.weekPlans) ? program.weekPlans : [];
+  const legacyWeek = normalizedWeekDays(program.weeklyPlan);
+  return Array.from({ length: totalWeeks }, (_, weekIndex) => {
+    const stored = storedWeeks.find((week) => Number(week.weekIndex) === weekIndex);
+    return {
+      weekIndex,
+      days: stored ? normalizedWeekDays(stored.days) : legacyWeek.map((day) => ({ ...day })),
+    };
   });
 }
 
@@ -140,8 +157,13 @@ function blockCountLabel(count) {
   return `${count} blokova`;
 }
 
-function programTrainingDays(program) {
-  return normalizedWeeklyPlan(program).filter((day) => day.trainingId).length;
+function programScheduleStats(program) {
+  const weeks = normalizedProgramWeeks(program);
+  const totalTrainings = weeks.reduce((total, week) => total + week.days.filter((day) => day.trainingId).length, 0);
+  return {
+    totalTrainings,
+    averagePerWeek: weeks.length ? Math.round((totalTrainings / weeks.length) * 10) / 10 : 0,
+  };
 }
 
 export default function ExerciseLibrary() {
@@ -259,22 +281,28 @@ export default function ExerciseLibrary() {
   }
 
   function toggleProgramTraining(trainingId) {
-    setProgramDraft((current) => ({
-      ...current,
-      trainingIds: current.trainingIds.includes(trainingId)
-        ? current.trainingIds.filter((id) => id !== trainingId)
-        : [...current.trainingIds, trainingId],
-      weeklyPlan: current.trainingIds.includes(trainingId)
-        ? normalizedWeeklyPlan(current).map((day) => day.trainingId === trainingId ? { ...day, trainingId: null } : day)
-        : normalizedWeeklyPlan(current),
-    }));
+    setProgramDraft((current) => {
+      const removing = current.trainingIds.includes(trainingId);
+      return {
+        ...current,
+        trainingIds: removing
+          ? current.trainingIds.filter((id) => id !== trainingId)
+          : [...current.trainingIds, trainingId],
+        weekPlans: normalizedProgramWeeks(current).map((week) => ({
+          ...week,
+          days: removing
+            ? week.days.map((day) => day.trainingId === trainingId ? { ...day, trainingId: null } : day)
+            : week.days,
+        })),
+      };
+    });
   }
 
   function saveProgramTemplate() {
     const name = programDraft.name.trim();
-    const weeklyPlan = normalizedWeeklyPlan(programDraft);
-    if (!name || programDraft.trainingIds.length === 0 || !weeklyPlan.some((day) => day.trainingId)) {
-      showStatus("Unesi naziv, izaberi trening i rasporedi ga u nedelji.");
+    const weekPlans = normalizedProgramWeeks(programDraft);
+    if (!name || programDraft.trainingIds.length === 0 || !weekPlans.some((week) => week.days.some((day) => day.trainingId))) {
+      showStatus("Unesi naziv, izaberi trening i rasporedi ga u programu.");
       return;
     }
 
@@ -283,7 +311,8 @@ export default function ExerciseLibrary() {
       id: createId("program"),
       name,
       weeks: Number(programDraft.weeks),
-      weeklyPlan,
+      weekPlans,
+      weeklyPlan: weekPlans[0].days,
       createdAt: new Date().toISOString(),
       source: coachMode ? "trainer" : "client",
     }, ...current]);
@@ -380,7 +409,8 @@ export default function ExerciseLibrary() {
               goal: program.goal,
               weeks: program.weeks,
               trainingIds: [...program.trainingIds],
-              weeklyPlan: normalizedWeeklyPlan(program),
+              weekPlans: normalizedProgramWeeks(program),
+              weeklyPlan: normalizedProgramWeeks(program)[0].days,
             });
             setActiveTab("trainings");
           }}
@@ -768,9 +798,14 @@ function TrainingLibrary({ templates, programDraft, setProgramDraft, onTogglePro
   const [creatingProgram, setCreatingProgram] = useState(programDraft.trainingIds.length > 0);
 
   function saveProgram() {
-    const hasScheduledTraining = normalizedWeeklyPlan(programDraft).some((day) => day.trainingId);
+    const hasScheduledTraining = normalizedProgramWeeks(programDraft).some((week) => week.days.some((day) => day.trainingId));
     onSaveProgram();
     if (programDraft.name.trim() && programDraft.trainingIds.length > 0 && hasScheduledTraining) setCreatingProgram(false);
+  }
+
+  function toggleTraining(trainingId, selected) {
+    if (!selected) setCreatingProgram(true);
+    onToggleProgramTraining(trainingId);
   }
 
   return (
@@ -795,16 +830,16 @@ function TrainingLibrary({ templates, programDraft, setProgramDraft, onTogglePro
         {templates.map((training) => {
           const selected = programDraft.trainingIds.includes(training.id);
           return (
-            <Panel key={training.id} className={`overflow-hidden ${creatingProgram && selected ? "border-brand-green-500/35" : ""}`}>
+            <Panel key={training.id} className={`overflow-hidden ${selected ? "border-brand-green-500/35" : ""}`}>
               <button type="button" onClick={() => onOpen(training)} className="block w-full text-left">
-                <TrainingPreview training={training} selected={creatingProgram && selected} />
+                <TrainingPreview training={training} selected={selected} />
                 <span className="flex items-center gap-3 p-3">
                   <TemplateSummary item={training} meta={`${training.exercises.length} vežbi · ${blockCountLabel(normalizedTrainingBlocks(training).length)} · ${training.focus}`} />
                   <span className="text-lg text-neutral-600">›</span>
                 </span>
               </button>
-              <div className={`flex items-center border-t border-white/[0.06] px-2 py-1.5 ${creatingProgram ? "justify-between" : "justify-end"}`}>
-                {creatingProgram && <button type="button" onClick={() => onToggleProgramTraining(training.id)} className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${selected ? "bg-red-500/10 text-red-300" : "bg-brand-green-500/10 text-brand-green-300"}`}>{selected ? "Ukloni iz programa" : "Dodaj u program"}</button>}
+              <div className="flex items-center justify-between border-t border-white/[0.06] px-2 py-1.5">
+                <button type="button" onClick={() => toggleTraining(training.id, selected)} className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${selected ? "bg-red-500/10 text-red-300" : "bg-brand-green-500/10 text-brand-green-300"}`}>{selected ? "Ukloni iz programa" : "Dodaj u program"}</button>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => onEditCopy(training)} className="rounded-lg px-2 py-1.5 text-[10px] text-neutral-300">Kopiraj i uredi</button>
                   {!training.demo && <button type="button" onClick={() => onDelete(training.id)} className="h-7 w-7 rounded-lg text-red-300" aria-label={`Obriši ${training.name}`}>×</button>}
@@ -820,15 +855,52 @@ function TrainingLibrary({ templates, programDraft, setProgramDraft, onTogglePro
 }
 
 function ProgramDraftEditor({ expanded, setExpanded, draft, setDraft, trainings, onSave }) {
-  const weeklyPlan = normalizedWeeklyPlan(draft);
-  const trainingDays = weeklyPlan.filter((day) => day.trainingId).length;
+  const [activeWeek, setActiveWeek] = useState(0);
+  const weekPlans = normalizedProgramWeeks(draft);
+  const effectiveWeek = Math.min(activeWeek, weekPlans.length - 1);
+  const activePlan = weekPlans[effectiveWeek];
+  const trainingDays = activePlan.days.filter((day) => day.trainingId).length;
   const restDays = WEEK_DAYS.length - trainingDays;
 
   function updateDay(dayIndex, trainingId) {
     setDraft((current) => ({
       ...current,
-      weeklyPlan: normalizedWeeklyPlan(current).map((day) => day.dayIndex === dayIndex ? { ...day, trainingId: trainingId || null } : day),
+      weekPlans: normalizedProgramWeeks(current).map((week) => week.weekIndex === effectiveWeek
+        ? { ...week, days: week.days.map((day) => day.dayIndex === dayIndex ? { ...day, trainingId: trainingId || null } : day) }
+        : week),
     }));
+  }
+
+  function updateDuration(value) {
+    const weeks = Math.max(1, Math.min(52, Number(value) || 1));
+    setDraft((current) => ({
+      ...current,
+      weeks,
+      weekPlans: normalizedProgramWeeks({ ...current, weeks }),
+    }));
+    if (activeWeek >= weeks) setActiveWeek(weeks - 1);
+  }
+
+  function copyPreviousWeek() {
+    if (effectiveWeek === 0) return;
+    setDraft((current) => {
+      const plans = normalizedProgramWeeks(current);
+      const previous = plans[effectiveWeek - 1].days.map((day) => ({ ...day }));
+      return { ...current, weekPlans: plans.map((week) => week.weekIndex === effectiveWeek ? { ...week, days: previous } : week) };
+    });
+  }
+
+  function repeatToEnd() {
+    setDraft((current) => {
+      const plans = normalizedProgramWeeks(current);
+      const source = plans[effectiveWeek].days;
+      return {
+        ...current,
+        weekPlans: plans.map((week) => week.weekIndex > effectiveWeek
+          ? { ...week, days: source.map((day) => ({ ...day })) }
+          : week),
+      };
+    });
   }
 
   function clearProgram() {
@@ -855,10 +927,18 @@ function ProgramDraftEditor({ expanded, setExpanded, draft, setDraft, trainings,
               </select>
             </label>
             <label className="text-[9px] font-medium uppercase text-neutral-500">Trajanje
-              <select value={draft.weeks} onChange={(event) => setDraft((current) => ({ ...current, weeks: Number(event.target.value) }))} className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-2 text-xs normal-case text-white outline-none">
-                {[2, 4, 6, 8, 12].map((weeks) => <option key={weeks} value={weeks} className="bg-neutral-900">{weeks} nedelja</option>)}
-              </select>
+              <span className="mt-1 flex h-10 items-center rounded-xl border border-white/10 bg-neutral-950/60 px-2"><input type="number" min="1" max="52" value={draft.weeks} onChange={(event) => updateDuration(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none" /><span className="text-[10px] normal-case text-neutral-500">nedelja</span></span>
             </label>
+          </div>
+
+          <div>
+            <p className="mb-2 text-[9px] font-medium uppercase text-neutral-500">Nedelja programa</p>
+            <ScrollArea orientation="horizontal" className="flex gap-1.5 pb-1" endShadowClassName="inset-y-0 right-0 w-9 bg-gradient-to-l from-neutral-900 via-neutral-900/80 to-transparent">
+              {weekPlans.map((week) => {
+                const scheduled = week.days.filter((day) => day.trainingId).length;
+                return <button key={week.weekIndex} type="button" onClick={() => setActiveWeek(week.weekIndex)} className={`w-14 shrink-0 rounded-lg border px-1 py-1.5 text-center ${effectiveWeek === week.weekIndex ? "border-brand-blue-500 bg-brand-blue-500 text-white" : "border-white/10 bg-white/[0.035] text-neutral-400"}`}><span className="block text-[9px]">NED</span><span className="block text-xs font-semibold">{week.weekIndex + 1}</span><span className={`mx-auto mt-1 block h-1 w-1 rounded-full ${scheduled ? "bg-brand-green-400" : "bg-transparent"}`} /></button>;
+              })}
+            </ScrollArea>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -867,9 +947,9 @@ function ProgramDraftEditor({ expanded, setExpanded, draft, setDraft, trainings,
           </div>
 
           <div>
-            <div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-white">Nedeljni raspored</p><span className="text-[9px] text-neutral-500">ponavlja se {draft.weeks} nedelja</span></div>
+            <div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-white">Raspored · nedelja {effectiveWeek + 1}</p><div className="flex gap-1">{effectiveWeek > 0 && <button type="button" onClick={copyPreviousWeek} className="rounded-md bg-white/[0.05] px-2 py-1 text-[8px] text-neutral-400">Kopiraj prethodnu</button>}{effectiveWeek < weekPlans.length - 1 && <button type="button" onClick={repeatToEnd} className="rounded-md bg-brand-blue-500/10 px-2 py-1 text-[8px] text-brand-blue-300">Ponovi do kraja</button>}</div></div>
             <div className="space-y-1.5">
-              {weeklyPlan.map((day) => (
+              {activePlan.days.map((day) => (
                 <label key={day.dayIndex} className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${day.trainingId ? "border-brand-green-500/20 bg-brand-green-500/[0.06]" : "border-white/[0.07] bg-neutral-950/35"}`}>
                   <span className="w-20 shrink-0 text-[11px] font-medium text-neutral-300">{WEEK_DAYS[day.dayIndex]}</span>
                   <select value={day.trainingId || ""} onChange={(event) => updateDay(day.dayIndex, event.target.value)} className={`h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-neutral-950/70 px-2 text-[10px] outline-none ${day.trainingId ? "text-white" : "text-neutral-500"}`}>
@@ -930,21 +1010,48 @@ function ProgramLibrary({ programs, onOpen, onDelete, onEditCopy }) {
         <p className="text-[11px] text-neutral-500">Kompletni planovi sastavljeni od više treninga.</p>
       </div>
       <div className="space-y-2">
-        {programs.map((program) => (
-          <Panel key={program.id} className="overflow-hidden">
-            <button type="button" onClick={() => onOpen(program)} className="flex w-full items-center gap-3 p-3 text-left">
-              <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-brand-green-500/10 text-brand-green-300"><b className="text-sm leading-none">{program.weeks}</b><small className="mt-0.5 text-[7px] uppercase">ned</small></span>
-              <TemplateSummary item={program} meta={programTrainingDays(program) ? `${programTrainingDays(program)}x nedeljno · ${program.trainingIds.length} treninga · ${program.goal}` : `${program.trainingIds.length} treninga · raspored nije definisan`} />
-              <span className="text-lg text-neutral-600">›</span>
-            </button>
-            <div className="flex justify-end gap-2 border-t border-white/[0.06] px-2 py-1.5">
-              <button type="button" onClick={() => onEditCopy(program)} className="rounded-lg px-2 py-1.5 text-[10px] text-neutral-300">Kopiraj i uredi</button>
-              {!program.demo && <button type="button" onClick={() => onDelete(program.id)} className="h-7 w-7 rounded-lg text-red-300" aria-label={`Obriši ${program.name}`}>×</button>}
-            </div>
-          </Panel>
-        ))}
+        {programs.map((program) => {
+          const stats = programScheduleStats(program);
+          return (
+            <Panel key={program.id} className="overflow-hidden">
+              <button type="button" onClick={() => onOpen(program)} className="block w-full text-left">
+                <ProgramPreview program={program} />
+                <span className="flex items-center gap-3 p-3">
+                  <TemplateSummary item={program} meta={stats.totalTrainings ? `${stats.averagePerWeek}x nedeljno · ${program.weeks} nedelja · ${program.goal}` : `${program.weeks} nedelja · raspored nije definisan`} />
+                  <span className="text-lg text-neutral-600">›</span>
+                </span>
+              </button>
+              <div className="flex justify-end gap-2 border-t border-white/[0.06] px-2 py-1.5">
+                <button type="button" onClick={() => onEditCopy(program)} className="rounded-lg px-2 py-1.5 text-[10px] text-neutral-300">Kopiraj i uredi</button>
+                {!program.demo && <button type="button" onClick={() => onDelete(program.id)} className="h-7 w-7 rounded-lg text-red-300" aria-label={`Obriši ${program.name}`}>×</button>}
+              </div>
+            </Panel>
+          );
+        })}
       </div>
       {programs.length === 0 && <EmptyState title="Još nema sačuvanih programa" />}
+    </div>
+  );
+}
+
+function ProgramPreview({ program }) {
+  const weeks = normalizedProgramWeeks(program);
+  const previewWeeks = weeks.slice(0, 6);
+  const hiddenWeeks = Math.max(0, weeks.length - previewWeeks.length);
+  const stats = programScheduleStats(program);
+  return (
+    <div className="relative overflow-hidden border-b border-white/[0.06] bg-[#090d15] px-3 pb-3 pt-2.5">
+      <div className="absolute inset-y-0 left-0 w-1 bg-brand-green-500" />
+      <div className="mb-2 flex items-center justify-between"><span className="text-[9px] font-medium uppercase text-neutral-500">Plan programa</span><span className="text-[9px] text-brand-green-300">{stats.totalTrainings} treninga ukupno</span></div>
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, previewWeeks.length)}, minmax(0, 1fr))` }}>
+        {previewWeeks.map((week) => (
+          <div key={week.weekIndex} className="rounded-lg border border-white/[0.07] bg-white/[0.025] p-1.5">
+            <p className="mb-1 text-center text-[8px] font-medium text-neutral-500">N{week.weekIndex + 1}</p>
+            <div className="grid grid-cols-7 gap-0.5">{week.days.map((day) => <span key={day.dayIndex} className={`h-3 rounded-sm ${day.trainingId ? "bg-brand-green-500" : "bg-white/[0.07]"}`} />)}</div>
+          </div>
+        ))}
+      </div>
+      {hiddenWeeks > 0 && <span className="absolute right-3 top-9 rounded-md bg-brand-blue-500 px-2 py-1 text-[9px] font-semibold text-white">+{hiddenWeeks}</span>}
     </div>
   );
 }
@@ -1162,16 +1269,25 @@ function TrainingDetails({ training, onOpenExercise, onClose }) {
 }
 
 function ProgramDetails({ program, trainings, onClose }) {
+  const [activeWeek, setActiveWeek] = useState(0);
   const included = program.trainingIds.map((id) => trainings.find((training) => training.id === id)).filter(Boolean);
-  const weeklyPlan = normalizedWeeklyPlan(program);
-  const hasSchedule = weeklyPlan.some((day) => day.trainingId);
+  const weekPlans = normalizedProgramWeeks(program);
+  const effectiveWeek = Math.min(activeWeek, weekPlans.length - 1);
+  const activePlan = weekPlans[effectiveWeek];
+  const trainingDays = activePlan.days.filter((day) => day.trainingId).length;
+  const hasSchedule = weekPlans.some((week) => week.days.some((day) => day.trainingId));
   return (
     <DetailsModal title={program.name} subtitle={`${program.weeks} nedelja · ${program.goal}`} onClose={onClose}>
       <section className="overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35">
-        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5"><p className="text-xs font-semibold text-white">Nedeljni raspored</p><span className="text-[9px] text-neutral-500">{programTrainingDays(program)} treninga · {7 - programTrainingDays(program)} odmora</span></div>
+        <div className="border-b border-white/[0.06] p-2.5">
+          <div className="mb-2 flex items-center justify-between px-0.5"><p className="text-xs font-semibold text-white">Nedelja {effectiveWeek + 1}</p><span className="text-[9px] text-neutral-500">{trainingDays} treninga · {7 - trainingDays} odmora</span></div>
+          <ScrollArea orientation="horizontal" className="flex gap-1.5 pb-1" endShadowClassName="inset-y-0 right-0 w-9 bg-gradient-to-l from-neutral-950 via-neutral-950/80 to-transparent">
+            {weekPlans.map((week) => <button key={week.weekIndex} type="button" onClick={() => setActiveWeek(week.weekIndex)} className={`h-8 w-10 shrink-0 rounded-lg text-[10px] font-semibold ${effectiveWeek === week.weekIndex ? "bg-brand-blue-500 text-white" : "bg-white/[0.05] text-neutral-500"}`}>{week.weekIndex + 1}</button>)}
+          </ScrollArea>
+        </div>
         {hasSchedule ? (
           <div className="divide-y divide-white/[0.05]">
-            {weeklyPlan.map((day) => {
+            {activePlan.days.map((day) => {
               const training = trainings.find((item) => item.id === day.trainingId);
               return <div key={day.dayIndex} className="flex items-center gap-3 px-3 py-2"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{WEEK_DAYS[day.dayIndex]}</span><span className={`min-w-0 flex-1 truncate text-xs ${training ? "font-medium text-white" : "text-neutral-600"}`}>{training?.name || "Odmor"}</span>{training && <span className="h-1.5 w-1.5 rounded-full bg-brand-green-400" />}</div>;
             })}
