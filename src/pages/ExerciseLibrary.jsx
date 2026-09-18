@@ -320,6 +320,70 @@ export default function ExerciseLibrary() {
     showStatus("Program je sačuvan kao lokalni nacrt.");
   }
 
+  function addScheduleEntry(entryType, templateId, selectedDate) {
+    setScheduledTrainings((current) => [{
+      id: createId("scheduled"),
+      entryType,
+      templateId,
+      dateKey: selectedDate,
+      status: "planned",
+    }, ...current]);
+  }
+
+  function updateScheduleEntry(id, patch) {
+    setScheduledTrainings((current) => {
+      const target = current.find((item) => item.id === id);
+      let next = current.map((item) => item.id === id ? { ...item, ...patch } : item);
+      if (target?.programRunId && patch.status === "completed") {
+        const programSessions = next.filter((item) => item.programRunId === target.programRunId);
+        if (programSessions.length > 0 && programSessions.every((item) => item.status === "completed")) {
+          next = next.map((item) => item.id === target.programRunId ? { ...item, status: "completed", completed: true } : item);
+        }
+      }
+      return next;
+    });
+  }
+
+  function removeScheduleEntry(id) {
+    setScheduledTrainings((current) => {
+      const target = current.find((item) => item.id === id);
+      if (target?.entryType === "program") {
+        return current.filter((item) => item.id !== id && item.programRunId !== id);
+      }
+      return current.filter((item) => item.id !== id);
+    });
+  }
+
+  function startScheduledProgram(entryId, program) {
+    setScheduledTrainings((current) => {
+      const parent = current.find((item) => item.id === entryId);
+      if (!parent || parent.status !== "planned") return current;
+      if (current.some((item) => item.programRunId === entryId)) {
+        return current.map((item) => item.id === entryId ? { ...item, status: "active" } : item);
+      }
+
+      const sessions = normalizedProgramWeeks(program).flatMap((week) => week.days
+        .filter((day) => day.trainingId)
+        .map((day) => ({
+          id: createId("program-session"),
+          entryType: "training",
+          templateId: day.trainingId,
+          dateKey: addDaysToDateKey(parent.dateKey, week.weekIndex * 7 + day.dayIndex),
+          status: "planned",
+          programRunId: entryId,
+          programTemplateId: program.id,
+          programName: program.name,
+          weekIndex: week.weekIndex,
+          dayIndex: day.dayIndex,
+        })));
+
+      return [
+        ...current.map((item) => item.id === entryId ? { ...item, status: "active", startedAt: new Date().toISOString(), sessionCount: sessions.length } : item),
+        ...sessions,
+      ];
+    });
+  }
+
   return (
     <div className="mx-auto max-w-md space-y-3">
       <div className="grid grid-cols-4 gap-1 rounded-xl border border-white/10 bg-neutral-950/70 p-1">
@@ -422,15 +486,10 @@ export default function ExerciseLibrary() {
           trainings={visibleTrainingTemplates}
           programs={visibleProgramTemplates}
           schedule={scheduledTrainings}
-          onSchedule={(entryType, templateId, selectedDate) => setScheduledTrainings((current) => [{
-            id: createId("scheduled"),
-            entryType,
-            templateId,
-            dateKey: selectedDate,
-            status: "planned",
-          }, ...current])}
-          onUpdate={(id, patch) => setScheduledTrainings((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item))}
-          onRemove={(id) => setScheduledTrainings((current) => current.filter((item) => item.id !== id))}
+          onSchedule={addScheduleEntry}
+          onUpdate={updateScheduleEntry}
+          onStartProgram={startScheduledProgram}
+          onRemove={removeScheduleEntry}
           onOpenTraining={setSelectedTraining}
           onOpenProgram={setSelectedProgram}
         />
@@ -1065,6 +1124,12 @@ function dateKey(value = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function addDaysToDateKey(startDateKey, days) {
+  const date = new Date(`${startDateKey}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateKey(date);
+}
+
 function calendarDaysFor(monthCursor) {
   const first = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1, 12);
   first.setDate(first.getDate() - ((first.getDay() + 6) % 7));
@@ -1088,7 +1153,7 @@ function resolveScheduleItem(item, trainings, programs) {
   };
 }
 
-function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate, onRemove, onOpenTraining, onOpenProgram }) {
+function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate, onStartProgram, onRemove, onOpenTraining, onOpenProgram }) {
   const today = dateKey();
   const [monthCursor, setMonthCursor] = useState(() => {
     const date = new Date();
@@ -1137,12 +1202,16 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
           {days.map((day) => {
             const key = dateKey(day);
             const inMonth = day.getMonth() === monthCursor.getMonth();
-            const count = schedule.filter((item) => item.dateKey === key).length;
+            const dayItems = schedule.filter((item) => item.dateKey === key);
             const selected = key === selectedDate;
             return (
               <button key={key} type="button" onClick={() => setSelectedDate(key)} className={`relative h-10 rounded-lg text-xs font-medium transition ${selected ? "bg-brand-blue-500 text-white" : key === today ? "bg-brand-blue-500/12 text-brand-blue-200" : inMonth ? "bg-white/[0.035] text-neutral-300" : "text-neutral-700"}`}>
                 {day.getDate()}
-                {count > 0 && <span className={`absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${selected ? "bg-white" : "bg-brand-green-400"}`} />}
+                {dayItems.length > 0 && (
+                  <span className="absolute inset-x-0 bottom-1 flex justify-center gap-0.5">
+                    {dayItems.slice(0, 3).map((item) => <span key={item.id} className={`h-1 w-1 rounded-full ${selected ? "bg-white" : item.status === "active" ? "bg-brand-blue-400" : item.status === "completed" ? "bg-neutral-600" : "bg-brand-green-400"}`} />)}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1169,17 +1238,33 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
         {selectedItems.map((item) => {
           const completed = item.status === "completed";
           const active = item.status === "active";
+          const planned = !completed && !active;
+          const programSessions = item.entryType === "program" ? schedule.filter((entry) => entry.programRunId === item.id) : [];
+          const completedSessions = programSessions.filter((entry) => entry.status === "completed").length;
+          const hasProgramSchedule = item.entryType !== "program" || programScheduleStats(item.template).totalTrainings > 0;
+          const meta = item.entryType === "program"
+            ? active || completed
+              ? `${completedSessions}/${programSessions.length || item.sessionCount || 0} treninga završeno`
+              : hasProgramSchedule ? `${item.template.weeks} nedelja · čeka početak` : "Raspored nije definisan"
+            : item.programRunId
+              ? `${item.programName} · Nedelja ${Number(item.weekIndex) + 1}, Dan ${Number(item.dayIndex) + 1}`
+              : `${item.template.exercises.length} vežbi`;
           return (
             <Panel key={item.id} className={`overflow-hidden ${completed ? "opacity-65" : ""}`}>
               <button type="button" onClick={() => item.entryType === "program" ? onOpenProgram(item.template) : onOpenTraining(item.template)} className="flex w-full items-center gap-3 p-3 text-left">
                 <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold uppercase ${item.entryType === "program" ? "bg-brand-green-500/10 text-brand-green-300" : "bg-brand-blue-500/10 text-brand-blue-300"}`}>{item.entryType === "program" ? "PR" : "TR"}</span>
-                <TemplateSummary item={item.template} meta={item.entryType === "program" ? `${item.template.weeks} nedelja` : `${item.template.exercises.length} vežbi`} />
+                <TemplateSummary item={item.template} meta={meta} />
+                {planned && <StatusPill tone="neutral">Planirano</StatusPill>}
                 {active && <StatusPill tone="blue">U toku</StatusPill>}
                 {completed && <StatusPill tone="green">Završeno</StatusPill>}
               </button>
               <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] px-2 py-1.5">
-                {!completed && <button type="button" onClick={() => onUpdate(item.id, { status: active ? "completed" : "active", completed: active })} className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${active ? "bg-brand-green-500 text-white" : "bg-brand-blue-500 text-white"}`}>{active ? "Završi" : "Pokreni"}</button>}
-                <button type="button" onClick={() => onRemove(item.id)} className="h-7 w-7 rounded-lg text-red-300" aria-label="Ukloni iz kalendara">×</button>
+                {item.entryType === "program" && planned && <button type="button" disabled={!hasProgramSchedule} onClick={() => onStartProgram(item.id, item.template)} className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-35">Pokreni program</button>}
+                {item.entryType === "training" && !completed && <button type="button" onClick={() => onUpdate(item.id, { status: active ? "completed" : "active", completed: active })} className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${active ? "bg-brand-green-500 text-white" : "bg-brand-blue-500 text-white"}`}>{active ? "Završi" : "Pokreni"}</button>}
+                <button type="button" onClick={() => {
+                  if (item.entryType === "program" && active && !window.confirm("Ukloniti program i sve njegove treninge iz kalendara?")) return;
+                  onRemove(item.id);
+                }} className="h-7 w-7 rounded-lg text-red-300" aria-label="Ukloni iz kalendara">×</button>
               </div>
             </Panel>
           );
