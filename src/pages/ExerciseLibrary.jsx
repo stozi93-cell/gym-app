@@ -82,11 +82,31 @@ function useStoredTemplates(key) {
 }
 
 function emptyTrainingDraft() {
-  return { name: "", focus: "Opšta priprema", exercises: [] };
+  return {
+    name: "",
+    focus: "Opšta priprema",
+    blocks: [{ id: "block-1", name: "Blok 1", pauseSeconds: 120 }],
+    exercises: [],
+  };
 }
 
 function emptyProgramDraft() {
   return { name: "", goal: "Opšta kondicija", weeks: 4, trainingIds: [] };
+}
+
+function normalizedTrainingBlocks(training) {
+  if (Array.isArray(training.blocks) && training.blocks.length > 0) {
+    return training.blocks.map((block, index) => ({
+      id: block.id || `block-${index + 1}`,
+      name: block.name || `Blok ${index + 1}`,
+      pauseSeconds: Number.isFinite(Number(block.pauseSeconds)) ? Number(block.pauseSeconds) : 120,
+    }));
+  }
+  return [{ id: "block-1", name: "Blok 1", pauseSeconds: 120 }];
+}
+
+function exerciseBlockId(item, blocks) {
+  return blocks.some((block) => block.id === item.blockId) ? item.blockId : blocks[0].id;
 }
 
 export default function ExerciseLibrary() {
@@ -137,15 +157,25 @@ export default function ExerciseLibrary() {
   function addExercise(exercise) {
     setTrainingDraft((current) => {
       if (current.exercises.some((item) => item.exerciseId === exercise.id)) return current;
+      const blocks = normalizedTrainingBlocks(current);
       return {
         ...current,
+        blocks,
         exercises: [
           ...current.exercises,
-          { exerciseId: exercise.id, sets: 3, reps: "8-10", restSeconds: 90 },
+          { exerciseId: exercise.id, blockId: blocks[blocks.length - 1].id, sets: 3, reps: "8-10", weight: "", restSeconds: 90 },
         ],
       };
     });
     showStatus(`${exercise.name} je dodata u nacrt.`);
+  }
+
+  function removeExercise(exerciseId) {
+    setTrainingDraft((current) => ({
+      ...current,
+      exercises: current.exercises.filter((item) => item.exerciseId !== exerciseId),
+    }));
+    showStatus("Vežba je uklonjena iz nacrta.");
   }
 
   function updateDraftExercise(index, patch) {
@@ -159,8 +189,15 @@ export default function ExerciseLibrary() {
 
   function moveDraftExercise(index, direction) {
     setTrainingDraft((current) => {
-      const target = index + direction;
-      if (target < 0 || target >= current.exercises.length) return current;
+      const blocks = normalizedTrainingBlocks(current);
+      const currentBlock = exerciseBlockId(current.exercises[index], blocks);
+      const blockIndexes = current.exercises
+        .map((item, itemIndex) => ({ itemIndex, blockId: exerciseBlockId(item, blocks) }))
+        .filter((item) => item.blockId === currentBlock)
+        .map((item) => item.itemIndex);
+      const position = blockIndexes.indexOf(index);
+      const target = blockIndexes[position + direction];
+      if (target === undefined) return current;
       const exercises = [...current.exercises];
       [exercises[index], exercises[target]] = [exercises[target], exercises[index]];
       return { ...current, exercises };
@@ -246,6 +283,7 @@ export default function ExerciseLibrary() {
             setDraft={setTrainingDraft}
             onUpdateExercise={updateDraftExercise}
             onMoveExercise={moveDraftExercise}
+            onMoveToBlock={(index, blockId) => updateDraftExercise(index, { blockId })}
             onRemoveExercise={(index) => setTrainingDraft((current) => ({
               ...current,
               exercises: current.exercises.filter((_, itemIndex) => itemIndex !== index),
@@ -261,8 +299,10 @@ export default function ExerciseLibrary() {
             equipment={equipment}
             setEquipment={setEquipment}
             exercises={filteredExercises}
+            draftExercises={trainingDraft.exercises}
             onOpen={setSelectedExercise}
             onAdd={addExercise}
+            onRemove={removeExercise}
           />
         </div>
       )}
@@ -280,6 +320,7 @@ export default function ExerciseLibrary() {
             setTrainingDraft({
               name: `${template.name} - kopija`,
               focus: template.focus,
+              blocks: normalizedTrainingBlocks(template).map((block) => ({ ...block })),
               exercises: template.exercises.map((item) => ({ ...item })),
             });
             setActiveTab("exercises");
@@ -329,6 +370,7 @@ export default function ExerciseLibrary() {
           canBuild
           added={trainingDraft.exercises.some((item) => item.exerciseId === selectedExercise.id)}
           onAdd={() => addExercise(selectedExercise)}
+          onRemove={() => removeExercise(selectedExercise.id)}
           onClose={() => setSelectedExercise(null)}
         />
       )}
@@ -357,8 +399,10 @@ function ExerciseBrowser({
   equipment,
   setEquipment,
   exercises,
+  draftExercises,
   onOpen,
   onAdd,
+  onRemove,
 }) {
   return (
     <div className="space-y-3">
@@ -411,8 +455,10 @@ function ExerciseBrowser({
             key={exercise.id}
             exercise={exercise}
             canBuild={canBuild}
+            added={draftExercises.some((item) => item.exerciseId === exercise.id)}
             onOpen={() => onOpen(exercise)}
             onAdd={() => onAdd(exercise)}
+            onRemove={() => onRemove(exercise.id)}
           />
         ))}
       </div>
@@ -424,7 +470,7 @@ function ExerciseBrowser({
   );
 }
 
-function ExerciseCard({ exercise, canBuild, onOpen, onAdd }) {
+function ExerciseCard({ exercise, canBuild, added, onOpen, onAdd, onRemove }) {
   return (
     <Panel className="overflow-hidden">
       <button type="button" onClick={onOpen} className="block w-full text-left">
@@ -441,12 +487,12 @@ function ExerciseCard({ exercise, canBuild, onOpen, onAdd }) {
       {canBuild && (
         <button
           type="button"
-          onClick={onAdd}
-          aria-label={`Dodaj ${exercise.name} u trening`}
-          className="flex w-full items-center justify-center gap-1 border-t border-white/[0.06] py-2 text-[11px] font-medium text-brand-green-300 transition hover:bg-brand-green-500/10"
+          onClick={added ? onRemove : onAdd}
+          aria-label={`${added ? "Ukloni" : "Dodaj"} ${exercise.name} ${added ? "iz" : "u"} trening`}
+          className={`flex w-full items-center justify-center gap-1 border-t py-2 text-[11px] font-medium transition ${added ? "border-red-400/15 bg-red-500/10 text-red-300 hover:bg-red-500/15" : "border-white/[0.06] text-brand-green-300 hover:bg-brand-green-500/10"}`}
         >
-          <PlusIcon className="h-3.5 w-3.5" />
-          Dodaj
+          {added ? <span className="text-base leading-none">×</span> : <PlusIcon className="h-3.5 w-3.5" />}
+          {added ? "Ukloni" : "Dodaj"}
         </button>
       )}
     </Panel>
@@ -500,18 +546,13 @@ function ExerciseMedia({ exercise, compact = false }) {
           <button type="button" disabled={position === positions.length - 1} onClick={() => movePosition(1)} aria-label="Sledeća pozicija" className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-black/55 text-lg text-white backdrop-blur-sm disabled:opacity-20">›</button>
         </>
       )}
-      <div className="absolute bottom-2 right-2 flex gap-1.5">
-        {positions.map((label, index) => (
-          <button
-            key={label}
-            type="button"
-            disabled={compact}
-            onClick={() => setPosition(index)}
-            aria-label={label}
-            className={`h-2 w-2 rounded-full transition ${index === position ? "bg-brand-blue-500" : "bg-white/20"}`}
-          />
-        ))}
-      </div>
+      {!compact && (
+        <div className="absolute bottom-2 right-2 flex gap-1.5">
+          {positions.map((label, index) => (
+            <button key={label} type="button" onClick={() => setPosition(index)} aria-label={label} className={`h-2 w-2 rounded-full transition ${index === position ? "bg-brand-blue-500" : "bg-white/20"}`} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -546,8 +587,44 @@ function ExercisePose({ pose, phase = 0, className }) {
   );
 }
 
-function TrainingDraftEditor({ draft, setDraft, onUpdateExercise, onMoveExercise, onRemoveExercise, onSave }) {
+function TrainingDraftEditor({ draft, setDraft, onUpdateExercise, onMoveExercise, onMoveToBlock, onRemoveExercise, onSave }) {
   const [expanded, setExpanded] = useState(draft.exercises.length > 0);
+  const blocks = normalizedTrainingBlocks(draft);
+
+  function addBlock() {
+    setDraft((current) => {
+      const currentBlocks = normalizedTrainingBlocks(current);
+      return {
+        ...current,
+        blocks: [...currentBlocks, { id: createId("block"), name: `Blok ${currentBlocks.length + 1}`, pauseSeconds: 120 }],
+      };
+    });
+  }
+
+  function updateBlock(blockId, patch) {
+    setDraft((current) => ({
+      ...current,
+      blocks: normalizedTrainingBlocks(current).map((block) => block.id === blockId ? { ...block, ...patch } : block),
+    }));
+  }
+
+  function removeBlock(blockId) {
+    setDraft((current) => {
+      const currentBlocks = normalizedTrainingBlocks(current);
+      if (currentBlocks.length === 1) return current;
+      const remainingBlocks = currentBlocks.filter((block) => block.id !== blockId).map((block, index) => ({ ...block, name: `Blok ${index + 1}` }));
+      return {
+        ...current,
+        blocks: remainingBlocks,
+        exercises: current.exercises.map((item) => exerciseBlockId(item, currentBlocks) === blockId ? { ...item, blockId: remainingBlocks[0].id } : item),
+      };
+    });
+  }
+
+  function clearDraft() {
+    if (draft.exercises.length > 0 && !window.confirm("Obrisati ceo nacrt treninga?")) return;
+    setDraft(emptyTrainingDraft());
+  }
 
   return (
     <Panel className="overflow-hidden">
@@ -573,32 +650,63 @@ function TrainingDraftEditor({ draft, setDraft, onUpdateExercise, onMoveExercise
             </select>
           </div>
 
-          <div className="space-y-2">
-            {draft.exercises.map((item, index) => {
-              const exercise = getExerciseById(item.exerciseId);
-              if (!exercise) return null;
+          <div className="space-y-3">
+            {blocks.map((block, blockIndex) => {
+              const blockExercises = draft.exercises
+                .map((item, index) => ({ item, index }))
+                .filter(({ item }) => exerciseBlockId(item, blocks) === block.id);
               return (
-                <div key={item.exerciseId} className="rounded-xl border border-white/10 bg-neutral-950/45 p-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-blue-500/10 text-xs font-semibold text-brand-blue-300">{index + 1}</span>
-                    <p className="min-w-0 flex-1 truncate text-xs font-semibold text-white">{exercise.name}</p>
-                    <button type="button" disabled={index === 0} onClick={() => onMoveExercise(index, -1)} className="h-8 w-8 rounded-lg border border-white/10 text-neutral-400 disabled:opacity-25" aria-label="Pomeri gore">↑</button>
-                    <button type="button" disabled={index === draft.exercises.length - 1} onClick={() => onMoveExercise(index, 1)} className="h-8 w-8 rounded-lg border border-white/10 text-neutral-400 disabled:opacity-25" aria-label="Pomeri dole">↓</button>
-                    <button type="button" onClick={() => onRemoveExercise(index)} className="h-8 w-8 rounded-lg border border-red-400/20 text-red-300" aria-label="Ukloni vežbu">×</button>
+                <section key={block.id} className="overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35">
+                  <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2.5">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-blue-500/12 text-[11px] font-semibold text-brand-blue-300">{blockIndex + 1}</span>
+                    <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-white">{block.name}</p><p className="text-[9px] text-neutral-500">{blockExercises.length} vežbi</p></div>
+                    {blocks.length > 1 && <button type="button" onClick={() => removeBlock(block.id)} className="h-7 w-7 rounded-lg text-red-300" aria-label={`Ukloni ${block.name}`}>×</button>}
                   </div>
-                  <div className="mt-2 grid grid-cols-3 gap-1.5">
-                    <SmallEditor label="Serije" type="number" value={item.sets} onChange={(value) => onUpdateExercise(index, { sets: Number(value) })} />
-                    <SmallEditor label="Ponavljanja" value={item.reps} onChange={(value) => onUpdateExercise(index, { reps: value })} />
-                    <SmallEditor label="Odmor" type="number" suffix="s" value={item.restSeconds} onChange={(value) => onUpdateExercise(index, { restSeconds: Number(value) })} />
+
+                  <div className="space-y-2 p-2.5">
+                    {blockExercises.map(({ item, index }, position) => {
+                      const exercise = getExerciseById(item.exerciseId);
+                      if (!exercise) return null;
+                      return (
+                        <div key={item.exerciseId} className="rounded-xl border border-white/[0.08] bg-neutral-950/55 p-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <p className="min-w-0 flex-1 truncate text-xs font-semibold text-white">{exercise.name}</p>
+                            {blocks.length > 1 && (
+                              <select value={block.id} onChange={(event) => onMoveToBlock(index, event.target.value)} aria-label={`Blok za ${exercise.name}`} className="h-8 w-12 rounded-lg border border-white/10 bg-neutral-900 px-1 text-[10px] text-white outline-none">
+                                {blocks.map((choice, choiceIndex) => <option key={choice.id} value={choice.id} className="bg-neutral-900">B{choiceIndex + 1}</option>)}
+                              </select>
+                            )}
+                            <button type="button" disabled={position === 0} onClick={() => onMoveExercise(index, -1)} className="h-8 w-7 rounded-lg border border-white/10 text-neutral-400 disabled:opacity-25" aria-label="Pomeri gore">↑</button>
+                            <button type="button" disabled={position === blockExercises.length - 1} onClick={() => onMoveExercise(index, 1)} className="h-8 w-7 rounded-lg border border-white/10 text-neutral-400 disabled:opacity-25" aria-label="Pomeri dole">↓</button>
+                            <button type="button" onClick={() => onRemoveExercise(index)} className="h-8 w-7 rounded-lg border border-red-400/20 text-red-300" aria-label="Ukloni vežbu">×</button>
+                          </div>
+                          <div className="mt-2 grid grid-cols-4 gap-1.5">
+                            <SmallEditor label="Serije" type="number" value={item.sets} onChange={(value) => onUpdateExercise(index, { sets: Number(value) })} />
+                            <SmallEditor label="Ponav." value={item.reps} onChange={(value) => onUpdateExercise(index, { reps: value })} />
+                            <SmallEditor label="Težina" type="number" suffix="kg" value={item.weight ?? ""} onChange={(value) => onUpdateExercise(index, { weight: value })} />
+                            <SmallEditor label="Odmor" type="number" suffix="s" value={item.restSeconds} onChange={(value) => onUpdateExercise(index, { restSeconds: Number(value) })} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {blockExercises.length === 0 && <p className="py-2 text-center text-[10px] text-neutral-600">{blockIndex === blocks.length - 1 ? "Nove vežbe se dodaju u ovaj blok." : "Premesti vežbu izborom njenog bloka."}</p>}
                   </div>
-                </div>
+
+                  {blockIndex < blocks.length - 1 && (
+                    <label className="flex items-center justify-between border-t border-amber-400/15 bg-amber-400/[0.05] px-3 py-2 text-[10px] text-amber-200/80">
+                      Pauza do sledećeg bloka
+                      <span className="flex items-center gap-1"><input type="number" min="0" step="15" value={block.pauseSeconds} onChange={(event) => updateBlock(block.id, { pauseSeconds: Number(event.target.value) })} className="h-8 w-16 rounded-lg border border-amber-300/15 bg-neutral-950/70 px-2 text-right text-xs text-white outline-none" /> s</span>
+                    </label>
+                  )}
+                </section>
               );
             })}
-            {draft.exercises.length === 0 && <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-xs text-neutral-500">Dodaj vežbe iz biblioteke ispod.</p>}
+            <button type="button" onClick={addBlock} className="w-full rounded-xl border border-dashed border-brand-blue-500/25 py-2.5 text-xs font-medium text-brand-blue-300">+ Dodaj blok</button>
+            {draft.exercises.length === 0 && <p className="text-center text-[10px] text-neutral-500">Dodaj vežbe iz biblioteke ispod.</p>}
           </div>
 
           <div className="flex items-center justify-between border-t border-white/10 pt-3">
-            <button type="button" onClick={() => setDraft(emptyTrainingDraft())} className="px-2 py-2 text-xs text-neutral-500">Očisti</button>
+            <button type="button" onClick={clearDraft} className="rounded-lg border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300">Očisti</button>
             <button type="button" onClick={onSave} className="rounded-lg bg-brand-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-glow">Sačuvaj trening</button>
           </div>
         </div>
@@ -892,12 +1000,26 @@ function DetailsModal({ title, subtitle, onClose, children }) {
 }
 
 function TrainingDetails({ training, onClose }) {
+  const blocks = normalizedTrainingBlocks(training);
   return (
     <DetailsModal title={training.name} subtitle={`${training.exercises.length} vežbi · ${training.focus}`} onClose={onClose}>
-      {training.exercises.map((item, index) => {
-        const exercise = getExerciseById(item.exerciseId);
-        if (!exercise) return null;
-        return <div key={`${item.exerciseId}-${index}`} className="flex items-center gap-3 rounded-xl border border-white/10 bg-neutral-950/45 p-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-blue-500/10 text-xs font-semibold text-brand-blue-300">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{exercise.name}</p><p className="mt-0.5 text-[10px] text-neutral-500">{item.sets} serije · {item.reps} ponavljanja · {item.restSeconds}s odmor</p></div></div>;
+      {blocks.map((block, blockIndex) => {
+        const items = training.exercises.filter((item) => exerciseBlockId(item, blocks) === block.id);
+        if (items.length === 0) return null;
+        return (
+          <section key={block.id} className="overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35">
+            <div className="border-b border-white/[0.06] px-3 py-2 text-xs font-semibold text-white">{block.name}</div>
+            <div className="space-y-1.5 p-2">
+              {items.map((item, index) => {
+                const exercise = getExerciseById(item.exerciseId);
+                if (!exercise) return null;
+                const weight = item.weight !== "" && item.weight !== undefined ? ` · ${item.weight}kg` : "";
+                return <div key={`${item.exerciseId}-${index}`} className="flex items-center gap-3 rounded-lg bg-white/[0.035] p-2.5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-blue-500/10 text-xs font-semibold text-brand-blue-300">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{exercise.name}</p><p className="mt-0.5 text-[10px] text-neutral-500">{item.sets} serije · {item.reps} ponavljanja{weight} · {item.restSeconds}s odmor</p></div></div>;
+              })}
+            </div>
+            {blockIndex < blocks.length - 1 && <div className="border-t border-amber-400/15 bg-amber-400/[0.05] px-3 py-2 text-[10px] text-amber-200/75">Pauza {block.pauseSeconds}s</div>}
+          </section>
+        );
       })}
     </DetailsModal>
   );
@@ -925,7 +1047,7 @@ function SmallEditor({ label, value, onChange, type = "text", suffix = "" }) {
   );
 }
 
-function ExerciseDetails({ exercise, canBuild, added, onAdd, onClose }) {
+function ExerciseDetails({ exercise, canBuild, added, onAdd, onRemove, onClose }) {
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -976,8 +1098,8 @@ function ExerciseDetails({ exercise, canBuild, added, onAdd, onClose }) {
         </ScrollArea>
         {canBuild && (
           <div className="relative z-30 shrink-0 border-t border-white/10 bg-neutral-900 p-3">
-            <button type="button" disabled={added} onClick={onAdd} className="w-full rounded-xl bg-brand-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-glow disabled:bg-white/5 disabled:text-neutral-500 disabled:shadow-none">
-              {added ? "Već je u nacrtu" : "Dodaj u trening"}
+            <button type="button" onClick={added ? onRemove : onAdd} className={`w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white ${added ? "border border-red-400/25 bg-red-500/15 text-red-200" : "bg-brand-blue-500 shadow-glow"}`}>
+              {added ? "Ukloni iz treninga" : "Dodaj u trening"}
             </button>
           </div>
         )}
