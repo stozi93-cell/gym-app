@@ -448,13 +448,14 @@ export default function ExerciseLibrary() {
       )}
 
       {selectedTraining && (
-        <TrainingDetails training={selectedTraining} onOpenExercise={setSelectedExercise} onClose={() => setSelectedTraining(null)} />
+        <TrainingDetails training={selectedTraining} elevated={Boolean(selectedProgram)} onOpenExercise={setSelectedExercise} onClose={() => setSelectedTraining(null)} />
       )}
 
       {selectedProgram && (
         <ProgramDetails
           program={selectedProgram}
           trainings={visibleTrainingTemplates}
+          onOpenTraining={setSelectedTraining}
           onClose={() => setSelectedProgram(null)}
         />
       )}
@@ -1216,10 +1217,10 @@ function useDialogLifecycle(onClose) {
   }, [onClose]);
 }
 
-function DetailsModal({ title, subtitle, onClose, children }) {
+function DetailsModal({ title, subtitle, zIndexClass = "z-[100]", onClose, children }) {
   useDialogLifecycle(onClose);
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4" onClick={onClose} role="presentation">
+    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/90 p-4`} onClick={onClose} role="presentation">
       <section role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()} className="flex h-[calc(100dvh-2rem)] max-h-[42rem] w-full max-w-md flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-900 shadow-2xl">
         <header className="flex shrink-0 items-start gap-3 border-b border-white/10 p-4">
           <div className="min-w-0 flex-1"><h2 className="truncate text-base font-semibold text-white">{title}</h2><p className="mt-0.5 text-xs text-neutral-500">{subtitle}</p></div>
@@ -1232,10 +1233,10 @@ function DetailsModal({ title, subtitle, onClose, children }) {
   );
 }
 
-function TrainingDetails({ training, onOpenExercise, onClose }) {
+function TrainingDetails({ training, elevated = false, onOpenExercise, onClose }) {
   const blocks = normalizedTrainingBlocks(training);
   return (
-    <DetailsModal title={training.name} subtitle={`${training.exercises.length} vežbi · ${training.focus}`} onClose={onClose}>
+    <DetailsModal title={training.name} subtitle={`${training.exercises.length} vežbi · ${training.focus}`} zIndexClass={elevated ? "z-[110]" : "z-[100]"} onClose={onClose}>
       {training.notes?.trim() && <div className="whitespace-pre-wrap rounded-xl border border-brand-blue-500/15 bg-brand-blue-500/[0.07] px-3 py-2.5 text-xs leading-relaxed text-neutral-300">{training.notes}</div>}
       {blocks.map((block, blockIndex) => {
         const items = training.exercises.filter((item) => exerciseBlockId(item, blocks) === block.id);
@@ -1268,7 +1269,7 @@ function TrainingDetails({ training, onOpenExercise, onClose }) {
   );
 }
 
-function ProgramDetails({ program, trainings, onClose }) {
+function ProgramDetails({ program, trainings, onOpenTraining, onClose }) {
   const [activeWeek, setActiveWeek] = useState(0);
   const included = program.trainingIds.map((id) => trainings.find((training) => training.id === id)).filter(Boolean);
   const weekPlans = normalizedProgramWeeks(program);
@@ -1289,13 +1290,14 @@ function ProgramDetails({ program, trainings, onClose }) {
           <div className="divide-y divide-white/[0.05]">
             {activePlan.days.map((day) => {
               const training = trainings.find((item) => item.id === day.trainingId);
-              return <div key={day.dayIndex} className="flex items-center gap-3 px-3 py-2"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{WEEK_DAYS[day.dayIndex]}</span><span className={`min-w-0 flex-1 truncate text-xs ${training ? "font-medium text-white" : "text-neutral-600"}`}>{training?.name || "Odmor"}</span>{training && <span className="h-1.5 w-1.5 rounded-full bg-brand-green-400" />}</div>;
+              if (!training) return <div key={day.dayIndex} className="flex items-center gap-3 px-3 py-2"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{WEEK_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 text-xs text-neutral-600">Odmor</span></div>;
+              return <button key={day.dayIndex} type="button" onClick={() => onOpenTraining(training)} className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/[0.04]"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{WEEK_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-white">{training.name}</span><span className="h-1.5 w-1.5 rounded-full bg-brand-green-400" /><span className="text-sm text-neutral-600">›</span></button>;
             })}
           </div>
         ) : <p className="px-3 py-4 text-center text-xs text-neutral-500">Raspored nije definisan.</p>}
       </section>
       <p className="px-1 pt-1 text-[10px] font-medium uppercase text-neutral-500">Treninzi u programu</p>
-      {included.map((training, index) => <div key={training.id} className="rounded-xl border border-white/10 bg-neutral-950/45 p-3"><div className="flex items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-green-500/10 text-xs font-semibold text-brand-green-300">{index + 1}</span><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{training.name}</p><p className="mt-0.5 text-[10px] text-neutral-500">{training.exercises.length} vežbi · {training.focus}</p></div></div></div>)}
+      {included.map((training, index) => <button key={training.id} type="button" onClick={() => onOpenTraining(training)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-neutral-950/45 p-3 text-left transition hover:bg-white/[0.04]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-green-500/10 text-xs font-semibold text-brand-green-300">{index + 1}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-white">{training.name}</span><span className="mt-0.5 block text-[10px] text-neutral-500">{training.exercises.length} vežbi · {training.focus}</span></span><span className="text-lg text-neutral-600">›</span></button>)}
       {included.length === 0 && <EmptyState title="Program nema dostupne treninge" />}
     </DetailsModal>
   );
@@ -1326,7 +1328,7 @@ function ExerciseDetails({ exercise, canBuild, added, onAdd, onRemove, onClose }
   }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-4" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4" onClick={onClose} role="presentation">
       <section role="dialog" aria-modal="true" aria-labelledby="exercise-title" onClick={(event) => event.stopPropagation()} className="flex h-[calc(100dvh-2rem)] max-h-[46rem] w-full max-w-md flex-col overflow-hidden rounded-xl border border-white/10 bg-neutral-900 shadow-2xl">
         <div className="relative shrink-0">
           <ExerciseMedia exercise={exercise} />
