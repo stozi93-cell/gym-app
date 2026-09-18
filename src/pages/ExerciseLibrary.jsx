@@ -13,6 +13,7 @@ import {
 const TRAINING_STORAGE_KEY = "remotion-training-templates-v1";
 const PROGRAM_STORAGE_KEY = "remotion-program-templates-v1";
 const SCHEDULE_STORAGE_KEY = "remotion-training-schedule-v1";
+const WEEK_DAYS = ["Ponedeljak", "Utorak", "Sreda", "Četvrtak", "Petak", "Subota", "Nedelja"];
 
 const DEMO_TRAININGS = [
   {
@@ -47,6 +48,15 @@ const DEMO_PROGRAMS = [{
   goal: "Povratak treningu",
   weeks: 4,
   trainingIds: DEMO_TRAININGS.map((item) => item.id),
+  weeklyPlan: [
+    { dayIndex: 0, trainingId: DEMO_TRAININGS[0].id },
+    { dayIndex: 1, trainingId: null },
+    { dayIndex: 2, trainingId: DEMO_TRAININGS[1].id },
+    { dayIndex: 3, trainingId: null },
+    { dayIndex: 4, trainingId: DEMO_TRAININGS[0].id },
+    { dayIndex: 5, trainingId: null },
+    { dayIndex: 6, trainingId: null },
+  ],
   source: "trainer",
   demo: true,
 }];
@@ -92,7 +102,21 @@ function emptyTrainingDraft() {
 }
 
 function emptyProgramDraft() {
-  return { name: "", goal: "Opšta kondicija", weeks: 4, trainingIds: [] };
+  return {
+    name: "",
+    goal: "Opšta kondicija",
+    weeks: 4,
+    trainingIds: [],
+    weeklyPlan: WEEK_DAYS.map((_, dayIndex) => ({ dayIndex, trainingId: null })),
+  };
+}
+
+function normalizedWeeklyPlan(program) {
+  const stored = Array.isArray(program.weeklyPlan) ? program.weeklyPlan : [];
+  return WEEK_DAYS.map((_, dayIndex) => {
+    const entry = stored.find((item) => Number(item.dayIndex) === dayIndex);
+    return { dayIndex, trainingId: entry?.trainingId || null };
+  });
 }
 
 function normalizedTrainingBlocks(training) {
@@ -114,6 +138,10 @@ function blockCountLabel(count) {
   if (count === 1) return "1 blok";
   if (count >= 2 && count <= 4) return `${count} bloka`;
   return `${count} blokova`;
+}
+
+function programTrainingDays(program) {
+  return normalizedWeeklyPlan(program).filter((day) => day.trainingId).length;
 }
 
 export default function ExerciseLibrary() {
@@ -236,13 +264,17 @@ export default function ExerciseLibrary() {
       trainingIds: current.trainingIds.includes(trainingId)
         ? current.trainingIds.filter((id) => id !== trainingId)
         : [...current.trainingIds, trainingId],
+      weeklyPlan: current.trainingIds.includes(trainingId)
+        ? normalizedWeeklyPlan(current).map((day) => day.trainingId === trainingId ? { ...day, trainingId: null } : day)
+        : normalizedWeeklyPlan(current),
     }));
   }
 
   function saveProgramTemplate() {
     const name = programDraft.name.trim();
-    if (!name || programDraft.trainingIds.length === 0) {
-      showStatus("Unesi naziv i izaberi bar jedan trening.");
+    const weeklyPlan = normalizedWeeklyPlan(programDraft);
+    if (!name || programDraft.trainingIds.length === 0 || !weeklyPlan.some((day) => day.trainingId)) {
+      showStatus("Unesi naziv, izaberi trening i rasporedi ga u nedelji.");
       return;
     }
 
@@ -251,6 +283,7 @@ export default function ExerciseLibrary() {
       id: createId("program"),
       name,
       weeks: Number(programDraft.weeks),
+      weeklyPlan,
       createdAt: new Date().toISOString(),
       source: coachMode ? "trainer" : "client",
     }, ...current]);
@@ -347,6 +380,7 @@ export default function ExerciseLibrary() {
               goal: program.goal,
               weeks: program.weeks,
               trainingIds: [...program.trainingIds],
+              weeklyPlan: normalizedWeeklyPlan(program),
             });
             setActiveTab("trainings");
           }}
@@ -734,75 +768,47 @@ function TrainingLibrary({ templates, programDraft, setProgramDraft, onTogglePro
   const [creatingProgram, setCreatingProgram] = useState(programDraft.trainingIds.length > 0);
 
   function saveProgram() {
+    const hasScheduledTraining = normalizedWeeklyPlan(programDraft).some((day) => day.trainingId);
     onSaveProgram();
-    if (programDraft.name.trim() && programDraft.trainingIds.length > 0) setCreatingProgram(false);
-  }
-
-  function cancelProgram() {
-    setProgramDraft(emptyProgramDraft());
-    setCreatingProgram(false);
+    if (programDraft.name.trim() && programDraft.trainingIds.length > 0 && hasScheduledTraining) setCreatingProgram(false);
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between px-1">
+      <ProgramDraftEditor
+        expanded={creatingProgram}
+        setExpanded={setCreatingProgram}
+        draft={programDraft}
+        setDraft={setProgramDraft}
+        trainings={templates.filter((training) => programDraft.trainingIds.includes(training.id))}
+        onSave={saveProgram}
+      />
+
+      <div className="px-1">
         <div>
           <p className="text-sm font-semibold text-white">Sačuvani treninzi</p>
-          <p className="text-[11px] text-neutral-500">Otvori trening ili izaberi više njih za program.</p>
+          <p className="text-[11px] text-neutral-500">Otvori trening ili ga dodaj u novi program.</p>
         </div>
-        <button type="button" onClick={() => setCreatingProgram((current) => !current)} className={`rounded-lg px-3 py-2 text-[11px] font-semibold ${creatingProgram ? "bg-white/10 text-neutral-200" : "bg-brand-blue-500 text-white"}`}>
-          {creatingProgram ? "Otkaži" : "Novi program"}
-        </button>
       </div>
-
-      {creatingProgram && (
-        <Panel className="space-y-3 border-brand-blue-500/25 p-3">
-          <input value={programDraft.name} onChange={(event) => setProgramDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Naziv programa" className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500" />
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-[9px] font-medium uppercase text-neutral-500">Cilj
-              <select value={programDraft.goal} onChange={(event) => setProgramDraft((current) => ({ ...current, goal: event.target.value }))} className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-2 text-xs normal-case text-white outline-none">
-                <option className="bg-neutral-900">Opšta kondicija</option><option className="bg-neutral-900">Snaga</option><option className="bg-neutral-900">Hipertrofija</option><option className="bg-neutral-900">Povratak treningu</option>
-              </select>
-            </label>
-            <label className="text-[9px] font-medium uppercase text-neutral-500">Trajanje
-              <select value={programDraft.weeks} onChange={(event) => setProgramDraft((current) => ({ ...current, weeks: Number(event.target.value) }))} className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-2 text-xs normal-case text-white outline-none">
-                {[2, 4, 6, 8, 12].map((weeks) => <option key={weeks} value={weeks} className="bg-neutral-900">{weeks} nedelja</option>)}
-              </select>
-            </label>
-          </div>
-          <div className="flex items-center justify-between border-t border-white/10 pt-3">
-            <span className="text-xs text-neutral-400">{programDraft.trainingIds.length} izabranih</span>
-            <div className="flex gap-2">
-              <button type="button" onClick={cancelProgram} className="px-2 py-2 text-xs text-neutral-500">Odustani</button>
-              <button type="button" onClick={saveProgram} className="rounded-lg bg-brand-blue-500 px-3 py-2 text-xs font-semibold text-white">Sačuvaj program</button>
-            </div>
-          </div>
-        </Panel>
-      )}
 
       <div className="space-y-2">
         {templates.map((training) => {
           const selected = programDraft.trainingIds.includes(training.id);
-          if (creatingProgram) {
-            return (
-              <button key={training.id} type="button" onClick={() => onToggleProgramTraining(training.id)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left ${selected ? "border-brand-green-500/35 bg-brand-green-500/10" : "border-white/10 bg-neutral-950/45"}`}>
-                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border text-xs ${selected ? "border-brand-green-500 bg-brand-green-500 text-white" : "border-white/15 text-transparent"}`}>✓</span>
-                <TemplateSummary item={training} meta={`${training.exercises.length} vežbi · ${training.focus}`} />
-              </button>
-            );
-          }
           return (
-            <Panel key={training.id} className="overflow-hidden">
+            <Panel key={training.id} className={`overflow-hidden ${creatingProgram && selected ? "border-brand-green-500/35" : ""}`}>
               <button type="button" onClick={() => onOpen(training)} className="block w-full text-left">
-                <TrainingPreview training={training} />
+                <TrainingPreview training={training} selected={creatingProgram && selected} />
                 <span className="flex items-center gap-3 p-3">
                   <TemplateSummary item={training} meta={`${training.exercises.length} vežbi · ${blockCountLabel(normalizedTrainingBlocks(training).length)} · ${training.focus}`} />
                   <span className="text-lg text-neutral-600">›</span>
                 </span>
               </button>
-              <div className="flex justify-end gap-2 border-t border-white/[0.06] px-2 py-1.5">
-                <button type="button" onClick={() => onEditCopy(training)} className="rounded-lg px-2 py-1.5 text-[10px] text-neutral-300">Kopiraj i uredi</button>
-                {!training.demo && <button type="button" onClick={() => onDelete(training.id)} className="h-7 w-7 rounded-lg text-red-300" aria-label={`Obriši ${training.name}`}>×</button>}
+              <div className={`flex items-center border-t border-white/[0.06] px-2 py-1.5 ${creatingProgram ? "justify-between" : "justify-end"}`}>
+                {creatingProgram && <button type="button" onClick={() => onToggleProgramTraining(training.id)} className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${selected ? "bg-red-500/10 text-red-300" : "bg-brand-green-500/10 text-brand-green-300"}`}>{selected ? "Ukloni iz programa" : "Dodaj u program"}</button>}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => onEditCopy(training)} className="rounded-lg px-2 py-1.5 text-[10px] text-neutral-300">Kopiraj i uredi</button>
+                  {!training.demo && <button type="button" onClick={() => onDelete(training.id)} className="h-7 w-7 rounded-lg text-red-300" aria-label={`Obriši ${training.name}`}>×</button>}
+                </div>
               </div>
             </Panel>
           );
@@ -813,7 +819,80 @@ function TrainingLibrary({ templates, programDraft, setProgramDraft, onTogglePro
   );
 }
 
-function TrainingPreview({ training }) {
+function ProgramDraftEditor({ expanded, setExpanded, draft, setDraft, trainings, onSave }) {
+  const weeklyPlan = normalizedWeeklyPlan(draft);
+  const trainingDays = weeklyPlan.filter((day) => day.trainingId).length;
+  const restDays = WEEK_DAYS.length - trainingDays;
+
+  function updateDay(dayIndex, trainingId) {
+    setDraft((current) => ({
+      ...current,
+      weeklyPlan: normalizedWeeklyPlan(current).map((day) => day.dayIndex === dayIndex ? { ...day, trainingId: trainingId || null } : day),
+    }));
+  }
+
+  function clearProgram() {
+    const hasContent = draft.name.trim() || draft.trainingIds.length > 0;
+    if (hasContent && !window.confirm("Obrisati ceo nacrt programa?")) return;
+    setDraft(emptyProgramDraft());
+  }
+
+  return (
+    <Panel className="overflow-hidden">
+      <button type="button" onClick={() => setExpanded((current) => !current)} className="flex w-full items-center gap-3 p-3 text-left">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-green-500/10 text-xl text-brand-green-300">+</span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-white">Novi program</span><span className="block text-[11px] text-neutral-500">{draft.trainingIds.length ? `${draft.trainingIds.length} izabranih treninga` : "Izaberi treninge sa liste"}</span></span>
+        <span className="text-[11px] font-medium text-brand-green-300">{expanded ? "Zatvori" : "Uredi"}</span>
+      </button>
+
+      {expanded && (
+        <div className="space-y-3 border-t border-white/10 p-3">
+          <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Naziv programa" className="w-full rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm text-white outline-none placeholder:text-neutral-500 focus:border-brand-green-500" />
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-[9px] font-medium uppercase text-neutral-500">Cilj
+              <select value={draft.goal} onChange={(event) => setDraft((current) => ({ ...current, goal: event.target.value }))} className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-2 text-xs normal-case text-white outline-none">
+                <option className="bg-neutral-900">Opšta kondicija</option><option className="bg-neutral-900">Snaga</option><option className="bg-neutral-900">Hipertrofija</option><option className="bg-neutral-900">Povratak treningu</option>
+              </select>
+            </label>
+            <label className="text-[9px] font-medium uppercase text-neutral-500">Trajanje
+              <select value={draft.weeks} onChange={(event) => setDraft((current) => ({ ...current, weeks: Number(event.target.value) }))} className="mt-1 h-10 w-full rounded-xl border border-white/10 bg-neutral-950/60 px-2 text-xs normal-case text-white outline-none">
+                {[2, 4, 6, 8, 12].map((weeks) => <option key={weeks} value={weeks} className="bg-neutral-900">{weeks} nedelja</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-brand-green-500/[0.08] px-3 py-2"><p className="text-lg font-semibold text-brand-green-300">{trainingDays}</p><p className="text-[9px] uppercase text-neutral-500">treninga nedeljno</p></div>
+            <div className="rounded-xl bg-white/[0.035] px-3 py-2"><p className="text-lg font-semibold text-neutral-200">{restDays}</p><p className="text-[9px] uppercase text-neutral-500">dana odmora</p></div>
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-white">Nedeljni raspored</p><span className="text-[9px] text-neutral-500">ponavlja se {draft.weeks} nedelja</span></div>
+            <div className="space-y-1.5">
+              {weeklyPlan.map((day) => (
+                <label key={day.dayIndex} className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${day.trainingId ? "border-brand-green-500/20 bg-brand-green-500/[0.06]" : "border-white/[0.07] bg-neutral-950/35"}`}>
+                  <span className="w-20 shrink-0 text-[11px] font-medium text-neutral-300">{WEEK_DAYS[day.dayIndex]}</span>
+                  <select value={day.trainingId || ""} onChange={(event) => updateDay(day.dayIndex, event.target.value)} className={`h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-neutral-950/70 px-2 text-[10px] outline-none ${day.trainingId ? "text-white" : "text-neutral-500"}`}>
+                    <option value="" className="bg-neutral-900">Odmor</option>
+                    {trainings.map((training) => <option key={training.id} value={training.id} className="bg-neutral-900">{training.name}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+            {trainings.length === 0 && <p className="mt-2 text-center text-[10px] text-neutral-500">Dodaj treninge iz liste ispod, pa ih rasporedi po danima.</p>}
+          </div>
+
+          <div className="flex items-center justify-between border-t border-white/10 pt-3">
+            <button type="button" onClick={clearProgram} className="rounded-lg border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300">Očisti</button>
+            <button type="button" onClick={onSave} className="rounded-lg bg-brand-blue-500 px-4 py-2 text-xs font-semibold text-white shadow-glow">Sačuvaj program</button>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function TrainingPreview({ training, selected = false }) {
   const exercises = training.exercises
     .slice(0, 3)
     .map((item) => getExerciseById(item.exerciseId))
@@ -838,6 +917,7 @@ function TrainingPreview({ training }) {
         <span className="rounded-md border border-white/10 bg-black/55 px-2 py-1 text-[9px] text-neutral-300">{blockCountLabel(normalizedTrainingBlocks(training).length)}</span>
       </div>
       {hiddenCount > 0 && <span className="absolute bottom-2 right-3 rounded-md bg-brand-blue-500 px-2 py-1 text-[9px] font-semibold text-white">+{hiddenCount}</span>}
+      {selected && <span className="absolute right-3 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-brand-green-500 text-sm font-semibold text-white shadow-lg">✓</span>}
     </div>
   );
 }
@@ -854,7 +934,7 @@ function ProgramLibrary({ programs, onOpen, onDelete, onEditCopy }) {
           <Panel key={program.id} className="overflow-hidden">
             <button type="button" onClick={() => onOpen(program)} className="flex w-full items-center gap-3 p-3 text-left">
               <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-brand-green-500/10 text-brand-green-300"><b className="text-sm leading-none">{program.weeks}</b><small className="mt-0.5 text-[7px] uppercase">ned</small></span>
-              <TemplateSummary item={program} meta={`${program.trainingIds.length} treninga · ${program.goal}`} />
+              <TemplateSummary item={program} meta={programTrainingDays(program) ? `${programTrainingDays(program)}x nedeljno · ${program.trainingIds.length} treninga · ${program.goal}` : `${program.trainingIds.length} treninga · raspored nije definisan`} />
               <span className="text-lg text-neutral-600">›</span>
             </button>
             <div className="flex justify-end gap-2 border-t border-white/[0.06] px-2 py-1.5">
@@ -1083,8 +1163,22 @@ function TrainingDetails({ training, onOpenExercise, onClose }) {
 
 function ProgramDetails({ program, trainings, onClose }) {
   const included = program.trainingIds.map((id) => trainings.find((training) => training.id === id)).filter(Boolean);
+  const weeklyPlan = normalizedWeeklyPlan(program);
+  const hasSchedule = weeklyPlan.some((day) => day.trainingId);
   return (
     <DetailsModal title={program.name} subtitle={`${program.weeks} nedelja · ${program.goal}`} onClose={onClose}>
+      <section className="overflow-hidden rounded-xl border border-white/10 bg-neutral-950/35">
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5"><p className="text-xs font-semibold text-white">Nedeljni raspored</p><span className="text-[9px] text-neutral-500">{programTrainingDays(program)} treninga · {7 - programTrainingDays(program)} odmora</span></div>
+        {hasSchedule ? (
+          <div className="divide-y divide-white/[0.05]">
+            {weeklyPlan.map((day) => {
+              const training = trainings.find((item) => item.id === day.trainingId);
+              return <div key={day.dayIndex} className="flex items-center gap-3 px-3 py-2"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{WEEK_DAYS[day.dayIndex]}</span><span className={`min-w-0 flex-1 truncate text-xs ${training ? "font-medium text-white" : "text-neutral-600"}`}>{training?.name || "Odmor"}</span>{training && <span className="h-1.5 w-1.5 rounded-full bg-brand-green-400" />}</div>;
+            })}
+          </div>
+        ) : <p className="px-3 py-4 text-center text-xs text-neutral-500">Raspored nije definisan.</p>}
+      </section>
+      <p className="px-1 pt-1 text-[10px] font-medium uppercase text-neutral-500">Treninzi u programu</p>
       {included.map((training, index) => <div key={training.id} className="rounded-xl border border-white/10 bg-neutral-950/45 p-3"><div className="flex items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-green-500/10 text-xs font-semibold text-brand-green-300">{index + 1}</span><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{training.name}</p><p className="mt-0.5 text-[10px] text-neutral-500">{training.exercises.length} vežbi · {training.focus}</p></div></div></div>)}
       {included.length === 0 && <EmptyState title="Program nema dostupne treninge" />}
     </DetailsModal>
