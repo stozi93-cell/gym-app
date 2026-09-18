@@ -85,6 +85,7 @@ function emptyTrainingDraft() {
   return {
     name: "",
     focus: "Opšta priprema",
+    notes: "",
     blocks: [{ id: "block-1", name: "Blok 1", pauseSeconds: 120 }],
     exercises: [],
   };
@@ -320,6 +321,7 @@ export default function ExerciseLibrary() {
             setTrainingDraft({
               name: `${template.name} - kopija`,
               focus: template.focus,
+              notes: template.notes || "",
               blocks: normalizedTrainingBlocks(template).map((block) => ({ ...block })),
               exercises: template.exercises.map((item) => ({ ...item })),
             });
@@ -649,6 +651,13 @@ function TrainingDraftEditor({ draft, setDraft, onUpdateExercise, onMoveExercise
               <option className="bg-neutral-900">Rehabilitacija</option>
             </select>
           </div>
+          <textarea
+            value={draft.notes || ""}
+            onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
+            placeholder="Napomene za trening..."
+            rows="2"
+            className="w-full resize-none rounded-xl border border-white/10 bg-neutral-950/60 px-3 py-2.5 text-sm leading-relaxed text-white outline-none placeholder:text-neutral-500 focus:border-brand-blue-500"
+          />
 
           <div className="space-y-3">
             {blocks.map((block, blockIndex) => {
@@ -1003,6 +1012,7 @@ function TrainingDetails({ training, onClose }) {
   const blocks = normalizedTrainingBlocks(training);
   return (
     <DetailsModal title={training.name} subtitle={`${training.exercises.length} vežbi · ${training.focus}`} onClose={onClose}>
+      {training.notes?.trim() && <div className="whitespace-pre-wrap rounded-xl border border-brand-blue-500/15 bg-brand-blue-500/[0.07] px-3 py-2.5 text-xs leading-relaxed text-neutral-300">{training.notes}</div>}
       {blocks.map((block, blockIndex) => {
         const items = training.exercises.filter((item) => exerciseBlockId(item, blocks) === block.id);
         if (items.length === 0) return null;
