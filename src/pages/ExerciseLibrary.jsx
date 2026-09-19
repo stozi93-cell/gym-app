@@ -175,6 +175,7 @@ export default function ExerciseLibrary() {
   const [equipment, setEquipment] = useState("all");
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [selectedTraining, setSelectedTraining] = useState(null);
+  const [selectedTrainingEntryId, setSelectedTrainingEntryId] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [trainingDraft, setTrainingDraft] = useState(emptyTrainingDraft);
   const [programDraft, setProgramDraft] = useState(emptyProgramDraft);
@@ -191,6 +192,9 @@ export default function ExerciseLibrary() {
     () => [...DEMO_PROGRAMS, ...programTemplates],
     [programTemplates]
   );
+  const selectedTrainingEntry = selectedTrainingEntryId
+    ? scheduledTrainings.find((item) => item.id === selectedTrainingEntryId)
+    : null;
 
   const filteredExercises = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase("sr-Latn-RS");
@@ -344,6 +348,21 @@ export default function ExerciseLibrary() {
     });
   }
 
+  function openTrainingDetails(training, scheduleEntryId = null) {
+    setSelectedTrainingEntryId(scheduleEntryId);
+    setSelectedTraining(training);
+  }
+
+  function closeTrainingDetails() {
+    setSelectedTraining(null);
+    setSelectedTrainingEntryId(null);
+  }
+
+  function startScheduledTraining(id, training) {
+    updateScheduleEntry(id, { status: "active", completed: false, startedAt: new Date().toISOString() });
+    openTrainingDetails(training, id);
+  }
+
   function removeScheduleEntry(id) {
     setScheduledTrainings((current) => {
       const target = current.find((item) => item.id === id);
@@ -447,7 +466,7 @@ export default function ExerciseLibrary() {
           setProgramDraft={setProgramDraft}
           onToggleProgramTraining={toggleProgramTraining}
           onSaveProgram={saveProgramTemplate}
-          onOpen={setSelectedTraining}
+          onOpen={(training) => openTrainingDetails(training)}
           onDelete={(id) => setTrainingTemplates((current) => current.filter((item) => item.id !== id))}
           onEditCopy={(template) => {
             setTrainingDraft({
@@ -489,9 +508,10 @@ export default function ExerciseLibrary() {
           onSchedule={addScheduleEntry}
           onUpdate={updateScheduleEntry}
           onMove={(id, newDate) => updateScheduleEntry(id, { dateKey: newDate })}
+          onStartTraining={startScheduledTraining}
           onStartProgram={startScheduledProgram}
           onRemove={removeScheduleEntry}
-          onOpenTraining={setSelectedTraining}
+          onOpenTraining={openTrainingDetails}
           onOpenProgram={setSelectedProgram}
         />
       )}
@@ -508,14 +528,22 @@ export default function ExerciseLibrary() {
       )}
 
       {selectedTraining && (
-        <TrainingDetails training={selectedTraining} elevated={Boolean(selectedProgram)} onOpenExercise={setSelectedExercise} onClose={() => setSelectedTraining(null)} />
+        <TrainingDetails
+          training={selectedTraining}
+          scheduleStatus={selectedTrainingEntry ? selectedTrainingEntry.status || (selectedTrainingEntry.completed ? "completed" : "planned") : null}
+          elevated={Boolean(selectedProgram)}
+          onOpenExercise={setSelectedExercise}
+          onStart={selectedTrainingEntryId ? () => updateScheduleEntry(selectedTrainingEntryId, { status: "active", completed: false, startedAt: new Date().toISOString() }) : null}
+          onComplete={selectedTrainingEntryId ? () => updateScheduleEntry(selectedTrainingEntryId, { status: "completed", completed: true, completedAt: new Date().toISOString() }) : null}
+          onClose={closeTrainingDetails}
+        />
       )}
 
       {selectedProgram && (
         <ProgramDetails
           program={selectedProgram}
           trainings={visibleTrainingTemplates}
-          onOpenTraining={setSelectedTraining}
+          onOpenTraining={(training) => openTrainingDetails(training)}
           onClose={() => setSelectedProgram(null)}
         />
       )}
@@ -1154,7 +1182,7 @@ function resolveScheduleItem(item, trainings, programs) {
   };
 }
 
-function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate, onMove, onStartProgram, onRemove, onOpenTraining, onOpenProgram }) {
+function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate, onMove, onStartTraining, onStartProgram, onRemove, onOpenTraining, onOpenProgram }) {
   const today = dateKey();
   const [monthCursor, setMonthCursor] = useState(() => {
     const date = new Date();
@@ -1229,7 +1257,7 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
                 {day.getDate()}
                 {dayItems.length > 0 && (
                   <span className="absolute inset-x-0 bottom-1 flex justify-center gap-1">
-                    {dayItems.slice(0, 3).map((item) => <span key={item.id} className={`h-1.5 w-1.5 rounded-full ring-1 ring-black/40 ${item.status === "completed" ? "bg-brand-green-400" : item.status === "active" ? "bg-brand-blue-300" : "bg-amber-300"}`} />)}
+                    {dayItems.slice(0, 3).map((item) => <span key={item.id} className={`h-1.5 w-1.5 rounded-full ring-1 ring-black/40 ${item.status === "completed" ? "bg-brand-green-400" : item.status === "active" ? "bg-brand-blue-300" : "bg-neutral-200"}`} />)}
                   </span>
                 )}
               </button>
@@ -1272,7 +1300,7 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
               : `${item.template.exercises.length} vežbi`;
           return (
             <Panel key={item.id} className={`overflow-hidden ${completed ? "opacity-65" : ""}`}>
-              <button type="button" onClick={() => item.entryType === "program" ? onOpenProgram(item.template) : onOpenTraining(item.template)} className="flex w-full items-center gap-3 p-3 text-left">
+              <button type="button" onClick={() => item.entryType === "program" ? onOpenProgram(item.template) : onOpenTraining(item.template, item.id)} className="flex w-full items-center gap-3 p-3 text-left">
                 <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold uppercase ${item.entryType === "program" ? "bg-brand-green-500/10 text-brand-green-300" : "bg-brand-blue-500/10 text-brand-blue-300"}`}>{item.entryType === "program" ? "PR" : "TR"}</span>
                 <TemplateSummary item={item.template} meta={meta} />
                 {planned && <StatusPill tone="neutral">Planirano</StatusPill>}
@@ -1290,7 +1318,7 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
                   <div className="flex items-center justify-end gap-2">
                     {movable && <button type="button" onClick={() => openDateEditor(item)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] text-neutral-300">Datum</button>}
                     {item.entryType === "program" && planned && <button type="button" disabled={!hasProgramSchedule} onClick={() => onStartProgram(item.id, item.template)} className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-35">Pokreni program</button>}
-                    {item.entryType === "training" && planned && <button type="button" onClick={() => onUpdate(item.id, { status: "active", completed: false })} className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-[10px] font-semibold text-white">Pokreni</button>}
+                    {item.entryType === "training" && planned && <button type="button" onClick={() => onStartTraining(item.id, item.template)} className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-[10px] font-semibold text-white">Pokreni</button>}
                     {item.entryType === "training" && !completed && <button type="button" onClick={() => onUpdate(item.id, { status: "completed", completed: true })} className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${active ? "bg-brand-green-500 text-white" : "border border-brand-green-500/30 bg-brand-green-500/10 text-brand-green-300"}`}>Završi</button>}
                     <button type="button" onClick={() => {
                       if (item.entryType === "program" && active && !window.confirm("Ukloniti program i sve njegove treninge iz kalendara?")) return;
@@ -1351,7 +1379,7 @@ function DetailsModal({ title, subtitle, zIndexClass = "z-[100]", onClose, child
   );
 }
 
-function TrainingDetails({ training, elevated = false, onOpenExercise, onClose }) {
+function TrainingDetails({ training, scheduleStatus = null, elevated = false, onOpenExercise, onStart, onComplete, onClose }) {
   const blocks = normalizedTrainingBlocks(training);
   return (
     <DetailsModal title={training.name} subtitle={`${training.exercises.length} vežbi · ${training.focus}`} zIndexClass={elevated ? "z-[110]" : "z-[100]"} onClose={onClose}>
@@ -1383,6 +1411,9 @@ function TrainingDetails({ training, elevated = false, onOpenExercise, onClose }
           </section>
         );
       })}
+      {scheduleStatus === "planned" && <button type="button" onClick={onStart} className="mt-2 h-11 w-full rounded-xl bg-brand-blue-500 text-sm font-semibold text-white shadow-glow">Pokreni trening</button>}
+      {scheduleStatus === "active" && <button type="button" onClick={onComplete} className="mt-2 h-11 w-full rounded-xl bg-brand-green-500 text-sm font-semibold text-white">Završi trening</button>}
+      {scheduleStatus === "completed" && <div className="mt-2 flex h-11 items-center justify-center rounded-xl border border-brand-green-500/25 bg-brand-green-500/10 text-sm font-semibold text-brand-green-300">Trening završen</div>}
     </DetailsModal>
   );
 }
