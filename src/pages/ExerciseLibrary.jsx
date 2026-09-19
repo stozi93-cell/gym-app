@@ -1025,7 +1025,7 @@ function ProgramDraftEditor({ expanded, setExpanded, draft, setDraft, trainings,
             <ScrollArea orientation="horizontal" className="flex gap-1.5 pb-1" endShadowClassName="inset-y-0 right-0 w-9 bg-gradient-to-l from-neutral-900 via-neutral-900/80 to-transparent">
               {weekPlans.map((week) => {
                 const scheduled = week.days.filter((day) => day.trainingId).length;
-                return <button key={week.weekIndex} type="button" onClick={() => setActiveWeek(week.weekIndex)} className={`w-14 shrink-0 rounded-lg border px-1 py-1.5 text-center ${effectiveWeek === week.weekIndex ? "border-brand-blue-500 bg-brand-blue-500 text-white" : "border-white/10 bg-white/[0.035] text-neutral-400"}`}><span className="block text-[9px]">NED</span><span className="block text-xs font-semibold">{week.weekIndex + 1}</span><span className={`mx-auto mt-1 block h-1 w-1 rounded-full ${scheduled ? "bg-brand-green-400" : "bg-transparent"}`} /></button>;
+                return <button key={week.weekIndex} type="button" onClick={() => setActiveWeek(week.weekIndex)} className={`w-14 shrink-0 rounded-lg border px-1 py-1.5 text-center ${effectiveWeek === week.weekIndex ? "border-brand-blue-500 bg-brand-blue-500 text-white" : "border-white/10 bg-white/[0.035] text-neutral-400"}`}><span className="block text-[9px]">NED</span><span className="block text-xs font-semibold">{week.weekIndex + 1}</span><span className={`mx-auto mt-1 block h-1 w-1 rounded-full ${scheduled ? "bg-brand-green-500" : "bg-transparent"}`} /></button>;
               })}
             </ScrollArea>
           </div>
@@ -1257,7 +1257,7 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
                 {day.getDate()}
                 {dayItems.length > 0 && (
                   <span className="absolute inset-x-0 bottom-1 flex justify-center gap-1">
-                    {dayItems.slice(0, 3).map((item) => <span key={item.id} className={`h-1.5 w-1.5 rounded-full ring-1 ring-black/40 ${item.status === "completed" ? "bg-brand-green-400" : item.status === "active" ? "bg-brand-blue-300" : "bg-neutral-200"}`} />)}
+                    {dayItems.slice(0, 3).map((item) => <span key={item.id} className={`h-1.5 w-1.5 rounded-full ring-1 ring-black/40 ${item.status === "completed" ? "bg-brand-green-500" : item.status === "active" ? "bg-brand-blue-300" : "bg-neutral-200"}`} />)}
                   </span>
                 )}
               </button>
@@ -1440,7 +1440,7 @@ function ProgramDetails({ program, trainings, onOpenTraining, onClose }) {
             {activePlan.days.map((day) => {
               const training = trainings.find((item) => item.id === day.trainingId);
               if (!training) return <div key={day.dayIndex} className="flex items-center gap-3 px-3 py-2"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{PROGRAM_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 text-xs text-neutral-600">Odmor</span></div>;
-              return <button key={day.dayIndex} type="button" onClick={() => onOpenTraining(training)} className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/[0.04]"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{PROGRAM_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-white">{training.name}</span><span className="h-1.5 w-1.5 rounded-full bg-brand-green-400" /><span className="text-sm text-neutral-600">›</span></button>;
+              return <button key={day.dayIndex} type="button" onClick={() => onOpenTraining(training)} className="flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-white/[0.04]"><span className="w-20 shrink-0 text-[10px] font-medium text-neutral-500">{PROGRAM_DAYS[day.dayIndex]}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-white">{training.name}</span><span className="h-1.5 w-1.5 rounded-full bg-brand-green-500" /><span className="text-sm text-neutral-600">›</span></button>;
             })}
           </div>
         ) : <p className="px-3 py-4 text-center text-xs text-neutral-500">Raspored nije definisan.</p>}
