@@ -488,6 +488,7 @@ export default function ExerciseLibrary() {
           schedule={scheduledTrainings}
           onSchedule={addScheduleEntry}
           onUpdate={updateScheduleEntry}
+          onMove={(id, newDate) => updateScheduleEntry(id, { dateKey: newDate })}
           onStartProgram={startScheduledProgram}
           onRemove={removeScheduleEntry}
           onOpenTraining={setSelectedTraining}
@@ -1153,7 +1154,7 @@ function resolveScheduleItem(item, trainings, programs) {
   };
 }
 
-function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate, onStartProgram, onRemove, onOpenTraining, onOpenProgram }) {
+function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate, onMove, onStartProgram, onRemove, onOpenTraining, onOpenProgram }) {
   const today = dateKey();
   const [monthCursor, setMonthCursor] = useState(() => {
     const date = new Date();
@@ -1162,6 +1163,8 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
   const [selectedDate, setSelectedDate] = useState(today);
   const [entryType, setEntryType] = useState("training");
   const [templateId, setTemplateId] = useState(trainings[0]?.id || "");
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [editedDate, setEditedDate] = useState("");
   const days = useMemo(() => calendarDaysFor(monthCursor), [monthCursor]);
   const choices = entryType === "training" ? trainings : programs;
   const effectiveTemplateId = choices.some((item) => item.id === templateId) ? templateId : choices[0]?.id || "";
@@ -1187,6 +1190,21 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
     onSchedule(entryType, effectiveTemplateId, selectedDate);
   }
 
+  function openDateEditor(item) {
+    setEditingEntryId(item.id);
+    setEditedDate(item.dateKey);
+  }
+
+  function saveDate(itemId) {
+    if (!editedDate) return;
+    onMove(itemId, editedDate);
+    const nextDate = new Date(`${editedDate}T12:00:00`);
+    setMonthCursor(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1, 12));
+    setSelectedDate(editedDate);
+    setEditingEntryId(null);
+    setEditedDate("");
+  }
+
   return (
     <div className="space-y-3">
       <Panel className="p-3">
@@ -1202,14 +1220,16 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
           {days.map((day) => {
             const key = dateKey(day);
             const inMonth = day.getMonth() === monthCursor.getMonth();
-            const dayItems = schedule.filter((item) => item.dateKey === key);
+            const dayItems = schedule
+              .filter((item) => item.dateKey === key)
+              .map((item) => ({ ...item, status: item.status || (item.completed ? "completed" : "planned") }));
             const selected = key === selectedDate;
             return (
               <button key={key} type="button" onClick={() => setSelectedDate(key)} className={`relative h-10 rounded-lg text-xs font-medium transition ${selected ? "bg-brand-blue-500 text-white" : key === today ? "bg-brand-blue-500/12 text-brand-blue-200" : inMonth ? "bg-white/[0.035] text-neutral-300" : "text-neutral-700"}`}>
                 {day.getDate()}
                 {dayItems.length > 0 && (
-                  <span className="absolute inset-x-0 bottom-1 flex justify-center gap-0.5">
-                    {dayItems.slice(0, 3).map((item) => <span key={item.id} className={`h-1 w-1 rounded-full ${selected ? "bg-white" : item.status === "active" ? "bg-brand-blue-400" : item.status === "completed" ? "bg-neutral-600" : "bg-brand-green-400"}`} />)}
+                  <span className="absolute inset-x-0 bottom-1 flex justify-center gap-1">
+                    {dayItems.slice(0, 3).map((item) => <span key={item.id} className={`h-1.5 w-1.5 rounded-full ring-1 ring-black/40 ${item.status === "completed" ? "bg-brand-green-400" : item.status === "active" ? "bg-brand-blue-300" : "bg-amber-300"}`} />)}
                   </span>
                 )}
               </button>
@@ -1242,6 +1262,7 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
           const programSessions = item.entryType === "program" ? schedule.filter((entry) => entry.programRunId === item.id) : [];
           const completedSessions = programSessions.filter((entry) => entry.status === "completed").length;
           const hasProgramSchedule = item.entryType !== "program" || programScheduleStats(item.template).totalTrainings > 0;
+          const movable = item.entryType === "training" || (item.entryType === "program" && planned);
           const meta = item.entryType === "program"
             ? active || completed
               ? `${completedSessions}/${programSessions.length || item.sessionCount || 0} treninga završeno`
@@ -1258,13 +1279,25 @@ function TrainingCalendar({ trainings, programs, schedule, onSchedule, onUpdate,
                 {active && <StatusPill tone="blue">U toku</StatusPill>}
                 {completed && <StatusPill tone="green">Završeno</StatusPill>}
               </button>
-              <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] px-2 py-1.5">
-                {item.entryType === "program" && planned && <button type="button" disabled={!hasProgramSchedule} onClick={() => onStartProgram(item.id, item.template)} className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-35">Pokreni program</button>}
-                {item.entryType === "training" && !completed && <button type="button" onClick={() => onUpdate(item.id, { status: active ? "completed" : "active", completed: active })} className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${active ? "bg-brand-green-500 text-white" : "bg-brand-blue-500 text-white"}`}>{active ? "Završi" : "Pokreni"}</button>}
-                <button type="button" onClick={() => {
-                  if (item.entryType === "program" && active && !window.confirm("Ukloniti program i sve njegove treninge iz kalendara?")) return;
-                  onRemove(item.id);
-                }} className="h-7 w-7 rounded-lg text-red-300" aria-label="Ukloni iz kalendara">×</button>
+              <div className="border-t border-white/[0.06] px-2 py-1.5">
+                {editingEntryId === item.id ? (
+                  <div className="flex items-center gap-2">
+                    <input type="date" value={editedDate} onChange={(event) => setEditedDate(event.target.value)} className="h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-neutral-950/70 px-2 text-xs text-white outline-none" />
+                    <button type="button" onClick={() => { setEditingEntryId(null); setEditedDate(""); }} className="px-2 py-1.5 text-[10px] text-neutral-500">Otkaži</button>
+                    <button type="button" onClick={() => saveDate(item.id)} className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-[10px] font-semibold text-white">Sačuvaj</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-end gap-2">
+                    {movable && <button type="button" onClick={() => openDateEditor(item)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] text-neutral-300">Datum</button>}
+                    {item.entryType === "program" && planned && <button type="button" disabled={!hasProgramSchedule} onClick={() => onStartProgram(item.id, item.template)} className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-35">Pokreni program</button>}
+                    {item.entryType === "training" && planned && <button type="button" onClick={() => onUpdate(item.id, { status: "active", completed: false })} className="rounded-lg bg-brand-blue-500 px-3 py-1.5 text-[10px] font-semibold text-white">Pokreni</button>}
+                    {item.entryType === "training" && !completed && <button type="button" onClick={() => onUpdate(item.id, { status: "completed", completed: true })} className={`rounded-lg px-3 py-1.5 text-[10px] font-semibold ${active ? "bg-brand-green-500 text-white" : "border border-brand-green-500/30 bg-brand-green-500/10 text-brand-green-300"}`}>Završi</button>}
+                    <button type="button" onClick={() => {
+                      if (item.entryType === "program" && active && !window.confirm("Ukloniti program i sve njegove treninge iz kalendara?")) return;
+                      onRemove(item.id);
+                    }} className="h-7 w-7 rounded-lg text-red-300" aria-label="Ukloni iz kalendara">×</button>
+                  </div>
+                )}
               </div>
             </Panel>
           );
