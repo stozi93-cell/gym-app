@@ -68,6 +68,66 @@ const LIBRARY_TABS = [
   { value: "calendar", label: "Kalendar" },
 ];
 
+const CLIENT_TABS = [
+  { value: "guide", label: "Za mene" },
+  { value: "trainings", label: "Moji treninzi" },
+  { value: "library", label: "Biblioteka" },
+  { value: "calendar", label: "Kalendar" },
+];
+
+const GUIDED_GOALS = [
+  { value: "unsure", label: "Nisam siguran", description: "Predloži mi uravnotežen trening" },
+  { value: "full", label: "Celo telo", description: "Noge, potisci, povlačenja i trup" },
+  { value: "upper", label: "Gornji deo", description: "Leđa, grudi, ramena i ruke" },
+  { value: "lower", label: "Donji deo", description: "Noge, gluteus i stabilnost" },
+  { value: "core", label: "Stabilnost", description: "Trup, kontrola i lakši pokreti" },
+];
+
+const GUIDED_BLUEPRINTS = {
+  unsure: ["back-squat", "incline-dumbbell-press", "seated-row", "hip-thrust", "face-pull", "dead-bug"],
+  full: ["back-squat", "incline-dumbbell-press", "seated-row", "hip-thrust", "overhead-press", "dead-bug"],
+  upper: ["incline-dumbbell-press", "seated-row", "lat-pulldown", "overhead-press", "face-pull", "dead-bug"],
+  lower: ["back-squat", "romanian-deadlift", "split-squat", "hip-thrust", "plank", "dead-bug"],
+  core: ["dead-bug", "plank", "face-pull", "seated-row", "hip-thrust", "split-squat"],
+};
+
+const GUIDED_GOAL_NAMES = {
+  unsure: "Uravnotežen trening",
+  full: "Celo telo",
+  upper: "Gornji deo tela",
+  lower: "Donji deo tela",
+  core: "Stabilnost i kontrola",
+};
+
+function buildGuidedTraining({ goal, duration, intensity }) {
+  const exerciseCount = duration <= 20 ? 3 : duration <= 30 ? 4 : duration <= 45 ? 5 : 6;
+  const sets = intensity === "light" ? 2 : intensity === "strong" ? 4 : 3;
+  const restSeconds = intensity === "light" ? 60 : intensity === "strong" ? 105 : 75;
+  const exercises = (GUIDED_BLUEPRINTS[goal] || GUIDED_BLUEPRINTS.unsure)
+    .slice(0, exerciseCount)
+    .map((exerciseId) => ({
+      exerciseId,
+      blockId: "block-1",
+      sets,
+      reps: exerciseId === "plank" ? "30 s" : exerciseId === "dead-bug" ? "8/strana" : "8-12",
+      weight: "",
+      restSeconds,
+    }));
+
+  return {
+    id: `guided-preview-${goal}-${duration}-${intensity}`,
+    name: `${GUIDED_GOAL_NAMES[goal] || GUIDED_GOAL_NAMES.unsure} · ${duration} min`,
+    focus: GUIDED_GOAL_NAMES[goal] || GUIDED_GOAL_NAMES.unsure,
+    notes: "Koristi težinu sa kojom zadržavaš dobru tehniku. Ako pokret izaziva bol, prekini ga i obrati se treneru.",
+    source: "client",
+    guided: true,
+    duration,
+    intensity,
+    blocks: [{ id: "block-1", name: "Glavni deo", pauseSeconds: 90 }],
+    exercises,
+  };
+}
+
 function createId(prefix) {
   return `${prefix}_${globalThis.crypto?.randomUUID?.() || Date.now()}`;
 }
@@ -170,6 +230,7 @@ export default function ExerciseLibrary() {
   const { profile, user } = useAuth();
   const coachMode = profile?.role === "admin";
   const [activeTab, setActiveTab] = useState("exercises");
+  const [clientTab, setClientTab] = useState("guide");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [equipment, setEquipment] = useState("all");
@@ -363,6 +424,38 @@ export default function ExerciseLibrary() {
     openTrainingDetails(training, id);
   }
 
+  function startTrainingNow(training, saveTemplate = false) {
+    const today = dateKey();
+    const existing = scheduledTrainings.find((item) =>
+      item.entryType === "training"
+      && item.templateId === training.id
+      && item.dateKey === today
+      && item.status !== "completed"
+    );
+
+    if (existing) {
+      startScheduledTraining(existing.id, training);
+      return;
+    }
+
+    const storedTraining = saveTemplate
+      ? { ...training, id: createId("training"), createdAt: new Date().toISOString(), source: "client" }
+      : training;
+    const entryId = createId("scheduled");
+
+    if (saveTemplate) setTrainingTemplates((current) => [storedTraining, ...current]);
+    setScheduledTrainings((current) => [{
+      id: entryId,
+      entryType: "training",
+      templateId: storedTraining.id,
+      dateKey: today,
+      status: "active",
+      completed: false,
+      startedAt: new Date().toISOString(),
+    }, ...current]);
+    openTrainingDetails(storedTraining, entryId);
+  }
+
   function removeScheduleEntry(id) {
     setScheduledTrainings((current) => {
       const target = current.find((item) => item.id === id);
@@ -405,102 +498,126 @@ export default function ExerciseLibrary() {
 
   return (
     <div className="mx-auto max-w-md space-y-3">
-      <div className="grid grid-cols-4 gap-1 rounded-xl border border-white/10 bg-neutral-950/70 p-1">
-          {LIBRARY_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setActiveTab(tab.value)}
-              className={`rounded-lg px-1 py-2 text-[11px] font-medium transition ${
-                activeTab === tab.value
-                  ? "bg-brand-blue-500 text-white shadow-glow"
-                  : "text-neutral-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-      </div>
-
       {status && (
         <div className="rounded-xl border border-brand-blue-500/20 bg-brand-blue-500/10 px-3 py-2 text-xs text-brand-blue-100">
           {status}
         </div>
       )}
 
-      {activeTab === "exercises" && (
-        <div className="space-y-3">
-          <TrainingDraftEditor
-            draft={trainingDraft}
-            setDraft={setTrainingDraft}
-            onUpdateExercise={updateDraftExercise}
-            onMoveExercise={moveDraftExercise}
-            onMoveToBlock={(index, blockId) => updateDraftExercise(index, { blockId })}
-            onRemoveExercise={(index) => setTrainingDraft((current) => ({
-              ...current,
-              exercises: current.exercises.filter((_, itemIndex) => itemIndex !== index),
-            }))}
-            onSave={saveTrainingTemplate}
-          />
-          <ExerciseBrowser
-            canBuild
-            search={search}
-            setSearch={setSearch}
-            category={category}
-            setCategory={setCategory}
-            equipment={equipment}
-            setEquipment={setEquipment}
-            exercises={filteredExercises}
-            draftExercises={trainingDraft.exercises}
-            onOpen={setSelectedExercise}
-            onAdd={addExercise}
-            onRemove={removeExercise}
-          />
-        </div>
+      {coachMode ? (
+        <>
+          <TabBar tabs={LIBRARY_TABS} value={activeTab} onChange={setActiveTab} />
+
+          {activeTab === "exercises" && (
+            <div className="space-y-3">
+              <TrainingDraftEditor
+                draft={trainingDraft}
+                setDraft={setTrainingDraft}
+                onUpdateExercise={updateDraftExercise}
+                onMoveExercise={moveDraftExercise}
+                onMoveToBlock={(index, blockId) => updateDraftExercise(index, { blockId })}
+                onRemoveExercise={(index) => setTrainingDraft((current) => ({
+                  ...current,
+                  exercises: current.exercises.filter((_, itemIndex) => itemIndex !== index),
+                }))}
+                onSave={saveTrainingTemplate}
+              />
+              <ExerciseBrowser
+                canBuild
+                search={search}
+                setSearch={setSearch}
+                category={category}
+                setCategory={setCategory}
+                equipment={equipment}
+                setEquipment={setEquipment}
+                exercises={filteredExercises}
+                draftExercises={trainingDraft.exercises}
+                onOpen={setSelectedExercise}
+                onAdd={addExercise}
+                onRemove={removeExercise}
+              />
+            </div>
+          )}
+
+          {activeTab === "trainings" && (
+            <TrainingLibrary
+              templates={visibleTrainingTemplates}
+              programDraft={programDraft}
+              setProgramDraft={setProgramDraft}
+              onToggleProgramTraining={toggleProgramTraining}
+              onSaveProgram={saveProgramTemplate}
+              onOpen={(training) => openTrainingDetails(training)}
+              onDelete={(id) => setTrainingTemplates((current) => current.filter((item) => item.id !== id))}
+              onEditCopy={(template) => {
+                setTrainingDraft({
+                  name: `${template.name} - kopija`,
+                  focus: template.focus,
+                  notes: template.notes || "",
+                  blocks: normalizedTrainingBlocks(template).map((block) => ({ ...block })),
+                  exercises: template.exercises.map((item) => ({ ...item })),
+                });
+                setActiveTab("exercises");
+              }}
+            />
+          )}
+
+          {activeTab === "programs" && (
+            <ProgramLibrary
+              programs={visibleProgramTemplates}
+              onOpen={setSelectedProgram}
+              onDelete={(id) => setProgramTemplates((current) => current.filter((item) => item.id !== id))}
+              onEditCopy={(program) => {
+                setProgramDraft({
+                  name: `${program.name} - kopija`,
+                  goal: program.goal,
+                  weeks: program.weeks,
+                  trainingIds: [...program.trainingIds],
+                  weekPlans: normalizedProgramWeeks(program),
+                  weeklyPlan: normalizedProgramWeeks(program)[0].days,
+                });
+                setActiveTab("trainings");
+              }}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <TabBar tabs={CLIENT_TABS} value={clientTab} onChange={setClientTab} compact />
+          {clientTab === "guide" && (
+            <ClientTrainingGuide
+              trainings={visibleTrainingTemplates}
+              schedule={scheduledTrainings}
+              onOpenTraining={openTrainingDetails}
+              onStartScheduled={startScheduledTraining}
+              onStartRecommendation={(training) => startTrainingNow(training, true)}
+              onOpenSaved={() => setClientTab("trainings")}
+            />
+          )}
+          {clientTab === "trainings" && (
+            <ClientTrainingList
+              trainings={visibleTrainingTemplates}
+              onOpen={openTrainingDetails}
+              onStart={startTrainingNow}
+            />
+          )}
+          {clientTab === "library" && (
+            <ExerciseBrowser
+              canBuild={false}
+              search={search}
+              setSearch={setSearch}
+              category={category}
+              setCategory={setCategory}
+              equipment={equipment}
+              setEquipment={setEquipment}
+              exercises={filteredExercises}
+              draftExercises={[]}
+              onOpen={setSelectedExercise}
+            />
+          )}
+        </>
       )}
 
-      {activeTab === "trainings" && (
-        <TrainingLibrary
-          templates={visibleTrainingTemplates}
-          programDraft={programDraft}
-          setProgramDraft={setProgramDraft}
-          onToggleProgramTraining={toggleProgramTraining}
-          onSaveProgram={saveProgramTemplate}
-          onOpen={(training) => openTrainingDetails(training)}
-          onDelete={(id) => setTrainingTemplates((current) => current.filter((item) => item.id !== id))}
-          onEditCopy={(template) => {
-            setTrainingDraft({
-              name: `${template.name} - kopija`,
-              focus: template.focus,
-              notes: template.notes || "",
-              blocks: normalizedTrainingBlocks(template).map((block) => ({ ...block })),
-              exercises: template.exercises.map((item) => ({ ...item })),
-            });
-            setActiveTab("exercises");
-          }}
-        />
-      )}
-
-      {activeTab === "programs" && (
-        <ProgramLibrary
-          programs={visibleProgramTemplates}
-          onOpen={setSelectedProgram}
-          onDelete={(id) => setProgramTemplates((current) => current.filter((item) => item.id !== id))}
-          onEditCopy={(program) => {
-            setProgramDraft({
-              name: `${program.name} - kopija`,
-              goal: program.goal,
-              weeks: program.weeks,
-              trainingIds: [...program.trainingIds],
-              weekPlans: normalizedProgramWeeks(program),
-              weeklyPlan: normalizedProgramWeeks(program)[0].days,
-            });
-            setActiveTab("trainings");
-          }}
-        />
-      )}
-
-      {activeTab === "calendar" && (
+      {(coachMode ? activeTab === "calendar" : clientTab === "calendar") && (
         <TrainingCalendar
           trainings={visibleTrainingTemplates}
           programs={visibleProgramTemplates}
@@ -519,7 +636,7 @@ export default function ExerciseLibrary() {
       {selectedExercise && (
         <ExerciseDetails
           exercise={selectedExercise}
-          canBuild
+          canBuild={coachMode}
           added={trainingDraft.exercises.some((item) => item.exerciseId === selectedExercise.id)}
           onAdd={() => addExercise(selectedExercise)}
           onRemove={() => removeExercise(selectedExercise.id)}
@@ -549,6 +666,201 @@ export default function ExerciseLibrary() {
       )}
     </div>
   );
+}
+
+function TabBar({ tabs, value, onChange, compact = false }) {
+  return (
+    <div className="grid grid-cols-4 gap-1 rounded-xl border border-white/10 bg-neutral-950/70 p-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          onClick={() => onChange(tab.value)}
+          className={`min-w-0 rounded-lg px-1 py-2 font-medium leading-tight transition ${compact ? "text-[10px]" : "text-[11px]"} ${
+            value === tab.value
+              ? "bg-brand-blue-500 text-white shadow-glow"
+              : "text-neutral-400 hover:bg-white/5 hover:text-white"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ClientTrainingGuide({ trainings, schedule, onOpenTraining, onStartScheduled, onStartRecommendation, onOpenSaved }) {
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState({ goal: "", duration: 0, intensity: "" });
+  const today = dateKey();
+  const resolved = schedule
+    .filter((item) => (item.entryType || "training") === "training")
+    .map((item) => resolveScheduleItem(item, trainings, []))
+    .filter((item) => item.template);
+  const todayTraining = resolved.find((item) => item.dateKey === today && item.status === "active")
+    || resolved.find((item) => item.dateKey === today && item.status === "planned")
+    || resolved.find((item) => item.dateKey === today && item.status === "completed");
+  const lastCompleted = [...resolved]
+    .filter((item) => item.status === "completed")
+    .sort((a, b) => String(b.completedAt || b.dateKey).localeCompare(String(a.completedAt || a.dateKey)))[0];
+  const recommendation = step === 4 ? buildGuidedTraining(answers) : null;
+
+  function choose(field, value, nextStep) {
+    setAnswers((current) => ({ ...current, [field]: value }));
+    setStep(nextStep);
+  }
+
+  function restart() {
+    setAnswers({ goal: "", duration: 0, intensity: "" });
+    setStep(1);
+  }
+
+  return (
+    <div className="space-y-3">
+      {todayTraining && (
+        <Panel className={`overflow-hidden ${todayTraining.status === "completed" ? "border-brand-green-500/25" : "border-brand-blue-500/25"}`}>
+          <div className="flex items-center gap-3 p-3">
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${todayTraining.status === "completed" ? "bg-brand-green-500/10 text-brand-green-300" : "bg-brand-blue-500/10 text-brand-blue-300"}`}>
+              <TrainingMiniIcon className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] font-medium uppercase text-neutral-500">Današnji trening</p>
+              <p className="truncate text-sm font-semibold text-white">{todayTraining.template.name}</p>
+              <p className="mt-0.5 text-[10px] text-neutral-500">{todayTraining.template.exercises.length} vežbi · {todayTraining.template.focus}</p>
+            </div>
+            {todayTraining.status === "completed" && <StatusPill tone="green">Završeno</StatusPill>}
+          </div>
+          <div className="flex gap-2 border-t border-white/[0.06] p-2">
+            <button type="button" onClick={() => onOpenTraining(todayTraining.template, todayTraining.id)} className="h-9 flex-1 rounded-lg border border-white/10 text-xs font-medium text-neutral-200">Pregled</button>
+            {todayTraining.status !== "completed" && (
+              <button type="button" onClick={() => todayTraining.status === "active" ? onOpenTraining(todayTraining.template, todayTraining.id) : onStartScheduled(todayTraining.id, todayTraining.template)} className="h-9 flex-1 rounded-lg bg-brand-blue-500 text-xs font-semibold text-white">
+                {todayTraining.status === "active" ? "Nastavi" : "Pokreni"}
+              </button>
+            )}
+          </div>
+        </Panel>
+      )}
+
+      {step === 0 && (
+        <Panel className="overflow-hidden">
+          <div className="border-b border-white/[0.06] p-4">
+            <p className="text-base font-semibold text-white">Kakav trening želiš danas?</p>
+            <p className="mt-1 text-xs leading-relaxed text-neutral-400">Odgovori na tri kratka pitanja i dobićeš trening prilagođen vremenu i intenzitetu koji ti odgovaraju.</p>
+          </div>
+          <div className="space-y-2 p-3">
+            <button type="button" onClick={() => setStep(1)} className="h-11 w-full rounded-xl bg-brand-blue-500 text-sm font-semibold text-white shadow-glow">Pronađi trening</button>
+            <div className="grid grid-cols-2 gap-2">
+              {lastCompleted && <button type="button" onClick={() => onStartRecommendation({ ...lastCompleted.template, id: `repeat-${lastCompleted.template.id}` })} className="h-10 rounded-xl border border-white/10 text-xs font-medium text-neutral-200">Ponovi poslednji</button>}
+              <button type="button" onClick={onOpenSaved} className={`h-10 rounded-xl border border-white/10 text-xs font-medium text-neutral-200 ${lastCompleted ? "" : "col-span-2"}`}>Moji treninzi</button>
+            </div>
+          </div>
+        </Panel>
+      )}
+
+      {step > 0 && step < 4 && (
+        <Panel className="overflow-hidden">
+          <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5">
+            <button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-lg text-neutral-300" aria-label="Nazad">‹</button>
+            <div className="flex gap-1.5" aria-label={`Korak ${step} od 3`}>
+              {[1, 2, 3].map((item) => <span key={item} className={`h-1.5 w-8 rounded-full ${item <= step ? "bg-brand-blue-500" : "bg-white/10"}`} />)}
+            </div>
+            <span className="w-8 text-right text-[10px] text-neutral-500">{step}/3</span>
+          </div>
+
+          {step === 1 && (
+            <QuestionStep title="Šta želiš da treniraš?">
+              {GUIDED_GOALS.map((option) => (
+                <ChoiceButton key={option.value} label={option.label} description={option.description} onClick={() => choose("goal", option.value, 2)} />
+              ))}
+            </QuestionStep>
+          )}
+
+          {step === 2 && (
+            <QuestionStep title="Koliko vremena imaš?">
+              <div className="grid grid-cols-2 gap-2">
+                {[20, 30, 45, 60].map((minutes) => (
+                  <button key={minutes} type="button" onClick={() => choose("duration", minutes, 3)} className="flex h-20 flex-col items-center justify-center rounded-xl border border-white/10 bg-white/[0.025] transition hover:border-brand-blue-500/45 hover:bg-brand-blue-500/[0.08]">
+                    <span className="text-xl font-semibold text-white">{minutes}</span>
+                    <span className="text-[10px] text-neutral-500">minuta</span>
+                  </button>
+                ))}
+              </div>
+            </QuestionStep>
+          )}
+
+          {step === 3 && (
+            <QuestionStep title="Kako se osećaš danas?">
+              <ChoiceButton label="Lagano" description="Manje serija i kraće trajanje" onClick={() => choose("intensity", "light", 4)} />
+              <ChoiceButton label="Normalno" description="Uravnotežen intenzitet" onClick={() => choose("intensity", "normal", 4)} />
+              <ChoiceButton label="Spreman za jači trening" description="Više serija i duži odmor" onClick={() => choose("intensity", "strong", 4)} />
+            </QuestionStep>
+          )}
+        </Panel>
+      )}
+
+      {recommendation && (
+        <Panel className="overflow-hidden border-brand-blue-500/25">
+          <div className="border-b border-white/[0.06] bg-brand-blue-500/[0.06] p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[9px] font-medium uppercase text-brand-blue-300">Predlog treninga</span>
+              <span className="rounded-full border border-white/10 px-2 py-1 text-[9px] text-neutral-300">{answers.duration} min</span>
+            </div>
+            <h2 className="text-base font-semibold text-white">{recommendation.name}</h2>
+            <p className="mt-1 text-xs text-neutral-400">{recommendation.exercises.length} vežbi · {answers.intensity === "light" ? "lagano" : answers.intensity === "strong" ? "jače" : "normalno"}</p>
+          </div>
+          <div className="divide-y divide-white/[0.05] px-3">
+            {recommendation.exercises.map((item, index) => {
+              const exercise = getExerciseById(item.exerciseId);
+              return exercise ? <div key={item.exerciseId} className="flex items-center gap-3 py-2.5"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-[10px] font-semibold text-neutral-400">{index + 1}</span><span className="min-w-0 flex-1 truncate text-xs font-medium text-white">{exercise.name}</span><span className="text-[10px] text-neutral-500">{item.sets} × {item.reps}</span></div> : null;
+            })}
+          </div>
+          <div className="grid grid-cols-[auto_1fr] gap-2 border-t border-white/[0.06] p-3">
+            <button type="button" onClick={restart} className="h-11 rounded-xl border border-white/10 px-4 text-xs font-medium text-neutral-300">Promeni</button>
+            <button type="button" onClick={() => onStartRecommendation(recommendation)} className="h-11 rounded-xl bg-brand-blue-500 px-4 text-sm font-semibold text-white shadow-glow">Pokreni trening</button>
+          </div>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+function QuestionStep({ title, children }) {
+  return <div className="space-y-2 p-3"><h2 className="px-1 pb-1 text-sm font-semibold text-white">{title}</h2>{children}</div>;
+}
+
+function ChoiceButton({ label, description, onClick }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-3 text-left transition hover:border-brand-blue-500/45 hover:bg-brand-blue-500/[0.08]">
+      <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-white">{label}</span><span className="mt-0.5 block text-[10px] text-neutral-500">{description}</span></span>
+      <span className="text-lg text-neutral-600">›</span>
+    </button>
+  );
+}
+
+function ClientTrainingList({ trainings, onOpen, onStart }) {
+  return (
+    <div className="space-y-2">
+      {trainings.map((training) => (
+        <Panel key={training.id} className="overflow-hidden">
+          <button type="button" onClick={() => onOpen(training)} className="block w-full text-left">
+            <TrainingPreview training={training} />
+            <span className="flex items-center gap-3 p-3">
+              <TemplateSummary item={training} meta={`${training.exercises.length} vežbi · ${training.focus}`} />
+              <span className="text-lg text-neutral-600">›</span>
+            </span>
+          </button>
+          <div className="flex items-center justify-end border-t border-white/[0.06] p-2">
+            <button type="button" onClick={() => onStart(training)} className="rounded-lg bg-brand-blue-500 px-4 py-2 text-xs font-semibold text-white">Pokreni</button>
+          </div>
+        </Panel>
+      ))}
+      {trainings.length === 0 && <EmptyState title="Još nema sačuvanih treninga" />}
+    </div>
+  );
+}
+
+function TrainingMiniIcon({ className }) {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M7 7v10M17 7v10M4 9v6M20 9v6M7 12h10" /></svg>;
 }
 
 function ExerciseBrowser({
